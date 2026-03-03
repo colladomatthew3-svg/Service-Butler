@@ -8,7 +8,37 @@ LOG_DIR="$ROOT_DIR/logs"
 PIDS_FILE="$ROOT_DIR/.pids"
 ENV_FILE="$ROOT_DIR/.env.local"
 mkdir -p "$LOG_DIR"
+
+DEV_UP_LOG="$LOG_DIR/dev-up.log"
+SUPABASE_LOG="$LOG_DIR/supabase.log"
+DB_PUSH_LOG="$LOG_DIR/db-push.log"
+SEED_USERS_LOG="$LOG_DIR/seed-users.log"
+DB_SEED_LOG="$LOG_DIR/db-seed.log"
+NEXT_LOG="$LOG_DIR/next.log"
+INNGEST_LOG="$LOG_DIR/inngest.log"
+NGROK_LOG="$LOG_DIR/ngrok.log"
+STRIPE_LISTEN_LOG="$LOG_DIR/stripe-listen.log"
+
+: > "$DEV_UP_LOG"
+exec > >(tee -a "$DEV_UP_LOG") 2>&1
+
 ENV_CHANGED=0
+FATAL=0
+SEED_STATUS="ok"
+SUPABASE_HEALTHY="no"
+CORE_AUTH_STATUS="failed"
+CORE_AUTH_CODE="000"
+CORE_REST_STATUS="failed"
+CORE_REST_CODE="000"
+STUDIO_HTTP_CODE="000"
+DB_PUSH_STATUS="not-run"
+NGROK_STATUS="not-started"
+NGROK_URL=""
+NGROK_REASON=""
+STRIPE_STATUS="not-started"
+STRIPE_REASON=""
+SUPABASE_STUDIO_URL="http://127.0.0.1:54323"
+APP_URL="http://localhost:3000"
 
 print_header() {
   echo ""
@@ -25,7 +55,7 @@ require_cmd() {
   if ! have_cmd "$cmd"; then
     echo "❌ Missing required command: $cmd"
     echo "   Install hint: $hint"
-    exit 1
+    FATAL=1
   fi
 }
 
@@ -35,6 +65,18 @@ optional_cmd() {
   if ! have_cmd "$cmd"; then
     echo "⚠️ Optional command missing: $cmd ($hint)"
   fi
+}
+
+unquote() {
+  local s="$1"
+  s="${s%\"}"
+  s="${s#\"}"
+  echo "$s"
+}
+
+http_code_for_url() {
+  local url="$1"
+  curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000"
 }
 
 wait_for_url() {
@@ -53,20 +95,24 @@ wait_for_url() {
     if (( $(date +%s) - started >= timeout_seconds )); then
       return 1
     fi
+
     sleep 2
   done
 }
 
-retry_cmd() {
+retry_cmd_logged() {
   local label="$1"
   local max_attempts="$2"
   local initial_sleep="$3"
-  shift 3
+  local logfile="$4"
+  shift 4
 
   local attempt=1
   local sleep_for="$initial_sleep"
+
   while (( attempt <= max_attempts )); do
-    if "$@"; then
+    : > "$logfile"
+    if "$@" > >(tee -a "$logfile") 2> >(tee -a "$logfile" >&2); then
       return 0
     fi
 
@@ -142,15 +188,23 @@ start_bg() {
   local logfile="$2"
   shift 2
 
+  local existing_pid
+  existing_pid="$(get_pid "$name")"
+  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+    echo "ℹ️ $name already running (pid $existing_pid)."
+    return 0
+  fi
+
   nohup "$@" > "$logfile" 2>&1 &
   local pid=$!
   write_pid "$name" "$pid"
   sleep 1
 
   if ! kill -0 "$pid" 2>/dev/null; then
-    echo "❌ Failed to start $name. Check $logfile"
-    exit 1
+    return 1
   fi
+
+  return 0
 }
 
 extract_ngrok_url() {
@@ -216,19 +270,56 @@ create_stripe_price_if_missing() {
   fi
 }
 
+print_ready() {
+  print_header "READY"
+  echo "App URL:                 $APP_URL"
+  echo "Supabase Studio URL:     $SUPABASE_STUDIO_URL (optional, http $STUDIO_HTTP_CODE)"
+  echo "Core auth health:        $CORE_AUTH_STATUS (http $CORE_AUTH_CODE)"
+  echo "Core rest health:        $CORE_REST_STATUS (http $CORE_REST_CODE)"
+  if [[ -n "$NGROK_URL" ]]; then
+    echo "ngrok URL:               $NGROK_URL"
+    echo "Twilio SMS inbound:      $NGROK_URL/api/twilio/sms/inbound"
+    echo "Twilio Voice inbound:    $NGROK_URL/api/twilio/voice/inbound"
+    echo "Twilio Status callback:  $NGROK_URL/api/twilio/status"
+  else
+    echo "ngrok URL:               ngrok not started ($NGROK_REASON)"
+  fi
+  if [[ "$STRIPE_STATUS" == "running" ]]; then
+    echo "Stripe listener:         running"
+    echo "Stripe whsec source:     $STRIPE_LISTEN_LOG"
+  else
+    echo "Stripe listener:         not started ($STRIPE_REASON)"
+  fi
+  echo "Seed status:             $SEED_STATUS"
+  if [[ "$SEED_STATUS" == "failed" ]]; then
+    echo "Seed recovery commands:  node scripts/seed-users.mjs && npx supabase db seed"
+  fi
+  echo "Logs:"
+  echo "  - ./logs/dev-up.log"
+  echo "  - ./logs/supabase.log"
+  echo "  - ./logs/db-push.log"
+  echo "  - ./logs/seed-users.log"
+  echo "  - ./logs/db-seed.log"
+  echo "  - ./logs/next.log"
+  echo "  - ./logs/inngest.log"
+  echo "  - ./logs/ngrok.log"
+  echo "  - ./logs/stripe-listen.log"
+  echo "Stop everything:         bash scripts/dev-down.sh"
+}
+
 print_header "Prerequisites"
 require_cmd node "https://nodejs.org/"
 require_cmd npm "https://nodejs.org/"
 require_cmd npx "Installed with Node.js"
 require_cmd docker "https://docs.docker.com/get-docker/"
-require_cmd ngrok "https://ngrok.com/download"
-require_cmd stripe "https://docs.stripe.com/stripe-cli"
+optional_cmd ngrok "https://ngrok.com/download"
+optional_cmd stripe "https://docs.stripe.com/stripe-cli"
 optional_cmd jq "brew install jq"
 optional_cmd psql "Install PostgreSQL client if you want SQL validations"
 
 if ! docker info >/dev/null 2>&1; then
   echo "❌ Docker appears to be stopped. Start Docker Desktop and run this script again."
-  exit 1
+  FATAL=1
 fi
 
 print_header "Environment"
@@ -247,7 +338,9 @@ for key in \
 done
 
 if [[ -z "$(get_env_value NEXT_PUBLIC_APP_URL)" ]]; then
-  set_env_key "NEXT_PUBLIC_APP_URL" "http://localhost:3000"
+  set_env_key "NEXT_PUBLIC_APP_URL" "$APP_URL"
+else
+  APP_URL="$(get_env_value NEXT_PUBLIC_APP_URL)"
 fi
 if [[ -z "$(get_env_value ALLOW_OUTBOUND_WITHOUT_STRIPE)" ]]; then
   set_env_key "ALLOW_OUTBOUND_WITHOUT_STRIPE" "false"
@@ -256,127 +349,195 @@ if [[ -z "$(get_env_value SUBSCRIPTION_GRACE_DAYS)" ]]; then
   set_env_key "SUBSCRIPTION_GRACE_DAYS" "3"
 fi
 
-print_header "Install + Database"
-npm install
-npx supabase start | tee "$LOG_DIR/supabase-start.log"
+if [[ "$FATAL" -eq 0 ]]; then
+  print_header "Install + Database"
+  npm install
 
-SUPABASE_STATUS_ENV="$(npx supabase status -o env 2>/dev/null || true)"
-SUPABASE_STUDIO_URL="http://127.0.0.1:54323"
-SUPABASE_API_URL="http://127.0.0.1:54321"
-
-if [[ -z "$SUPABASE_STATUS_ENV" && -f "$LOG_DIR/supabase-start.log" ]]; then
-  # Fallback parser for plain-text `supabase start` output.
-  api_url="$(grep -E 'API URL:|Project URL:' "$LOG_DIR/supabase-start.log" | head -n1 | sed -E 's/.*(http[^ ]+).*/\1/' || true)"
-  studio_url="$(grep -E 'Studio URL:' "$LOG_DIR/supabase-start.log" | head -n1 | sed -E 's/.*(http[^ ]+).*/\1/' || true)"
-  anon_key="$(grep -E 'anon key:|Publishable key:' "$LOG_DIR/supabase-start.log" | head -n1 | sed -E 's/.*: *//' || true)"
-  service_key="$(grep -E 'service_role key:|Secret key:' "$LOG_DIR/supabase-start.log" | head -n1 | sed -E 's/.*: *//' || true)"
-  db_url="$(grep -E 'DB URL:' "$LOG_DIR/supabase-start.log" | head -n1 | sed -E 's/.*(postgres[^ ]+).*/\1/' || true)"
-
-  [[ -n "$api_url" ]] && SUPABASE_STATUS_ENV+=$'\n'"SUPABASE_URL=$api_url"
-  [[ -n "$studio_url" ]] && SUPABASE_STATUS_ENV+=$'\n'"STUDIO_URL=$studio_url"
-  [[ -n "$anon_key" ]] && SUPABASE_STATUS_ENV+=$'\n'"ANON_KEY=$anon_key"
-  [[ -n "$service_key" ]] && SUPABASE_STATUS_ENV+=$'\n'"SERVICE_ROLE_KEY=$service_key"
-  [[ -n "$db_url" ]] && SUPABASE_STATUS_ENV+=$'\n'"DB_URL=$db_url"
+  : > "$SUPABASE_LOG"
+  if ! npx supabase start > >(tee -a "$SUPABASE_LOG") 2> >(tee -a "$SUPABASE_LOG" >&2); then
+    echo "❌ supabase start failed."
+    FATAL=1
+  fi
 fi
 
-if [[ -n "$SUPABASE_STATUS_ENV" ]]; then
-  while IFS='=' read -r k v; do
-    [[ -z "${k:-}" ]] && continue
-    case "$k" in
-      API_URL|SUPABASE_URL)
-        SUPABASE_API_URL="$v"
-        # Always refresh local Supabase URL after `supabase start`.
-        set_env_key "NEXT_PUBLIC_SUPABASE_URL" "$v"
-        ;;
-      STUDIO_URL)
-        SUPABASE_STUDIO_URL="$v"
-        ;;
-      ANON_KEY|SUPABASE_ANON_KEY)
-        # Always refresh local publishable (anon) key after `supabase start`.
-        set_env_key "NEXT_PUBLIC_SUPABASE_ANON_KEY" "$v"
-        ;;
-      SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY)
-        # Always refresh local service role key after `supabase start`.
-        set_env_key "SUPABASE_SERVICE_ROLE_KEY" "$v"
-        ;;
-      DB_URL|SUPABASE_DB_URL)
-        if [[ -z "$(get_env_value SUPABASE_DB_URL)" ]]; then set_env_key "SUPABASE_DB_URL" "$v"; fi
-        ;;
-    esac
-  done <<< "$SUPABASE_STATUS_ENV"
-fi
+if [[ "$FATAL" -eq 0 ]]; then
+  SUPABASE_STATUS_ENV="$(npx supabase status -o env 2>/dev/null || true)"
+  SUPABASE_API_URL="http://127.0.0.1:54321"
 
-if ! wait_for_url "$SUPABASE_STUDIO_URL" 120; then
-  echo "❌ Supabase Studio did not become healthy at $SUPABASE_STUDIO_URL"
-  echo "   Recovery: npx supabase stop && npx supabase start"
-  echo "   Check: docker ps"
-  exit 1
-fi
+  if [[ -z "$SUPABASE_STATUS_ENV" && -f "$SUPABASE_LOG" ]]; then
+    api_url="$(grep -E 'API URL:|Project URL:' "$SUPABASE_LOG" | head -n1 | sed -E 's/.*(http[^ ]+).*/\1/' || true)"
+    studio_url="$(grep -E 'Studio URL:' "$SUPABASE_LOG" | head -n1 | sed -E 's/.*(http[^ ]+).*/\1/' || true)"
+    anon_key="$(grep -E 'anon key:|Publishable key:' "$SUPABASE_LOG" | head -n1 | sed -E 's/.*: *//' || true)"
+    service_key="$(grep -E 'service_role key:|Secret key:' "$SUPABASE_LOG" | head -n1 | sed -E 's/.*: *//' || true)"
+    db_url="$(grep -E 'DB URL:' "$SUPABASE_LOG" | head -n1 | sed -E 's/.*(postgres[^ ]+).*/\1/' || true)"
 
-if ! retry_cmd "supabase db push" 3 2 npx supabase db push; then
-  echo "   Recovery: npx supabase db push"
-  exit 1
-fi
+    [[ -n "$api_url" ]] && SUPABASE_STATUS_ENV+=$'\n'"SUPABASE_URL=$api_url"
+    [[ -n "$studio_url" ]] && SUPABASE_STATUS_ENV+=$'\n'"STUDIO_URL=$studio_url"
+    [[ -n "$anon_key" ]] && SUPABASE_STATUS_ENV+=$'\n'"ANON_KEY=$anon_key"
+    [[ -n "$service_key" ]] && SUPABASE_STATUS_ENV+=$'\n'"SERVICE_ROLE_KEY=$service_key"
+    [[ -n "$db_url" ]] && SUPABASE_STATUS_ENV+=$'\n'"DB_URL=$db_url"
+  fi
 
-SEED_STATUS="ok"
-if ! node scripts/seed-users.mjs; then
-  SEED_STATUS="failed"
-  echo "⚠️ seed-users step failed. Continuing with services so you can inspect logs."
-  echo "   Recovery: node scripts/seed-users.mjs"
-fi
+  if [[ -n "$SUPABASE_STATUS_ENV" ]]; then
+    while IFS='=' read -r k v; do
+      [[ -z "${k:-}" ]] && continue
+      v="$(unquote "$v")"
+      case "$k" in
+        API_URL|SUPABASE_URL)
+          SUPABASE_API_URL="$v"
+          set_env_key "NEXT_PUBLIC_SUPABASE_URL" "$v"
+          ;;
+        STUDIO_URL)
+          SUPABASE_STUDIO_URL="$v"
+          ;;
+        ANON_KEY|SUPABASE_ANON_KEY)
+          set_env_key "NEXT_PUBLIC_SUPABASE_ANON_KEY" "$v"
+          ;;
+        SERVICE_ROLE_KEY|SUPABASE_SERVICE_ROLE_KEY)
+          set_env_key "SUPABASE_SERVICE_ROLE_KEY" "$v"
+          ;;
+        DB_URL|SUPABASE_DB_URL)
+          if [[ -z "$(get_env_value SUPABASE_DB_URL)" ]]; then set_env_key "SUPABASE_DB_URL" "$v"; fi
+          ;;
+      esac
+    done <<< "$SUPABASE_STATUS_ENV"
+  fi
 
-if ! retry_cmd "supabase db seed" 3 2 npx supabase db seed; then
-  SEED_STATUS="failed"
-  echo "⚠️ Database seed failed after retries. Continuing with services; Supabase containers remain running."
-  echo "   Recovery: npx supabase db seed"
-  echo "   Check logs: tail -n 200 logs/next.log"
+  SUPABASE_API_URL="$(unquote "$SUPABASE_API_URL")"
+  SUPABASE_STUDIO_URL="$(unquote "$SUPABASE_STUDIO_URL")"
+
+  AUTH_URL="${SUPABASE_API_URL}/auth/v1/health"
+  REST_URL="${SUPABASE_API_URL}/rest/v1/"
+
+  started="$(date +%s)"
+  while true; do
+    CORE_AUTH_CODE="$(http_code_for_url "$AUTH_URL")"
+    CORE_REST_CODE="$(http_code_for_url "$REST_URL")"
+
+    if [[ "$CORE_AUTH_CODE" == "200" ]]; then
+      CORE_AUTH_STATUS="ok"
+    else
+      CORE_AUTH_STATUS="failed"
+    fi
+
+    if [[ "$CORE_REST_CODE" != "000" ]]; then
+      CORE_REST_STATUS="ok"
+    else
+      CORE_REST_STATUS="failed"
+    fi
+
+    if [[ "$CORE_AUTH_STATUS" == "ok" && "$CORE_REST_STATUS" == "ok" ]]; then
+      SUPABASE_HEALTHY="yes"
+      break
+    fi
+
+    if (( $(date +%s) - started >= 120 )); then
+      break
+    fi
+
+    sleep 2
+  done
+
+  if [[ "$SUPABASE_HEALTHY" != "yes" ]]; then
+    if [[ "$CORE_AUTH_CODE" == "000" && "$CORE_REST_CODE" == "000" ]]; then
+      echo "❌ Supabase core API health check failed (auth/rest both unreachable)."
+      echo "   Recovery: npx supabase stop && npx supabase start"
+      echo "   Then retry: bash scripts/dev-up.sh"
+      FATAL=1
+    else
+      echo "⚠️ Supabase core health degraded (auth=$CORE_AUTH_CODE rest=$CORE_REST_CODE). Continuing."
+    fi
+  fi
+
+  STUDIO_HTTP_CODE="$(http_code_for_url "$SUPABASE_STUDIO_URL")"
+
+  if [[ "$FATAL" -eq 0 ]]; then
+    if retry_cmd_logged "supabase db push" 3 2 "$DB_PUSH_LOG" npx supabase db push; then
+      DB_PUSH_STATUS="ok"
+    else
+      DB_PUSH_STATUS="failed"
+      echo "   Recovery: npx supabase db push"
+      FATAL=1
+    fi
+
+    : > "$SEED_USERS_LOG"
+    if ! node scripts/seed-users.mjs > >(tee -a "$SEED_USERS_LOG") 2> >(tee -a "$SEED_USERS_LOG" >&2); then
+      SEED_STATUS="failed"
+      echo "⚠️ seed-users step failed. Continuing."
+      echo "   Recovery: node scripts/seed-users.mjs"
+    fi
+
+    if ! retry_cmd_logged "supabase db seed" 3 2 "$DB_SEED_LOG" npx supabase db seed; then
+      SEED_STATUS="failed"
+      echo "⚠️ Database seed failed after retries. Continuing."
+      echo "   Recovery: npx supabase db seed"
+    fi
+  fi
 fi
 
 print_header "Start Services"
-bash scripts/dev-down.sh >/dev/null 2>&1 || true
-: > "$PIDS_FILE"
+touch "$PIDS_FILE"
 
-start_bg "next" "$LOG_DIR/next.log" npm run dev
-start_bg "inngest" "$LOG_DIR/inngest.log" npm run inngest:dev
-start_bg "ngrok" "$LOG_DIR/ngrok.log" ngrok http 3000 --log=stdout
-
-NGROK_URL=""
-for _ in $(seq 1 30); do
-  NGROK_URL="$(extract_ngrok_url)"
-  if [[ -n "$NGROK_URL" ]]; then
-    break
-  fi
-  sleep 1
-done
-
-if [[ -z "$NGROK_URL" ]]; then
-  echo "❌ Could not retrieve ngrok URL automatically."
-  echo "   Recovery: run ngrok http 3000"
-  echo "   Then set WEBHOOK_BASE_URL in .env.local"
-  exit 1
-fi
-
-set_env_key "WEBHOOK_BASE_URL" "$NGROK_URL"
-
-start_bg "stripe_listen" "$LOG_DIR/stripe-listen.log" stripe listen --forward-to http://localhost:3000/api/stripe/webhook
-
-WHSEC=""
-for _ in $(seq 1 30); do
-  WHSEC="$(extract_whsec "$LOG_DIR/stripe-listen.log")"
-  if [[ -n "$WHSEC" ]]; then
-    break
-  fi
-  sleep 1
-done
-
-if [[ -n "$WHSEC" ]]; then
-  set_env_key "STRIPE_WEBHOOK_SECRET" "$WHSEC"
+if start_bg "next" "$NEXT_LOG" npm run dev; then
+  :
 else
-  echo "⚠️ Could not auto-capture STRIPE_WEBHOOK_SECRET from stripe listen output."
-  echo "   Recovery: copy whsec_... from $LOG_DIR/stripe-listen.log into .env.local"
+  echo "⚠️ Could not start Next.js. Check $NEXT_LOG"
 fi
 
-create_stripe_price_if_missing
+if start_bg "inngest" "$INNGEST_LOG" npm run inngest:dev; then
+  :
+else
+  echo "⚠️ Could not start Inngest dev server. Check $INNGEST_LOG"
+fi
+
+if have_cmd ngrok; then
+  if start_bg "ngrok" "$NGROK_LOG" ngrok http 3000 --log=stdout; then
+    for _ in $(seq 1 30); do
+      NGROK_URL="$(extract_ngrok_url)"
+      if [[ -n "$NGROK_URL" ]]; then
+        NGROK_STATUS="running"
+        break
+      fi
+      sleep 1
+    done
+
+    if [[ "$NGROK_STATUS" != "running" ]]; then
+      NGROK_REASON="unable to read ngrok API tunnel URL"
+    else
+      set_env_key "WEBHOOK_BASE_URL" "$NGROK_URL"
+    fi
+  else
+    NGROK_REASON="failed to launch process"
+  fi
+else
+  NGROK_REASON="ngrok CLI not installed"
+fi
+
+if have_cmd stripe; then
+  if start_bg "stripe_listen" "$STRIPE_LISTEN_LOG" stripe listen --forward-to http://localhost:3000/api/stripe/webhook; then
+    STRIPE_STATUS="running"
+    WHSEC=""
+    for _ in $(seq 1 30); do
+      WHSEC="$(extract_whsec "$STRIPE_LISTEN_LOG")"
+      if [[ -n "$WHSEC" ]]; then
+        break
+      fi
+      sleep 1
+    done
+
+    if [[ -n "$WHSEC" ]]; then
+      set_env_key "STRIPE_WEBHOOK_SECRET" "$WHSEC"
+    else
+      STRIPE_REASON="listener running but whsec not auto-detected; check $STRIPE_LISTEN_LOG"
+    fi
+
+    create_stripe_price_if_missing
+  else
+    STRIPE_REASON="failed to launch process"
+  fi
+else
+  STRIPE_REASON="stripe CLI not installed"
+fi
 
 if [[ "$ENV_CHANGED" -eq 1 ]]; then
   echo "Environment changed; restarting Next.js to pick up new values..."
@@ -385,35 +546,14 @@ if [[ "$ENV_CHANGED" -eq 1 ]]; then
     kill "$NEXT_PID" 2>/dev/null || true
     sleep 1
   fi
-  start_bg "next" "$LOG_DIR/next.log" npm run dev
+  if ! start_bg "next" "$NEXT_LOG" npm run dev; then
+    echo "⚠️ Could not restart Next.js. Check $NEXT_LOG"
+  fi
 fi
 
-SMS_URL="$NGROK_URL/api/twilio/sms/inbound"
-VOICE_URL="$NGROK_URL/api/twilio/voice/inbound"
-STATUS_URL="$NGROK_URL/api/twilio/status"
+print_ready
 
-NEXT_OK="no"
-INNGEST_OK="no"
-STRIPE_OK="no"
-if kill -0 "$(get_pid next)" 2>/dev/null; then NEXT_OK="yes"; fi
-if kill -0 "$(get_pid inngest)" 2>/dev/null; then INNGEST_OK="yes"; fi
-if kill -0 "$(get_pid stripe_listen)" 2>/dev/null; then STRIPE_OK="yes"; fi
-
-print_header "✅ READY"
-echo "App URL:                 http://localhost:3000"
-echo "Supabase Studio URL:     $SUPABASE_STUDIO_URL"
-echo "ngrok URL:               $NGROK_URL"
-echo "Twilio SMS inbound:      $SMS_URL"
-echo "Twilio Voice inbound:    $VOICE_URL"
-echo "Twilio Status callback:  $STATUS_URL"
-echo "Stripe listener running: $STRIPE_OK"
-echo "Stripe whsec source:     $LOG_DIR/stripe-listen.log"
-echo "Next running:            $NEXT_OK"
-echo "Inngest running:         $INNGEST_OK"
-echo "Seed status:             $SEED_STATUS"
-if [[ "$SEED_STATUS" == "failed" ]]; then
-  echo "Seed recovery commands:  node scripts/seed-users.mjs && npx supabase db seed"
+# Exit non-zero only for fatal prerequisites/database failures.
+if [[ "$FATAL" -eq 1 ]]; then
+  exit 1
 fi
-echo "Logs:                    ./logs/next.log ./logs/inngest.log ./logs/ngrok.log ./logs/stripe-listen.log"
-echo "Stop everything:         bash scripts/dev-down.sh"
-echo "Optional clean DB reset: bash scripts/db-reset.sh"

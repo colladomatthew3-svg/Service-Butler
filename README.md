@@ -24,7 +24,10 @@ Troubleshooting:
 
 ## What dev-up does
 - Installs dependencies.
-- Starts local Supabase and waits for health (Studio URL 200).
+- Starts local Supabase and checks core API health:
+  - Auth: `/auth/v1/health` must return `200`
+  - REST: `/rest/v1/` must return anything except `000` (401 is acceptable)
+- Studio health is optional and never blocks boot.
 - Auto-populates `.env.local` Supabase keys from local CLI output/status:
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`

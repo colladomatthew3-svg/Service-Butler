@@ -11,14 +11,14 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const variantClass: Record<ButtonVariant, string> = {
-  primary: "bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700",
-  secondary: "bg-white text-neutral-900 ring-1 ring-inset ring-neutral-300 hover:bg-neutral-50",
-  ghost: "bg-transparent text-neutral-700 hover:bg-neutral-100",
-  danger: "bg-danger-500 text-white hover:bg-danger-600 active:bg-danger-700"
+  primary: "bg-semantic-brand text-white hover:bg-semantic-brandHover active:translate-y-px",
+  secondary: "bg-semantic-surface text-semantic-text ring-1 ring-inset ring-semantic-border hover:bg-semantic-surface2",
+  ghost: "bg-transparent text-semantic-muted hover:bg-semantic-surface2",
+  danger: "bg-semantic-danger text-white hover:bg-danger-700 active:translate-y-px"
 };
 
 const sizeClass: Record<ButtonSize, string> = {
-  sm: "h-10 px-4 text-sm",
+  sm: "h-11 px-4 text-sm",
   md: "h-12 px-5 text-sm",
   lg: "h-14 px-6 text-base"
 };
@@ -27,7 +27,8 @@ export function Button({ className, variant = "primary", size = "md", fullWidth,
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed",
+        "shadow-sm hover:shadow-md focus-visible:ring-semantic-brand/45 focus-visible:ring-offset-2 focus-visible:ring-offset-semantic-surface disabled:bg-neutral-300 disabled:text-neutral-500 disabled:shadow-none",
         variantClass[variant],
         sizeClass[size],
         fullWidth && "w-full",

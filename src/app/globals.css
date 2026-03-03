@@ -3,10 +3,17 @@
 @tailwind utilities;
 
 :root {
-  --bg: #f7f9f8;
-  --text: #1f2933;
-  --muted: #52606d;
-  --border: #dbe3ea;
+  --bg: 244 247 245;
+  --surface: 255 255 255;
+  --surface2: 247 250 248;
+  --border: 219 227 234;
+  --text: 31 41 51;
+  --muted: 82 96 109;
+  --brand: 120 190 32;
+  --brandHover: 96 153 24;
+  --success: 31 157 85;
+  --warning: 217 145 0;
+  --danger: 214 69 69;
 }
 
 * {
@@ -27,7 +34,7 @@
   }
 
   body {
-    @apply bg-surface text-neutral-900 font-sans;
+    @apply bg-semantic-bg text-semantic-text font-sans;
     margin: 0;
   }
 
@@ -50,21 +57,21 @@
   }
 
   :focus-visible {
-    outline: 2px solid rgba(120, 190, 32, 0.65);
+    outline: 2px solid rgb(var(--brand) / 0.65);
     outline-offset: 2px;
   }
 }
 
 body {
-  background: radial-gradient(1200px 600px at 10% -10%, rgba(120, 190, 32, 0.16), transparent 50%),
-    radial-gradient(800px 500px at 100% 0%, rgba(217, 140, 95, 0.12), transparent 45%),
-    var(--bg);
-  color: var(--text);
+  background: radial-gradient(1200px 600px at 10% -10%, rgb(var(--brand) / 0.16), transparent 50%),
+    radial-gradient(800px 500px at 100% 0%, rgb(217 140 95 / 0.12), transparent 45%),
+    rgb(var(--bg));
+  color: rgb(var(--text));
 }
 
 .panel {
-  background: white;
-  border: 1px solid var(--border);
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border));
   border-radius: 1rem;
   padding: 1rem;
 }

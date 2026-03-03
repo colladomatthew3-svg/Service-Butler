@@ -59,12 +59,12 @@ export default function DashboardOverviewPage() {
               <Link
                 key={lead.id}
                 href={`/dashboard/leads/${lead.id}`}
-                className="block rounded-xl border border-neutral-200 p-4 transition hover:border-brand-300 hover:bg-brand-50/40"
+                className="block rounded-xl border border-semantic-border p-4 transition hover:border-brand-300 hover:bg-brand-50/40"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-neutral-900">{lead.name}</p>
-                    <p className="text-sm text-neutral-600">
+                    <p className="font-semibold text-semantic-text">{lead.name}</p>
+                    <p className="text-sm text-semantic-muted">
                       {lead.serviceType} · {lead.location}
                     </p>
                   </div>
@@ -72,7 +72,7 @@ export default function DashboardOverviewPage() {
                     {lead.urgency}
                   </Badge>
                 </div>
-                <p className="mt-2 text-sm text-neutral-700">Next: {lead.nextStep}</p>
+                <p className="mt-2 text-sm text-semantic-muted">Next: {lead.nextStep}</p>
               </Link>
             ))}
           </CardBody>

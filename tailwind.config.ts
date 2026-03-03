@@ -17,6 +17,19 @@ const config: Config = {
     },
     extend: {
       colors: {
+        semantic: {
+          bg: "rgb(var(--bg) / <alpha-value>)",
+          surface: "rgb(var(--surface) / <alpha-value>)",
+          surface2: "rgb(var(--surface2) / <alpha-value>)",
+          border: "rgb(var(--border) / <alpha-value>)",
+          text: "rgb(var(--text) / <alpha-value>)",
+          muted: "rgb(var(--muted) / <alpha-value>)",
+          brand: "rgb(var(--brand) / <alpha-value>)",
+          brandHover: "rgb(var(--brandHover) / <alpha-value>)",
+          success: "rgb(var(--success) / <alpha-value>)",
+          warning: "rgb(var(--warning) / <alpha-value>)",
+          danger: "rgb(var(--danger) / <alpha-value>)"
+        },
         brand: {
           50: "#f4fae8",
           100: "#e4f3c7",
@@ -60,9 +73,7 @@ const config: Config = {
           500: "#d64545",
           700: "#8e1f1f"
         },
-        surface: "#F7F9F8",
-        card: "#ffffff",
-        muted: "#52606D"
+        card: "#ffffff"
       },
       fontFamily: {
         sans: ["Inter", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"]

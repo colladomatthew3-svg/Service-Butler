@@ -19,9 +19,9 @@ export function EmptyState({
   return (
     <Card>
       <CardBody className="flex flex-col items-center py-12 text-center">
-        {icon && <div className="mb-4 rounded-full bg-neutral-100 p-3 text-neutral-700">{icon}</div>}
-        <h3 className="text-lg font-semibold text-neutral-900">{title}</h3>
-        <p className="mt-2 max-w-md text-sm text-neutral-600">{description}</p>
+        {icon && <div className="mb-4 rounded-full bg-semantic-surface2 p-3 text-semantic-muted">{icon}</div>}
+        <h3 className="text-lg font-semibold text-semantic-text">{title}</h3>
+        <p className="mt-2 max-w-md text-sm text-semantic-muted">{description}</p>
         {ctaLabel && ctaHref && (
           <Link href={ctaHref} className="mt-6">
             <Button>{ctaLabel}</Button>

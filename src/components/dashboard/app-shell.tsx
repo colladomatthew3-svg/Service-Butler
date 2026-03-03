@@ -34,11 +34,11 @@ export function DashboardAppShell({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-surface">
+    <div className="min-h-screen bg-semantic-bg">
       <div className="mx-auto flex max-w-[1440px]">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 w-72 border-r border-neutral-200 bg-white px-5 py-6 shadow-card transition-transform lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 w-72 border-r border-semantic-border bg-semantic-surface px-5 py-6 shadow-card transition-transform lg:static lg:translate-x-0",
             open ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -66,7 +66,7 @@ export function DashboardAppShell({
                   href={item.href}
                   className={cn(
                     "flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition",
-                    active ? "bg-brand-50 text-brand-700" : "text-neutral-700 hover:bg-neutral-100"
+                    active ? "bg-brand-50 text-brand-700" : "text-semantic-muted hover:bg-semantic-surface2 hover:text-semantic-text"
                   )}
                   onClick={() => setOpen(false)}
                 >
@@ -77,9 +77,9 @@ export function DashboardAppShell({
             })}
           </nav>
 
-          <div className="mt-8 rounded-xl bg-neutral-50 p-4">
-            <p className="text-xs uppercase tracking-wide text-neutral-500">Today</p>
-            <p className="mt-2 text-sm font-medium text-neutral-900">Prioritize new high-urgency leads first.</p>
+          <div className="mt-8 rounded-xl bg-semantic-surface2 p-4">
+            <p className="text-xs uppercase tracking-wide text-semantic-muted">Today</p>
+            <p className="mt-2 text-sm font-medium text-semantic-text">Prioritize new high-urgency leads first.</p>
           </div>
 
           <div className="mt-auto pt-8">{onSignOut}</div>
@@ -94,7 +94,7 @@ export function DashboardAppShell({
         )}
 
         <div className="flex min-h-screen flex-1 flex-col lg:pl-0">
-          <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
+          <header className="sticky top-0 z-20 border-b border-semantic-border bg-semantic-surface/95 px-4 py-3 backdrop-blur sm:px-6">
             <div className="flex items-center gap-3">
               <button
                 className="rounded-lg p-2 text-neutral-600 hover:bg-neutral-100 lg:hidden"

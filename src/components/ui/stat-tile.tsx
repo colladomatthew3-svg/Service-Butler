@@ -19,14 +19,14 @@ export function StatTile({
         ? "bg-success-100 text-success-700"
         : tone === "warning"
           ? "bg-warning-100 text-warning-700"
-          : "bg-neutral-100 text-neutral-700";
+          : "bg-semantic-surface2 text-semantic-muted";
 
   return (
     <Card>
       <CardBody className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-neutral-600">{label}</p>
-          <p className="mt-1 text-3xl font-semibold tracking-tight text-neutral-900">{value}</p>
+          <p className="text-sm font-medium text-semantic-muted">{label}</p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight text-semantic-text">{value}</p>
         </div>
         {icon && <div className={`rounded-xl p-3 ${toneClass}`}>{icon}</div>}
       </CardBody>

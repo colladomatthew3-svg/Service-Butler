@@ -13,19 +13,19 @@ export default function DashboardSettingsPage() {
       <section className="grid gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-neutral-900">Business Profile</h2>
+            <h2 className="text-lg font-semibold text-semantic-text">Business Profile</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Business name</label>
+              <label className="mb-1 block text-sm font-medium text-semantic-muted">Business name</label>
               <Input defaultValue="ServiceButler Demo Plumbing" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Primary phone</label>
+              <label className="mb-1 block text-sm font-medium text-semantic-muted">Primary phone</label>
               <Input defaultValue="+1 (813) 555-0182" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Review link</label>
+              <label className="mb-1 block text-sm font-medium text-semantic-muted">Review link</label>
               <Input defaultValue="https://g.page/r/example/review" />
             </div>
           </CardBody>
@@ -33,28 +33,28 @@ export default function DashboardSettingsPage() {
 
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-neutral-900">Automation Rules</h2>
+            <h2 className="text-lg font-semibold text-semantic-text">Automation Rules</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-neutral-700">Quiet hours start</label>
+                <label className="mb-1 block text-sm font-medium text-semantic-muted">Quiet hours start</label>
                 <Input type="time" defaultValue="20:00" />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-neutral-700">Quiet hours end</label>
+                <label className="mb-1 block text-sm font-medium text-semantic-muted">Quiet hours end</label>
                 <Input type="time" defaultValue="07:00" />
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Default response channel</label>
+              <label className="mb-1 block text-sm font-medium text-semantic-muted">Default response channel</label>
               <Select defaultValue="SMS">
                 <option value="SMS">SMS first</option>
                 <option value="EMAIL">Email first</option>
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-neutral-700">Dispatcher notes template</label>
+              <label className="mb-1 block text-sm font-medium text-semantic-muted">Dispatcher notes template</label>
               <Textarea rows={5} defaultValue={"Issue:\nUrgency:\nBest arrival window:\nSpecial access instructions:"} />
             </div>
           </CardBody>

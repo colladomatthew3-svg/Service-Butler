@@ -20,16 +20,16 @@ export default function InboxPage() {
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-neutral-900">Threads</h2>
+            <h2 className="text-lg font-semibold text-semantic-text">Threads</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             {conversations.map((thread) => (
-              <article key={thread.id} className="rounded-xl border border-neutral-200 p-4">
+              <article key={thread.id} className="rounded-xl border border-semantic-border p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold text-neutral-900">{thread.name}</p>
+                  <p className="font-semibold text-semantic-text">{thread.name}</p>
                   <Badge variant={thread.channel === "SMS" ? "brand" : "default"}>{thread.channel}</Badge>
                 </div>
-                <p className="mt-2 text-sm text-neutral-600">{thread.lastMessage}</p>
+                <p className="mt-2 text-sm text-semantic-muted">{thread.lastMessage}</p>
                 {thread.unread && (
                   <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-accent-600">Unread</p>
                 )}
@@ -40,14 +40,14 @@ export default function InboxPage() {
 
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-neutral-900">Conversation</h2>
+            <h2 className="text-lg font-semibold text-semantic-text">Conversation</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="space-y-3">
-              <div className="max-w-[80%] rounded-2xl bg-neutral-100 px-4 py-3 text-sm text-neutral-800">
+              <div className="max-w-[80%] rounded-2xl bg-semantic-surface2 px-4 py-3 text-sm text-semantic-text">
                 Can someone come this afternoon? AC unit is warm.
               </div>
-              <div className="ml-auto max-w-[80%] rounded-2xl bg-brand-500 px-4 py-3 text-sm text-white">
+              <div className="ml-auto max-w-[80%] rounded-2xl bg-semantic-brand px-4 py-3 text-sm text-white">
                 Yes, we can send a tech between 3-5PM. Does that work?
               </div>
             </div>

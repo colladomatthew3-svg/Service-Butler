@@ -2,19 +2,24 @@ export default function HomePage() {
   return (
     <main className="pb-24">
       <section className="container pt-12 sm:pt-16">
-        <div className="grid items-center gap-10 rounded-3xl border border-semantic-border bg-semantic-surface px-6 py-10 shadow-card sm:px-10 sm:py-14 lg:grid-cols-[1fr_1.05fr]">
+        <div className="rounded-3xl bg-gradient-to-br from-brand-200/70 via-brand-100/30 to-transparent p-[1px] shadow-card">
+          <div className="grid items-center gap-10 rounded-3xl bg-semantic-surface px-6 py-10 sm:px-10 sm:py-14 lg:grid-cols-[1fr_1.05fr]">
           <div>
             <p className="inline-flex rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">
               Built for home service teams
             </p>
-            <h1 className="mt-5 max-w-2xl text-balance text-4xl font-semibold leading-[1.08] text-semantic-text sm:text-5xl lg:text-[3.4rem]">
+            <h1 className="mt-5 max-w-[20ch] text-balance text-4xl font-semibold leading-[1.04] text-semantic-text sm:text-5xl lg:text-[3.35rem]">
               Never Lose Another Lead - Automate Follow-Ups &amp; Get Jobs Done Faster
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-semantic-muted">
+            <p className="mt-5 max-w-[52ch] text-lg leading-relaxed text-semantic-muted">
               Capture every call and text, route jobs to the right tech, and keep dispatch, messaging, and follow-up in one fast workspace.
             </p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <a href="/login" className="inline-flex h-14 items-center rounded-xl bg-semantic-brand px-6 text-sm font-semibold text-white shadow-sm hover:bg-semantic-brandHover">
+            <div className="mt-10 flex flex-wrap gap-3">
+              <a
+                href="/login"
+                className="relative inline-flex h-14 items-center overflow-hidden rounded-xl bg-semantic-brand px-6 text-sm font-semibold text-white shadow-md transition hover:bg-semantic-brandHover"
+              >
+                <span className="absolute inset-y-0 -left-14 w-10 rotate-12 bg-white/30 blur-sm" />
                 Start Free Trial
               </a>
               <a
@@ -48,9 +53,10 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+        </div>
       </section>
 
-      <section className="container mt-16">
+      <section className="container py-16">
         <div className="rounded-3xl border border-semantic-border bg-semantic-surface px-6 py-8 shadow-soft sm:px-10">
           <div className="grid gap-8 lg:grid-cols-[0.95fr_1fr] lg:items-center">
             <div>
@@ -80,7 +86,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="container mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="container py-16">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["Lead Capture", "Capture calls, texts, and forms into one lead inbox instantly."],
           ["Smart Automated Follow-Ups", "Auto-send SMS and email sequences that stop on reply."],
@@ -92,9 +99,10 @@ export default function HomePage() {
             <p className="mt-2 text-sm leading-relaxed text-semantic-muted">{copy}</p>
           </article>
         ))}
+        </div>
       </section>
 
-      <section className="container mt-16">
+      <section className="container py-16">
         <div className="rounded-3xl border border-semantic-border bg-semantic-surface p-6 shadow-soft sm:p-10">
           <h2 className="text-2xl font-semibold text-semantic-text sm:text-3xl">How it works</h2>
           <div className="mt-8 grid gap-4 md:grid-cols-4">
@@ -113,7 +121,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="container mt-16 grid gap-4 md:grid-cols-3">
+      <section className="container py-16">
+        <div className="grid gap-4 md:grid-cols-3">
         {[
           ['"We stopped losing missed-call jobs in week one."', "HVAC owner · Tampa"],
           ['"Techs arrive with cleaner notes and fewer callbacks."', "Plumbing dispatcher · Orlando"],
@@ -124,9 +133,10 @@ export default function HomePage() {
             <footer className="mt-3 text-sm text-semantic-muted">{byline}</footer>
           </blockquote>
         ))}
+        </div>
       </section>
 
-      <section className="container mt-16">
+      <section className="container pt-4">
         <div className="rounded-3xl bg-neutral-900 px-6 py-10 text-white shadow-card sm:px-10 sm:py-14">
           <h2 className="text-3xl font-semibold">Operate faster with fewer missed opportunities.</h2>
           <p className="mt-3 max-w-2xl text-neutral-300">

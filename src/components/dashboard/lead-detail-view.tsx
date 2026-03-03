@@ -26,7 +26,7 @@ export function LeadDetailView({ lead }: { lead: Lead }) {
   };
 
   return (
-    <div className="space-y-6 pb-24 md:pb-0">
+    <div className="space-y-6 pb-36 md:pb-0">
       <PageHeader
         title={lead.name}
         subtitle={`${lead.serviceType} · ${lead.location}`}
@@ -133,7 +133,7 @@ export function LeadDetailView({ lead }: { lead: Lead }) {
         <Button variant="ghost">Back to Lead Inbox</Button>
       </Link>
 
-      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-semantic-border bg-semantic-surface/95 p-3 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-semantic-border bg-semantic-surface/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
         <div className="grid grid-cols-3 gap-2">
           <Button size="lg" onClick={callAction}>
             <PhoneCall className="h-4 w-4" />

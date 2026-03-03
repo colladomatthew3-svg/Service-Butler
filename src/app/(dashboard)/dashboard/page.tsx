@@ -28,7 +28,7 @@ export default function DashboardOverviewPage() {
       <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-neutral-900">Next Actions</h2>
+            <h2 className="text-lg font-semibold text-semantic-text">Next Actions</h2>
           </CardHeader>
           <CardBody className="grid gap-3 sm:grid-cols-2">
             <Button size="lg" className="justify-start">
@@ -52,7 +52,7 @@ export default function DashboardOverviewPage() {
 
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-neutral-900">Lead Queue Preview</h2>
+            <h2 className="text-lg font-semibold text-semantic-text">Lead Queue Preview</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             {preview.map((lead) => (

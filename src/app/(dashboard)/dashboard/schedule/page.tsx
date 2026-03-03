@@ -18,31 +18,31 @@ export default function SchedulePage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-neutral-900">Today & Tomorrow Jobs</h2>
+          <h2 className="text-lg font-semibold text-semantic-text">Today & Tomorrow Jobs</h2>
         </CardHeader>
         <CardBody className="space-y-4">
           {mockJobs.map((job) => (
-            <article key={job.id} className="rounded-xl border border-neutral-200 p-4">
+            <article key={job.id} className="rounded-xl border border-semantic-border p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="font-semibold text-neutral-900">{job.customer}</p>
-                  <p className="text-sm text-neutral-600">{job.serviceType}</p>
+                  <p className="font-semibold text-semantic-text">{job.customer}</p>
+                  <p className="text-sm text-semantic-muted">{job.serviceType}</p>
                 </div>
                 <Badge variant={job.status === "Completed" ? "success" : job.status === "In Progress" ? "warning" : "brand"}>
                   {job.status}
                 </Badge>
               </div>
-              <div className="mt-3 grid gap-2 text-sm text-neutral-700 sm:grid-cols-2">
+              <div className="mt-3 grid gap-2 text-sm text-semantic-muted sm:grid-cols-2">
                 <p className="inline-flex items-center gap-2">
-                  <CalendarClock className="h-4 w-4 text-neutral-500" />
+                  <CalendarClock className="h-4 w-4 text-semantic-muted" />
                   {job.startWindow}
                 </p>
                 <p className="inline-flex items-center gap-2">
-                  <Truck className="h-4 w-4 text-neutral-500" />
+                  <Truck className="h-4 w-4 text-semantic-muted" />
                   Tech: {job.tech}
                 </p>
               </div>
-              <p className="mt-2 text-sm text-neutral-600">{job.location}</p>
+              <p className="mt-2 text-sm text-semantic-muted">{job.location}</p>
             </article>
           ))}
         </CardBody>

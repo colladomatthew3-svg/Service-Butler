@@ -32,6 +32,7 @@ CORE_REST_STATUS="failed"
 CORE_REST_CODE="000"
 STUDIO_HTTP_CODE="000"
 DB_PUSH_STATUS="not-run"
+CURRENT_DB_MODE="local"
 NGROK_STATUS="not-started"
 NGROK_URL=""
 NGROK_REASON=""
@@ -274,6 +275,11 @@ create_stripe_price_if_missing() {
 print_ready() {
   print_header "READY"
   echo "App URL:                 $APP_URL"
+  if [[ "$CURRENT_DB_MODE" == "remote" ]]; then
+    echo "DB:                      remote (db push enabled)"
+  else
+    echo "DB:                      local (migrations applied on start)"
+  fi
   echo "Supabase Studio URL:     $SUPABASE_STUDIO_URL (optional, http $STUDIO_HTTP_CODE)"
   echo "Core auth health:        $CORE_AUTH_STATUS (http $CORE_AUTH_CODE)"
   echo "Core rest health:        $CORE_REST_STATUS (http $CORE_REST_CODE)"
@@ -337,6 +343,7 @@ fi
 for key in \
   NEXT_PUBLIC_APP_URL WEBHOOK_BASE_URL \
   NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_DB_URL \
+  DB_MODE \
   BILLING_MODE \
   TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE_NUMBER \
   STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID \
@@ -358,10 +365,18 @@ fi
 if [[ -z "$(get_env_value BILLING_MODE)" ]]; then
   set_env_key "BILLING_MODE" "disabled"
 fi
+if [[ -z "$(get_env_value DB_MODE)" ]]; then
+  set_env_key "DB_MODE" "local"
+fi
 CURRENT_BILLING_MODE="$(get_env_value BILLING_MODE)"
 if [[ "$CURRENT_BILLING_MODE" != "stripe" ]]; then
   CURRENT_BILLING_MODE="disabled"
   set_env_key "BILLING_MODE" "disabled"
+fi
+CURRENT_DB_MODE="$(get_env_value DB_MODE)"
+if [[ "$CURRENT_DB_MODE" != "remote" ]]; then
+  CURRENT_DB_MODE="local"
+  set_env_key "DB_MODE" "local"
 fi
 
 if [[ "$FATAL" -eq 0 ]]; then
@@ -467,12 +482,29 @@ if [[ "$FATAL" -eq 0 ]]; then
   STUDIO_HTTP_CODE="$(http_code_for_url "$SUPABASE_STUDIO_URL")"
 
   if [[ "$FATAL" -eq 0 ]]; then
-    if retry_cmd_logged "supabase db push" 3 2 "$DB_PUSH_LOG" npx supabase db push; then
-      DB_PUSH_STATUS="ok"
+    if [[ "$CURRENT_DB_MODE" == "remote" ]]; then
+      : > "$DB_PUSH_LOG"
+      if npx supabase db push > >(tee -a "$DB_PUSH_LOG") 2> >(tee -a "$DB_PUSH_LOG" >&2); then
+        DB_PUSH_STATUS="ok"
+      elif grep -qi "Cannot find project ref" "$DB_PUSH_LOG"; then
+        DB_PUSH_STATUS="skipped"
+        echo "⚠️ supabase db push skipped: project is not linked (Cannot find project ref)."
+        echo "   Recovery: npx supabase link --project-ref <ref> && npx supabase db push"
+      elif retry_cmd_logged "supabase db push" 2 2 "$DB_PUSH_LOG" npx supabase db push; then
+        DB_PUSH_STATUS="ok"
+      elif grep -qi "Cannot find project ref" "$DB_PUSH_LOG"; then
+        DB_PUSH_STATUS="skipped"
+        echo "⚠️ supabase db push skipped: project is not linked (Cannot find project ref)."
+        echo "   Recovery: npx supabase link --project-ref <ref> && npx supabase db push"
+      else
+        DB_PUSH_STATUS="failed"
+        echo "   Recovery: npx supabase db push"
+        FATAL=1
+      fi
     else
-      DB_PUSH_STATUS="failed"
-      echo "   Recovery: npx supabase db push"
-      FATAL=1
+      DB_PUSH_STATUS="skipped"
+      : > "$DB_PUSH_LOG"
+      echo "DB_MODE=local -> skipping supabase db push." | tee -a "$DB_PUSH_LOG"
     fi
 
     : > "$SEED_USERS_LOG"

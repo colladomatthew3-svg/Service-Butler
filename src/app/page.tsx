@@ -1,6 +1,11 @@
+import Image from "next/image";
+import { TopNav } from "@/components/brand/TopNav";
+
 export default function HomePage() {
   return (
-    <main className="pb-24">
+    <>
+      <TopNav />
+      <main className="pb-24">
       <section className="container pt-12 sm:pt-16">
         <div className="rounded-3xl bg-gradient-to-br from-brand-200/70 via-brand-100/30 to-transparent p-[1px] shadow-card">
           <div className="grid items-center gap-10 rounded-3xl bg-semantic-surface px-6 py-10 sm:px-10 sm:py-14 lg:grid-cols-[1fr_1.05fr]">
@@ -51,12 +56,12 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
+            </div>
           </div>
-        </div>
         </div>
       </section>
 
-      <section className="container py-16">
+      <section id="features" className="container py-16">
         <div className="rounded-3xl border border-semantic-border bg-semantic-surface px-6 py-8 shadow-soft sm:px-10">
           <div className="grid gap-8 lg:grid-cols-[0.95fr_1fr] lg:items-center">
             <div>
@@ -103,6 +108,20 @@ export default function HomePage() {
       </section>
 
       <section className="container py-16">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-semantic-border bg-semantic-surface p-3 shadow-soft">
+            <Image src="/stock/crew.svg" alt="Dispatch team workspace visual" width={1200} height={800} className="h-52 w-full rounded-xl object-cover" />
+          </div>
+          <div className="rounded-2xl border border-semantic-border bg-semantic-surface p-3 shadow-soft">
+            <Image src="/stock/truck.svg" alt="Service truck brand visual" width={1200} height={800} className="h-52 w-full rounded-xl object-cover" />
+          </div>
+          <div className="rounded-2xl border border-semantic-border bg-semantic-surface p-3 shadow-soft">
+            <Image src="/stock/tools.svg" alt="Technician tools visual" width={1200} height={800} className="h-52 w-full rounded-xl object-cover" />
+          </div>
+        </div>
+      </section>
+
+      <section id="how-it-works" className="container py-16">
         <div className="rounded-3xl border border-semantic-border bg-semantic-surface p-6 shadow-soft sm:p-10">
           <h2 className="text-2xl font-semibold text-semantic-text sm:text-3xl">How it works</h2>
           <div className="mt-8 grid gap-4 md:grid-cols-4">
@@ -149,6 +168,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-    </main>
+      </main>
+    </>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { signOut } from "@/actions/auth";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { getAccountBillingState } from "@/lib/services/account-billing";
@@ -10,7 +11,13 @@ import { Card, CardBody } from "@/components/ui/card";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { accountId } = await getCurrentUserContext();
+  let accountId: string;
+  try {
+    ({ accountId } = await getCurrentUserContext());
+  } catch {
+    redirect("/login");
+  }
+
   const billing = await getAccountBillingState(accountId);
 
   const showWarning = !billing.allowed || billing.allowedReason === "dev_override";

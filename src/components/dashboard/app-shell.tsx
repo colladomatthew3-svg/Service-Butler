@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import { Menu, LayoutGrid, Users, CalendarDays, MessageSquare, Settings, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { ComponentType, ReactNode } from "react";
+import { Logo } from "@/components/brand/Logo";
+import { AppTopBar } from "@/components/brand/AppTopBar";
 
 type NavItem = {
   href: string;
@@ -43,9 +43,9 @@ export function DashboardAppShell({
           )}
         >
           <div className="mb-8 flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">ServiceButler</p>
-              <p className="text-lg font-semibold text-neutral-900">Ops Console</p>
+            <div className="space-y-3">
+              <Logo variant="lockup" size={34} />
+              <p className="text-xs uppercase tracking-[0.14em] text-semantic-muted">Ops Console</p>
             </div>
             <button
               className="rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 lg:hidden"
@@ -103,15 +103,10 @@ export function DashboardAppShell({
               >
                 <Menu className="h-5 w-5" />
               </button>
-              <div className="w-full max-w-md">
-                <Input placeholder="Search leads, jobs, customers..." className="h-11" />
+              <div className="md:hidden">
+                <Logo variant="wordmark" size={28} />
               </div>
-              <div className="ml-auto hidden items-center gap-3 sm:flex">
-                <Button size="md">New Lead</Button>
-                <Button variant="secondary" size="md">
-                  Create Job
-                </Button>
-              </div>
+              <AppTopBar />
             </div>
           </header>
 

@@ -6,6 +6,7 @@
    bash scripts/dev-up.sh
    ```
 2. One-time Twilio console action: paste the printed webhook URLs for Messaging, Voice, and Status Callback.
+   - Twilio webhooks are auto-configured when credentials are present.
 3. Run one-command smoke test:
    ```bash
    bash scripts/smoke-test.sh
@@ -39,6 +40,7 @@ Troubleshooting:
   - `npx supabase db seed`
 - If seeding fails, it keeps services/containers running and prints next-step recovery commands.
 - Starts Next.js, Inngest, ngrok, and Stripe webhook listener in background.
+- Auto-configures Twilio phone webhooks when Twilio credentials + `WEBHOOK_BASE_URL` are available.
 - If `BILLING_MODE=disabled`, Stripe listener/product setup is skipped.
 - Auto-writes `WEBHOOK_BASE_URL` and `STRIPE_WEBHOOK_SECRET` to `.env.local`.
 - Attempts to auto-create `STRIPE_PRICE_ID` if missing.

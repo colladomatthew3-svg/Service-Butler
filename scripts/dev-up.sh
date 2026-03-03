@@ -14,6 +14,7 @@ SUPABASE_LOG="$LOG_DIR/supabase.log"
 DB_PUSH_LOG="$LOG_DIR/db-push.log"
 SEED_USERS_LOG="$LOG_DIR/seed-users.log"
 DB_SEED_LOG="$LOG_DIR/db-seed.log"
+TWILIO_CONFIG_LOG="$LOG_DIR/twilio-config.log"
 NEXT_LOG="$LOG_DIR/next.log"
 INNGEST_LOG="$LOG_DIR/inngest.log"
 NGROK_LOG="$LOG_DIR/ngrok.log"
@@ -312,6 +313,7 @@ print_ready() {
   echo "  - ./logs/db-push.log"
   echo "  - ./logs/seed-users.log"
   echo "  - ./logs/db-seed.log"
+  echo "  - ./logs/twilio-config.log"
   echo "  - ./logs/next.log"
   echo "  - ./logs/inngest.log"
   echo "  - ./logs/ngrok.log"
@@ -552,6 +554,12 @@ if have_cmd ngrok; then
       NGROK_REASON="unable to read ngrok API tunnel URL"
     else
       set_env_key "WEBHOOK_BASE_URL" "$NGROK_URL"
+
+      : > "$TWILIO_CONFIG_LOG"
+      if ! node scripts/twilio-config.mjs > >(tee -a "$TWILIO_CONFIG_LOG") 2> >(tee -a "$TWILIO_CONFIG_LOG" >&2); then
+        echo "⚠️ Twilio auto-config failed unexpectedly. Continuing."
+        echo "   Recovery: node scripts/twilio-config.mjs"
+      fi
     fi
   else
     NGROK_REASON="failed to launch process"

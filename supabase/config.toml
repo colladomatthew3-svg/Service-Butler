@@ -1,0 +1,8 @@
+project_id = "servicebutler-ai"
+
+[db]
+port = 54322
+
+[db.seed]
+enabled = false
+sql_paths = ["./seed.sql"]

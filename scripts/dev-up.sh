@@ -37,6 +37,7 @@ NGROK_URL=""
 NGROK_REASON=""
 STRIPE_STATUS="not-started"
 STRIPE_REASON=""
+CURRENT_BILLING_MODE="disabled"
 SUPABASE_STUDIO_URL="http://127.0.0.1:54323"
 APP_URL="http://localhost:3000"
 
@@ -276,6 +277,11 @@ print_ready() {
   echo "Supabase Studio URL:     $SUPABASE_STUDIO_URL (optional, http $STUDIO_HTTP_CODE)"
   echo "Core auth health:        $CORE_AUTH_STATUS (http $CORE_AUTH_CODE)"
   echo "Core rest health:        $CORE_REST_STATUS (http $CORE_REST_CODE)"
+  if [[ "$CURRENT_BILLING_MODE" == "disabled" ]]; then
+    echo "Billing:                 disabled (MVP mode)"
+  else
+    echo "Billing:                 stripe"
+  fi
   if [[ -n "$NGROK_URL" ]]; then
     echo "ngrok URL:               $NGROK_URL"
     echo "Twilio SMS inbound:      $NGROK_URL/api/twilio/sms/inbound"
@@ -331,6 +337,7 @@ fi
 for key in \
   NEXT_PUBLIC_APP_URL WEBHOOK_BASE_URL \
   NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY SUPABASE_DB_URL \
+  BILLING_MODE \
   TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE_NUMBER \
   STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID \
   ALLOW_OUTBOUND_WITHOUT_STRIPE SUBSCRIPTION_GRACE_DAYS; do
@@ -347,6 +354,14 @@ if [[ -z "$(get_env_value ALLOW_OUTBOUND_WITHOUT_STRIPE)" ]]; then
 fi
 if [[ -z "$(get_env_value SUBSCRIPTION_GRACE_DAYS)" ]]; then
   set_env_key "SUBSCRIPTION_GRACE_DAYS" "3"
+fi
+if [[ -z "$(get_env_value BILLING_MODE)" ]]; then
+  set_env_key "BILLING_MODE" "disabled"
+fi
+CURRENT_BILLING_MODE="$(get_env_value BILLING_MODE)"
+if [[ "$CURRENT_BILLING_MODE" != "stripe" ]]; then
+  CURRENT_BILLING_MODE="disabled"
+  set_env_key "BILLING_MODE" "disabled"
 fi
 
 if [[ "$FATAL" -eq 0 ]]; then
@@ -513,7 +528,10 @@ else
   NGROK_REASON="ngrok CLI not installed"
 fi
 
-if have_cmd stripe; then
+if [[ "$CURRENT_BILLING_MODE" == "disabled" ]]; then
+  STRIPE_STATUS="disabled"
+  STRIPE_REASON="billing disabled (MVP mode)"
+elif have_cmd stripe; then
   if start_bg "stripe_listen" "$STRIPE_LISTEN_LOG" stripe listen --forward-to http://localhost:3000/api/stripe/webhook; then
     STRIPE_STATUS="running"
     WHSEC=""

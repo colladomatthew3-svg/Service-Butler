@@ -1,7 +1,10 @@
 import { isSubscriptionAllowed } from "@/lib/services/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isBillingDisabled } from "@/lib/services/billing-mode";
 
 export async function assertOutboundAllowed(accountId: string) {
+  if (isBillingDisabled()) return;
+
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("stripe_subscriptions")

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 import { createCheckoutSession } from "@/lib/services/billing";
+import { isBillingDisabled } from "@/lib/services/billing-mode";
 
 export async function POST(req: NextRequest) {
+  if (isBillingDisabled()) {
+    return NextResponse.json({ disabled: true });
+  }
+
   const { accountId, role } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER"]);
 

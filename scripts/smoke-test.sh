@@ -25,6 +25,16 @@ get_env_value() {
   echo "${line#*=}"
 }
 
+get_billing_mode() {
+  local mode
+  mode="$(get_env_value BILLING_MODE)"
+  if [[ "$mode" == "stripe" ]]; then
+    echo "stripe"
+  else
+    echo "disabled"
+  fi
+}
+
 run_step() {
   local label="$1"
   shift
@@ -61,13 +71,23 @@ else
 fi
 
 # Env sanity
+BILLING_MODE="$(get_billing_mode)"
 MISSING=()
-for key in TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE_NUMBER STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID WEBHOOK_BASE_URL; do
+for key in TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN TWILIO_PHONE_NUMBER WEBHOOK_BASE_URL; do
   val="$(get_env_value "$key")"
   if [[ -z "$val" ]]; then
     MISSING+=("$key")
   fi
 done
+
+if [[ "$BILLING_MODE" == "stripe" ]]; then
+  for key in STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID; do
+    val="$(get_env_value "$key")"
+    if [[ -z "$val" ]]; then
+      MISSING+=("$key")
+    fi
+  done
+fi
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
   echo "\n❌ Missing env keys in .env.local: ${MISSING[*]}"
@@ -81,7 +101,10 @@ if [[ -n "$WEBHOOK_BASE_URL" && ! "$WEBHOOK_BASE_URL" =~ ^https:// ]]; then
 fi
 
 # Stripe sanity
-if command -v stripe >/dev/null 2>&1; then
+if [[ "$BILLING_MODE" == "disabled" ]]; then
+  STRIPE_STATUS="DISABLED"
+  echo "\nℹ️ Stripe checks skipped because BILLING_MODE=disabled."
+elif command -v stripe >/dev/null 2>&1; then
   STRIPE_STATUS="FAIL"
   if stripe trigger customer.subscription.created >/dev/null 2>&1 && stripe trigger customer.subscription.updated >/dev/null 2>&1; then
     if command -v psql >/dev/null 2>&1 && [[ -n "$SUPABASE_DB_URL" ]]; then
@@ -132,7 +155,7 @@ echo "Supabase:         $SUPABASE_STATUS"
 echo "Stripe webhooks:  $STRIPE_STATUS"
 echo "Twilio:           $TWILIO_STATUS"
 
-if [[ "$BUILD_STATUS" == "PASS" && "$ENV_STATUS" == "PASS" && ( "$SUPABASE_STATUS" == "PASS" || "$SUPABASE_STATUS" == "SKIPPED" ) && ( "$STRIPE_STATUS" == "PASS" || "$STRIPE_STATUS" == "MANUAL" ) ]]; then
+if [[ "$BUILD_STATUS" == "PASS" && "$ENV_STATUS" == "PASS" && ( "$SUPABASE_STATUS" == "PASS" || "$SUPABASE_STATUS" == "SKIPPED" ) && ( "$STRIPE_STATUS" == "PASS" || "$STRIPE_STATUS" == "MANUAL" || "$STRIPE_STATUS" == "DISABLED" ) ]]; then
   echo "\n✅ Overall: READY FOR MANUAL TWILIO VERIFY"
   exit 0
 fi

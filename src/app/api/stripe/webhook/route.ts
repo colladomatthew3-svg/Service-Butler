@@ -4,8 +4,14 @@ import { getStripeClient } from "@/lib/services/stripe";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { markWebhookProcessing } from "@/lib/services/webhook-idempotency";
 import { logEvent } from "@/lib/services/logger";
+import { isBillingDisabled } from "@/lib/services/billing-mode";
 
 export async function POST(req: NextRequest) {
+  if (isBillingDisabled()) {
+    logEvent("info", "webhook.stripe.ignored", { reason: "billing disabled" });
+    return NextResponse.json({ ok: true, ignored: true });
+  }
+
   const signature = req.headers.get("stripe-signature");
   if (!signature) return NextResponse.json({ error: "Missing signature" }, { status: 400 });
 

@@ -28,6 +28,7 @@ Troubleshooting:
   - Auth: `/auth/v1/health` must return `200`
   - REST: `/rest/v1/` must return anything except `000` (401 is acceptable)
 - Studio health is optional and never blocks boot.
+- Defaults billing to MVP mode via `BILLING_MODE=disabled`.
 - Auto-populates `.env.local` Supabase keys from local CLI output/status:
   - `NEXT_PUBLIC_SUPABASE_URL`
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -38,6 +39,7 @@ Troubleshooting:
   - `npx supabase db seed`
 - If seeding fails, it keeps services/containers running and prints next-step recovery commands.
 - Starts Next.js, Inngest, ngrok, and Stripe webhook listener in background.
+- If `BILLING_MODE=disabled`, Stripe listener/product setup is skipped.
 - Auto-writes `WEBHOOK_BASE_URL` and `STRIPE_WEBHOOK_SECRET` to `.env.local`.
 - Attempts to auto-create `STRIPE_PRICE_ID` if missing.
 - Prints a ready summary with copy/paste Twilio webhook URLs.
@@ -47,6 +49,9 @@ Troubleshooting:
 - Seeding is run explicitly by `scripts/dev-up.sh` in deterministic order.
 - Use `scripts/db-reset.sh` only when you want to nuke/reset the local DB.
 - `.env.example` includes the Supabase keys and `dev-up.sh` fills them automatically into `.env.local`.
+- Billing modes:
+  - `disabled` (default): Stripe endpoints return `{disabled:true}` and outbound is always allowed.
+  - `stripe`: full Stripe checkout/portal/webhook/subscription gating behavior.
 
 ## Stop everything
 ```bash

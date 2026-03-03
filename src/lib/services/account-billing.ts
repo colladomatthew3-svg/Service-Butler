@@ -1,7 +1,16 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSubscriptionAllowed } from "@/lib/services/stripe";
+import { isBillingDisabled } from "@/lib/services/billing-mode";
 
 export async function getAccountBillingState(accountId: string) {
+  if (isBillingDisabled()) {
+    return {
+      status: "disabled",
+      allowed: true,
+      allowedReason: "billing_disabled"
+    };
+  }
+
   const supabase = await getSupabaseServerClient();
   const { data } = await supabase
     .from("stripe_subscriptions")

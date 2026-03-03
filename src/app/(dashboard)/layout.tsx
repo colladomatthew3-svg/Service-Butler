@@ -2,41 +2,71 @@ import Link from "next/link";
 import { signOut } from "@/actions/auth";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { getAccountBillingState } from "@/lib/services/account-billing";
+import { DashboardAppShell } from "@/components/dashboard/app-shell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { accountId } = await getCurrentUserContext();
   const billing = await getAccountBillingState(accountId);
 
   const showWarning = !billing.allowed || billing.allowedReason === "dev_override";
+  const bannerText =
+    billing.allowedReason === "dev_override"
+      ? `Outbound allowed because dev override is enabled. Stripe subscription: ${billing.status}.`
+      : billing.allowedReason === "billing_disabled"
+        ? "Billing is disabled in MVP mode. Outbound features are available."
+        : `Outbound sending is locked. Current subscription status: ${billing.status}.`;
 
   return (
-    <main>
-      {showWarning && (
-        <div
-          className="panel"
-          style={{
-            borderColor: billing.allowedReason === "dev_override" ? "#0a7f5a" : "#b22222",
-            background: billing.allowedReason === "dev_override" ? "#f2fff7" : "#fff4f4",
-            color: billing.allowedReason === "dev_override" ? "#0a583f" : "#7a0000"
-          }}
-        >
-          {billing.allowedReason === "dev_override"
-            ? `Outbound allowed because dev override is enabled. Stripe subscription status: ${billing.status}.`
-            : `Outbound sending is locked. Current subscription status: ${billing.status}. Update billing to resume SMS/email/voice.`}
+    <DashboardAppShell
+      onSignOut={
+        <div className="space-y-3">
+          <Link href="/billing" className="block">
+            <Button variant="secondary" fullWidth>
+              Billing
+            </Button>
+          </Link>
+          <Link href="/pipeline" className="block">
+            <Button variant="ghost" fullWidth>
+              Legacy Pipeline
+            </Button>
+          </Link>
+          <form action={signOut}>
+            <Button variant="danger" fullWidth type="submit">
+              Sign out
+            </Button>
+          </form>
         </div>
+      }
+    >
+      {(showWarning || billing.allowedReason === "billing_disabled") && (
+        <Card className="mb-6">
+          <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <Badge
+                variant={
+                  billing.allowedReason === "billing_disabled"
+                    ? "brand"
+                    : billing.allowedReason === "dev_override"
+                      ? "success"
+                      : "danger"
+                }
+              >
+                {billing.allowed ? "Outbound enabled" : "Outbound locked"}
+              </Badge>
+              <p className="mt-2 text-sm text-neutral-700">{bannerText}</p>
+            </div>
+            <Link href="/billing">
+              <Button variant="secondary">Open Billing</Button>
+            </Link>
+          </CardBody>
+        </Card>
       )}
-
-      <nav>
-        <Link href="/pipeline">Pipeline</Link>
-        <Link href="/conversations">Conversations</Link>
-        <Link href="/campaigns">Campaigns</Link>
-        <Link href="/settings">Settings</Link>
-        <Link href="/billing">Billing</Link>
-        <form action={signOut}>
-          <button type="submit">Sign out</button>
-        </form>
-      </nav>
       {children}
-    </main>
+    </DashboardAppShell>
   );
 }

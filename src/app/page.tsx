@@ -1,98 +1,114 @@
 export default function HomePage() {
   return (
-    <main className="min-h-screen max-w-none px-0 py-0">
-      <div className="bg-[radial-gradient(circle_at_top_right,_rgba(120,190,32,0.18),_transparent_45%),radial-gradient(circle_at_10%_20%,_rgba(217,140,95,0.16),_transparent_40%),#F7F9F8]">
-        <section className="mx-auto max-w-6xl px-6 pb-20 pt-16 sm:px-10 lg:pt-24">
-          <div className="inline-flex items-center rounded-full border border-[#78BE20]/35 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#1F2933]">
-            Concierge Clean Ops Platform
-          </div>
-          <h1 className="mt-8 max-w-4xl text-balance text-4xl font-semibold leading-tight text-[#1F2933] sm:text-5xl lg:text-6xl">
-            Never Lose Another Lead - Automate Follow-Ups &amp; Get Jobs Done Faster
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-[#52606D]">
-            ServiceButler helps home service teams capture every inbound call, text, and form lead, then instantly
-            respond, dispatch, and track work from one practical dashboard.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-4">
-            <a
-              href="/login"
-              className="rounded-md bg-[#78BE20] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#67a71b]"
-            >
-              Start Free Trial
-            </a>
-            <a
-              href="/login"
-              className="rounded-md border border-[#1F2933]/20 bg-white px-7 py-3 text-sm font-semibold text-[#1F2933] transition hover:border-[#1F2933]/40"
-            >
-              See Live Demo
-            </a>
-          </div>
-        </section>
-
-        <section className="mx-auto grid max-w-6xl gap-5 px-6 pb-20 sm:grid-cols-2 sm:px-10 lg:grid-cols-4">
-          {[
-            ["Lead Capture", "Collect call, SMS, and web leads automatically so no inquiry slips through."],
-            ["Smart Automated Follow-Ups", "Send the right text or email at the right time with stop-on-reply logic."],
-            ["Job Dispatch & Tracking", "Assign techs, monitor status, and keep dispatch aligned with field activity."],
-            ["One Dashboard for Ops", "Manage conversations, campaigns, jobs, and settings from one clean workspace."]
-          ].map(([title, body]) => (
-            <article key={title} className="rounded-xl border border-[#d7dfda] bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-[#1F2933]">{title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[#52606D]">{body}</p>
-            </article>
-          ))}
-        </section>
-
-        <section className="mx-auto max-w-6xl px-6 pb-20 sm:px-10">
-          <div className="rounded-2xl border border-[#d7dfda] bg-white p-8 shadow-sm sm:p-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#52606D]">How It Works</p>
-            <div className="mt-8 grid gap-6 md:grid-cols-3">
-              {[
-                ["1. Capture", "Every call, message, or web form becomes a trackable lead in seconds."],
-                ["2. Automate", "Prebuilt workflows follow up instantly, then nurture until they reply or book."],
-                ["3. Dispatch", "Turn won leads into jobs, assign your team, and track completion without friction."]
-              ].map(([title, body]) => (
-                <div key={title} className="rounded-xl bg-[#F7F9F8] p-6">
-                  <h3 className="text-lg font-semibold text-[#1F2933]">{title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-[#52606D]">{body}</p>
-                </div>
-              ))}
+    <main className="pb-20">
+      <section className="container pt-12 sm:pt-16">
+        <div className="grid items-center gap-10 rounded-3xl border border-neutral-200 bg-white px-6 py-8 shadow-card sm:px-10 sm:py-12 lg:grid-cols-[1fr_1.05fr]">
+          <div>
+            <p className="inline-flex rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">
+              Built for home service teams
+            </p>
+            <h1 className="mt-5 text-4xl font-semibold leading-tight text-neutral-900 sm:text-5xl">
+              Never Lose Another Lead - Automate Follow-Ups &amp; Get Jobs Done Faster
+            </h1>
+            <p className="mt-5 max-w-xl text-lg text-neutral-600">
+              Capture every call and text, route jobs to the right tech, and keep dispatch, messaging, and follow-up in one fast workspace.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <a href="/login" className="inline-flex h-12 items-center rounded-xl bg-brand-500 px-6 text-sm font-semibold text-white hover:bg-brand-600">
+                Start Free Trial
+              </a>
+              <a
+                href="/dashboard"
+                className="inline-flex h-12 items-center rounded-xl border border-neutral-300 bg-white px-6 text-sm font-semibold text-neutral-900 hover:bg-neutral-50"
+              >
+                Open Product Tour
+              </a>
             </div>
           </div>
-        </section>
 
-        <section className="mx-auto max-w-6xl px-6 pb-20 sm:px-10">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 shadow-soft sm:p-6">
+            <div className="rounded-xl bg-white p-4 shadow-soft">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm font-semibold text-neutral-900">Lead Inbox</p>
+                <span className="rounded-full bg-success-100 px-3 py-1 text-xs font-semibold text-success-700">12 new today</span>
+              </div>
+              <div className="space-y-3">
+                {[
+                  ["James Roper", "Missed call · HVAC", "Call in 10 min"],
+                  ["Maria Fernandez", "Web form · Plumbing", "Send estimate"],
+                  ["Chris Parker", "SMS reply · Roofing", "Schedule tomorrow"]
+                ].map(([name, source, next]) => (
+                  <div key={name} className="rounded-lg border border-neutral-200 p-3">
+                    <p className="font-semibold text-neutral-900">{name}</p>
+                    <p className="text-xs text-neutral-500">{source}</p>
+                    <p className="mt-1 text-sm text-neutral-700">Next: {next}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="container mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          ["Lead Capture", "Capture calls, texts, and forms into one lead inbox instantly."],
+          ["Smart Automated Follow-Ups", "Auto-send SMS and email sequences that stop on reply."],
+          ["Job Dispatch & Tracking", "Assign jobs with clear windows and field-ready notes."],
+          ["One Dashboard for Ops", "Dispatch, lead status, and inbox updates in one place."]
+        ].map(([title, copy]) => (
+          <article key={title} className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-soft">
+            <h3 className="text-lg font-semibold text-neutral-900">{title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-600">{copy}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="container mt-16">
+        <div className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-soft sm:p-10">
+          <h2 className="text-2xl font-semibold text-neutral-900 sm:text-3xl">How it works</h2>
+          <div className="mt-8 grid gap-4 md:grid-cols-4">
             {[
-              ['"We recovered 19 missed leads in our first month."', "A. Ramos, HVAC Owner"],
-              ['"Dispatch finally has one source of truth."', "L. Patel, Plumbing Ops Lead"],
-              ['"Follow-ups now happen automatically, every single time."', "M. Walker, Roofing GM"]
-            ].map(([quote, person]) => (
-              <blockquote key={person} className="rounded-xl border border-[#d7dfda] bg-white p-6 shadow-sm">
-                <p className="text-base leading-relaxed text-[#1F2933]">{quote}</p>
-                <footer className="mt-4 text-sm text-[#52606D]">{person}</footer>
-              </blockquote>
+              ["1. Lead Capture", "Inbound calls, SMS, and forms are captured instantly."],
+              ["2. Qualification", "Auto-replies gather details and flag urgency."],
+              ["3. Schedule", "Dispatcher books jobs and assigns the right tech."],
+              ["4. Follow-Up", "Automations send reminders and review requests."]
+            ].map(([title, copy]) => (
+              <div key={title} className="rounded-xl bg-neutral-50 p-5">
+                <h3 className="text-base font-semibold text-neutral-900">{title}</h3>
+                <p className="mt-2 text-sm text-neutral-600">{copy}</p>
+              </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="bg-[#1F2933]">
-          <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-14 sm:px-10 md:flex-row md:items-center">
-            <div>
-              <h2 className="text-3xl font-semibold text-white">Ready to run a tighter operation?</h2>
-              <p className="mt-2 max-w-2xl text-[#d6dde3]">
-                Launch ServiceButler and convert more leads without adding admin overhead.
-              </p>
-            </div>
-            <a
-              href="/login"
-              className="rounded-md bg-[#D98C5F] px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#c37d53]"
-            >
-              Get Started Now
+      <section className="container mt-16 grid gap-4 md:grid-cols-3">
+        {[
+          ['"We stopped losing missed-call jobs in week one."', "HVAC owner · Tampa"],
+          ['"Techs arrive with cleaner notes and fewer callbacks."', "Plumbing dispatcher · Orlando"],
+          ['"Our response time dropped from 45 minutes to under 7."', "Electrical contractor · Jacksonville"]
+        ].map(([quote, byline]) => (
+          <blockquote key={byline} className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-soft">
+            <p className="text-base text-neutral-900">{quote}</p>
+            <footer className="mt-3 text-sm text-neutral-500">{byline}</footer>
+          </blockquote>
+        ))}
+      </section>
+
+      <section className="container mt-16">
+        <div className="rounded-3xl bg-neutral-900 px-6 py-10 text-white sm:px-10 sm:py-14">
+          <h2 className="text-3xl font-semibold">Operate faster with fewer missed opportunities.</h2>
+          <p className="mt-3 max-w-2xl text-neutral-300">
+            Give your team one clear system for lead intake, dispatch, messaging, and follow-up.
+          </p>
+          <div className="mt-7">
+            <a href="/login" className="inline-flex h-12 items-center rounded-xl bg-accent-500 px-6 text-sm font-semibold text-white hover:bg-accent-600">
+              Book Your Demo
             </a>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
     </main>
   );
 }

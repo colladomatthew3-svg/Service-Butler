@@ -3,72 +3,68 @@
 @tailwind utilities;
 
 :root {
-  --bg: #f7f8f9;
-  --panel: #ffffff;
-  --text: #112233;
-  --muted: #4d5b66;
-  --accent: #0a7f5a;
-  --danger: #b22222;
-  --border: #dce2e7;
+  --bg: #f7f9f8;
+  --text: #1f2933;
+  --muted: #52606d;
+  --border: #dbe3ea;
 }
 
 * {
   box-sizing: border-box;
 }
 
+*,
+*::before,
+*::after {
+  border-color: var(--border);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-surface text-neutral-900 font-sans;
+    margin: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply tracking-tight text-neutral-900;
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    @apply font-sans;
+  }
+
+  :focus-visible {
+    outline: 2px solid rgba(120, 190, 32, 0.65);
+    outline-offset: 2px;
+  }
+}
+
 body {
-  margin: 0;
-  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
-  background: linear-gradient(180deg, #f7f8f9 0%, #eef3f7 100%);
+  background: radial-gradient(1200px 600px at 10% -10%, rgba(120, 190, 32, 0.16), transparent 50%),
+    radial-gradient(800px 500px at 100% 0%, rgba(217, 140, 95, 0.12), transparent 45%),
+    var(--bg);
   color: var(--text);
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-main {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 12px;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-
-button {
-  cursor: pointer;
-  background: var(--accent);
-  color: white;
-  border: none;
-}
-
-nav {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-
-nav a {
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
   background: white;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
 }

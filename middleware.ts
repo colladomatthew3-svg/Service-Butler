@@ -14,6 +14,7 @@ export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const pathname = req.nextUrl.pathname;
 
+  if (pathname === "/") return res;
   if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) return res;
 
   const supabase = createServerClient(

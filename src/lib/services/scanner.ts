@@ -570,14 +570,12 @@ export async function fetchGooglePlacesLeads({
   service,
   radius,
   triggers,
-  forecast,
   campaignMode
 }: {
   location: string;
   service: string;
   radius: number;
   triggers: string[];
-  forecast?: ForecastSummary | null;
   campaignMode: CampaignMode;
 }): Promise<ScannerLead[]> {
   const run = await runScanner({

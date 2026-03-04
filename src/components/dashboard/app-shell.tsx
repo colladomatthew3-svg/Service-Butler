@@ -16,8 +16,8 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Overview", icon: LayoutGrid },
-  { href: "/dashboard/leads", label: "Lead Inbox", icon: Users },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/dashboard/leads", label: "Leads", icon: Users },
   { href: "/dashboard/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/dashboard/jobs", label: "Jobs", icon: BriefcaseBusiness },
   { href: "/dashboard/scanner", label: "Scanner", icon: Radar },

@@ -1,413 +1,878 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Radar, Search, MapPin, Phone, Plus, Eye, Sparkles, X, Loader2, CalendarPlus } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Play,
+  Square,
+  Radar,
+  MapPin,
+  Gauge,
+  Tags,
+  Eye,
+  Download,
+  Route,
+  Plus,
+  BriefcaseBusiness,
+  Loader2,
+  Wrench,
+  X,
+  Settings2,
+  TestTube2
+} from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { PageHeader } from "@/components/ui/page-header";
+import { cn } from "@/lib/utils/cn";
 
-type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
+type Mode = "demo" | "live";
+type Category = "plumbing" | "electrical" | "landscaping" | "restoration" | "general";
+type Tab = "feed" | "rules" | "harness";
 
-type ScannerLead = {
+type ScannerEvent = {
   id: string;
-  name: string;
-  phone: string;
-  city: string;
-  state: string;
-  postal: string;
-  service_type: string;
-  urgency: "high" | "medium" | "low";
-  intentScore: number;
-  reason: string;
-  sourceMode: "synthetic" | "google_places";
-  signals: Array<{ id?: string; signal_type: string; title: string; detail: string; score: number }>;
-  added?: boolean;
+  source: string;
+  category: Category;
+  title: string;
+  description: string;
+  location_text: string;
+  lat: number | null;
+  lon: number | null;
+  intent_score: number;
+  confidence: number;
+  tags: string[];
+  raw: Record<string, unknown>;
+  created_at: string;
 };
 
-type WeatherSettings = {
-  weather_location_label?: string | null;
-  weather_lat?: number | null;
-  weather_lng?: number | null;
-  home_base_city?: string | null;
-  home_base_state?: string | null;
+type RoutingRule = {
+  id: string;
+  category: Category;
+  default_assignee: string | null;
+  default_create_mode: "lead" | "job";
+  default_job_value_cents: number;
+  default_sla_minutes: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
-const triggerOptions = ["Storm", "Heavy Rain", "High Wind", "Freeze", "Heat", "Hail"] as const;
-const serviceOptions = ["Restoration", "Roofing", "Plumbing", "HVAC", "Electrical", "Cleaning"] as const;
-const campaignOptions: CampaignMode[] = ["Storm Response", "Roofing", "Water Damage", "HVAC Emergency"];
+const categories: Category[] = ["plumbing", "electrical", "landscaping", "restoration", "general"];
 
-export function LeadScannerView() {
-  const params = useSearchParams();
-  const [location, setLocation] = useState("");
-  const [service, setService] = useState<(typeof serviceOptions)[number]>("Roofing");
-  const [radius, setRadius] = useState("10");
-  const [campaignMode, setCampaignMode] = useState<CampaignMode>("Storm Response");
-  const [triggers, setTriggers] = useState<string[]>(["Storm", "Heavy Rain"]);
-  const [scanning, setScanning] = useState(false);
-  const [results, setResults] = useState<ScannerLead[]>([]);
-  const [preview, setPreview] = useState<ScannerLead | null>(null);
-  const [recommendedAction, setRecommendedAction] = useState<string>("");
-  const [weatherRiskLabel, setWeatherRiskLabel] = useState<string>("");
+const categoryLabel: Record<Category, string> = {
+  plumbing: "Plumbing",
+  electrical: "Electrical",
+  landscaping: "Landscaping",
+  restoration: "Restoration",
+  general: "General"
+};
+
+export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
+  const [mode, setMode] = useState<Mode>("demo");
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [location, setLocation] = useState("Brentwood, NY");
+  const [lat, setLat] = useState("");
+  const [lon, setLon] = useState("");
+  const [radius, setRadius] = useState("25");
+  const [limit, setLimit] = useState("20");
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([...categories]);
+  const [loading, setLoading] = useState(false);
+  const [events, setEvents] = useState<ScannerEvent[]>([]);
+  const [preview, setPreview] = useState<ScannerEvent | null>(null);
+  const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+
+  const [rules, setRules] = useState<RoutingRule[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [editing, setEditing] = useState<RoutingRule | null>(null);
+  const [ruleForm, setRuleForm] = useState({
+    category: "general" as Category,
+    default_assignee: "Dispatch Queue",
+    default_create_mode: "lead" as "lead" | "job",
+    default_job_value_cents: "60000",
+    default_sla_minutes: "60",
+    enabled: true
+  });
+
+  const [harnessDuration, setHarnessDuration] = useState("30");
+  const [harnessInterval, setHarnessInterval] = useState("20");
+  const [harnessRunning, setHarnessRunning] = useState(false);
+  const [captured, setCaptured] = useState<ScannerEvent[]>([]);
+
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startRef = useRef<number>(0);
+
   const { showToast } = useToast();
 
+  const sortedEvents = useMemo(
+    () => [...events].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [events]
+  );
+
+  const testRule = useMemo(() => {
+    const pick = selectedCategories[0] || "general";
+    return rules.find((rule) => rule.category === pick && rule.enabled) || null;
+  }, [rules, selectedCategories]);
+
   useEffect(() => {
-    const fromQuery = params.get("location");
-    if (fromQuery) setLocation(fromQuery);
+    setTab(initialTab);
+  }, [initialTab]);
 
-    async function loadSettings() {
-      const res = await fetch("/api/settings/weather");
-      const data = (await res.json()) as WeatherSettings;
-      if (!fromQuery) {
-        const label = data.weather_location_label || [data.home_base_city, data.home_base_state].filter(Boolean).join(", ");
-        if (label) setLocation(label);
-      }
-    }
-    loadSettings();
-  }, [params]);
-
-  async function scanNow() {
-    setScanning(true);
-    const startedAt = Date.now();
-
-    const res = await fetch("/api/scanner", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        location,
-        service,
-        radius: Number(radius),
-        triggers,
-        campaignMode
-      })
-    });
-
-    const elapsed = Date.now() - startedAt;
-    if (elapsed < 900) {
-      await new Promise((resolve) => setTimeout(resolve, 900 - elapsed));
-    }
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setScanning(false);
-      showToast((data as { error?: string }).error || "Scan failed");
-      return;
-    }
-
-    const payload = data as {
-      campaignMode?: CampaignMode;
-      weatherRisk?: { label?: string };
-      recommendedAction?: string;
-      leads?: ScannerLead[];
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
     };
-    setCampaignMode(payload.campaignMode || campaignMode);
-    setWeatherRiskLabel(payload.weatherRisk?.label || "");
-    setRecommendedAction(payload.recommendedAction || "");
-    setResults(payload.leads || []);
-    setScanning(false);
-    showToast(`Scan complete: ${(payload.leads || []).length} leads found`);
+  }, []);
+
+  const loadEvents = useCallback(async () => {
+    const res = await fetch("/api/scanner/events?limit=100");
+    const data = (await res.json().catch(() => ({}))) as { events?: ScannerEvent[]; error?: string };
+    if (!res.ok) {
+      showToast(data.error || "Could not load scanner feed");
+      return;
+    }
+    setEvents(data.events || []);
+  }, [showToast]);
+
+  const loadRules = useCallback(async () => {
+    setRulesLoading(true);
+    const res = await fetch("/api/routing-rules");
+    const data = (await res.json().catch(() => ({}))) as { rules?: RoutingRule[]; error?: string };
+    if (!res.ok) {
+      showToast(data.error || "Could not load routing rules");
+      setRulesLoading(false);
+      return;
+    }
+    setRules(data.rules || []);
+    setRulesLoading(false);
+  }, [showToast]);
+
+  useEffect(() => {
+    loadEvents();
+    loadRules();
+  }, [loadEvents, loadRules]);
+
+  function parseNum(value: string) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
   }
 
-  async function addToInbox(lead: ScannerLead) {
-    const res = await fetch("/api/leads", {
+  async function runScan(manual = true) {
+    setLoading(true);
+    const res = await fetch("/api/scanner/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        name: lead.name,
-        phone: lead.phone,
-        service_type: lead.service_type,
-        city: lead.city,
-        state: lead.state,
-        postal_code: lead.postal,
-        requested_timeframe: lead.urgency === "high" ? "ASAP" : lead.urgency === "medium" ? "Today" : "This week",
-        notes: `Scanner lead: ${lead.reason}`,
-        source: "import"
+        mode,
+        location,
+        categories: selectedCategories,
+        limit: Number(limit) || 20,
+        radius: Number(radius) || 25,
+        lat: parseNum(lat),
+        lon: parseNum(lon)
       })
     });
+
+    const data = (await res.json().catch(() => ({}))) as {
+      opportunities?: Array<{
+        id: string;
+        source: string;
+        category: Category;
+        title: string;
+        description: string;
+        locationText: string;
+        lat: number | null;
+        lon: number | null;
+        intentScore: number;
+        confidence: number;
+        tags: string[];
+        raw: Record<string, unknown>;
+      }>;
+      weatherRisk?: { label?: string };
+      mode?: Mode;
+      error?: string;
+    };
 
     if (!res.ok) {
-      showToast("Could not add lead");
+      setLoading(false);
+      showToast(data.error || "Scanner run failed");
       return;
     }
 
-    setResults((prev) => prev.map((row) => (row.id === lead.id ? { ...row, added: true } : row)));
-    showToast("Added to Inbox");
+    const batch: ScannerEvent[] = (data.opportunities || []).map((op) => ({
+      id: op.id,
+      source: op.source,
+      category: op.category,
+      title: op.title,
+      description: op.description,
+      location_text: op.locationText,
+      lat: op.lat,
+      lon: op.lon,
+      intent_score: op.intentScore,
+      confidence: op.confidence,
+      tags: op.tags,
+      raw: op.raw,
+      created_at: new Date().toISOString()
+    }));
+
+    setCaptured((prev) => {
+      const merged = [...batch, ...prev];
+      const seen = new Set<string>();
+      return merged.filter((e) => {
+        if (seen.has(e.id)) return false;
+        seen.add(e.id);
+        return true;
+      });
+    });
+
+    await loadEvents();
+    setLoading(false);
+
+    if (manual) {
+      const risk = data.weatherRisk?.label ? ` · ${data.weatherRisk.label}` : "";
+      showToast(`Scanner captured ${batch.length} opportunities${risk}`);
+    }
   }
 
-  async function addAsJobScheduled(lead: ScannerLead) {
-    const leadRes = await fetch("/api/leads", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: lead.name,
-        phone: lead.phone,
-        service_type: lead.service_type,
-        city: lead.city,
-        state: lead.state,
-        postal_code: lead.postal,
-        requested_timeframe: "Tomorrow AM",
-        notes: `Scanner job candidate: ${lead.reason}`,
-        source: "import"
-      })
-    });
-    const leadData = await leadRes.json();
-    if (!leadRes.ok || !leadData.leadId) {
-      showToast("Could not create lead for job");
-      return;
-    }
+  function startHarness() {
+    if (harnessRunning) return;
+    const durationMs = Math.max(1, Number(harnessDuration) || 30) * 60_000;
+    const intervalMs = Math.max(10, Number(harnessInterval) || 20) * 1000;
 
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    d.setHours(9, 0, 0, 0);
+    setHarnessRunning(true);
+    startRef.current = Date.now();
+    setCaptured([]);
 
-    const jobRes = await fetch("/api/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        lead_id: leadData.leadId,
-        pipeline_status: "SCHEDULED",
-        scheduled_for: d.toISOString(),
-        service_type: lead.service_type,
-        estimated_value: Math.round((400 + lead.intentScore * 22) / 10) * 10,
-        assigned_tech_name: campaignMode === "Storm Response" ? "Storm Crew A" : "Dispatch Queue",
-        intent_score: lead.intentScore,
-        customer_name: lead.name,
-        customer_phone: lead.phone,
-        city: lead.city,
-        state: lead.state,
-        postal_code: lead.postal,
-        notes: `Created from scanner (${campaignMode})`
-      })
-    });
-    const jobData = await jobRes.json();
-
-    if (!jobRes.ok || !jobData.jobId) {
-      showToast("Could not create job");
-      return;
-    }
-
-    setResults((prev) => prev.map((row) => (row.id === lead.id ? { ...row, added: true } : row)));
-    showToast("Added as scheduled job");
+    runScan(false);
+    timerRef.current = setInterval(async () => {
+      const elapsed = Date.now() - startRef.current;
+      if (elapsed >= durationMs) {
+        stopHarness();
+        showToast("Live test finished");
+        return;
+      }
+      await runScan(false);
+    }, intervalMs);
   }
+
+  function stopHarness() {
+    setHarnessRunning(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  async function dispatchEvent(event: ScannerEvent, createMode?: "lead" | "job") {
+    setDispatchingId(event.id);
+    const res = await fetch(`/api/scanner/events/${event.id}/dispatch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(createMode ? { createMode } : {})
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      mode?: "lead" | "job";
+      leadId?: string;
+      jobId?: string;
+    };
+    setDispatchingId(null);
+
+    if (!res.ok) {
+      showToast(data.error || "Dispatch failed");
+      return;
+    }
+
+    if (data.mode === "job" && data.jobId) {
+      showToast("Scheduled job created");
+      window.location.href = `/dashboard/jobs/${data.jobId}`;
+      return;
+    }
+
+    if (data.leadId) {
+      showToast("Lead created in inbox");
+      window.location.href = `/dashboard/leads/${data.leadId}`;
+      return;
+    }
+
+    showToast("Dispatched");
+  }
+
+  async function saveRule() {
+    const payload = {
+      category: ruleForm.category,
+      default_assignee: ruleForm.default_assignee,
+      default_create_mode: ruleForm.default_create_mode,
+      default_job_value_cents: Number(ruleForm.default_job_value_cents) || 0,
+      default_sla_minutes: Number(ruleForm.default_sla_minutes) || 60,
+      enabled: ruleForm.enabled
+    };
+
+    const url = editing ? `/api/routing-rules/${editing.id}` : "/api/routing-rules";
+    const method = editing ? "PATCH" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      showToast(data.error || "Could not save rule");
+      return;
+    }
+
+    showToast(editing ? "Rule updated" : "Rule created");
+    setEditing(null);
+    setRuleForm({
+      category: "general",
+      default_assignee: "Dispatch Queue",
+      default_create_mode: "lead",
+      default_job_value_cents: "60000",
+      default_sla_minutes: "60",
+      enabled: true
+    });
+    await loadRules();
+  }
+
+  async function deleteRule(ruleId: string) {
+    const res = await fetch(`/api/routing-rules/${ruleId}`, { method: "DELETE" });
+    if (!res.ok) {
+      showToast("Could not delete rule");
+      return;
+    }
+    showToast("Rule deleted");
+    await loadRules();
+  }
+
+  function openEdit(rule: RoutingRule) {
+    setEditing(rule);
+    setRuleForm({
+      category: rule.category,
+      default_assignee: rule.default_assignee || "",
+      default_create_mode: rule.default_create_mode,
+      default_job_value_cents: String(rule.default_job_value_cents),
+      default_sla_minutes: String(rule.default_sla_minutes),
+      enabled: rule.enabled
+    });
+  }
+
+  function exportCsv() {
+    const source = captured.length > 0 ? captured : sortedEvents;
+    if (source.length === 0) {
+      showToast("No opportunities to export");
+      return;
+    }
+
+    const columns = [
+      "id",
+      "source",
+      "category",
+      "title",
+      "description",
+      "location",
+      "intent_score",
+      "confidence",
+      "tags",
+      "created_at"
+    ];
+
+    const rows = source.map((event) => [
+      event.id,
+      event.source,
+      event.category,
+      event.title,
+      event.description,
+      event.location_text,
+      String(event.intent_score),
+      String(event.confidence),
+      event.tags.join("|"),
+      event.created_at
+    ]);
+
+    const csv = [columns, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell || "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `scanner-opportunities-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const tabs: Array<{ id: Tab; label: string; icon: typeof Radar }> = [
+    { id: "feed", label: "Scanner Feed", icon: Radar },
+    { id: "rules", label: "Routing Rules", icon: Route },
+    { id: "harness", label: "Live Test Harness", icon: TestTube2 }
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Lead Scanner"
-        subtitle="Generate opportunities from weather pressure, urgency signals, and local demand patterns."
+        title="Opportunity Scanner"
+        subtitle="Live signal feed for dispatch: route each opportunity to a lead or scheduled job in one click."
         actions={
-          <Badge variant="brand" className="gap-1">
-            <Sparkles className="h-3.5 w-3.5" />
-            Action-first scanner
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Link href="/dashboard/scanner/harness">
+              <Button variant="secondary" size="sm">
+                <TestTube2 className="h-4 w-4" />
+                Open Harness
+              </Button>
+            </Link>
+            <Button variant="secondary" size="sm" onClick={exportCsv}>
+              <Download className="h-4 w-4" />
+              Export captured opportunities
+            </Button>
+          </div>
         }
       />
 
       <Card>
-        <CardBody className="grid gap-4 lg:grid-cols-[1.2fr_180px_140px_auto]">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Location</p>
-            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Zip or City, State" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Service</p>
-            <Select value={service} onChange={(e) => setService(e.target.value as (typeof serviceOptions)[number])}>
-              {serviceOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Radius</p>
-            <Select value={radius} onChange={(e) => setRadius(e.target.value)}>
-              {["5", "10", "25", "50"].map((r) => (
-                <option key={r} value={r}>{r} mi</option>
-              ))}
-            </Select>
-          </div>
-          <div className="self-end">
-            <Button size="lg" onClick={scanNow} disabled={scanning || !location.trim()} fullWidth>
-              {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Scan Now
-            </Button>
-          </div>
+        <CardBody className="space-y-4">
+          <div className="grid gap-3 lg:grid-cols-[140px_1fr_140px_120px_120px]">
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Mode</p>
+              <Select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
+                <option value="demo">DEMO</option>
+                <option value="live">LIVE</option>
+              </Select>
+            </div>
 
-          <div className="lg:col-span-2">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Campaign mode</p>
-            <div className="flex flex-wrap gap-2">
-              {campaignOptions.map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setCampaignMode(mode)}
-                  className={`min-h-11 rounded-full px-4 text-sm font-semibold ${
-                    campaignMode === mode ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
-                  }`}
-                >
-                  {mode}
-                </button>
-              ))}
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Service Area</p>
+              <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City/ZIP or leave for account weather location" />
+            </div>
+
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Radius (mi)</p>
+              <Select value={radius} onChange={(e) => setRadius(e.target.value)}>
+                {["5", "10", "25", "50", "100"].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Limit</p>
+              <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
+                {["8", "12", "20", "30", "50"].map((value) => (
+                  <option key={value} value={value}>{value}</option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="self-end">
+              <Button onClick={() => runScan(true)} disabled={loading} fullWidth>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Scan Now
+              </Button>
             </div>
           </div>
 
-          <div className="lg:col-span-2">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Triggers</p>
-            <div className="flex flex-wrap gap-2">
-              {triggerOptions.map((trigger) => {
-                const active = triggers.includes(trigger);
-                return (
-                  <button
-                    key={trigger}
-                    onClick={() => {
-                      setTriggers((prev) =>
-                        prev.includes(trigger) ? prev.filter((t) => t !== trigger) : [...prev, trigger]
-                      );
-                    }}
-                    className={`min-h-11 rounded-full px-4 text-sm font-semibold ${
-                      active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
-                    }`}
-                  >
-                    {trigger}
-                  </button>
-                );
-              })}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat (optional)</p>
+                <Input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="40.7812" />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lon (optional)</p>
+                <Input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="-73.2462" />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Categories</p>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((category) => {
+                  const active = selectedCategories.includes(category);
+                  return (
+                    <button
+                      key={category}
+                      onClick={() =>
+                        setSelectedCategories((prev) =>
+                          prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
+                        )
+                      }
+                      className={cn(
+                        "min-h-11 rounded-full px-4 text-sm font-semibold",
+                        active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
+                      )}
+                    >
+                      {categoryLabel[category]}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </CardBody>
       </Card>
 
-      {(weatherRiskLabel || recommendedAction) && (
-        <Card className="border-warning-500/25 bg-warning-100">
-          <CardBody>
-            <p className="text-sm font-semibold text-warning-700">Weather impact: {weatherRiskLabel}</p>
-            <p className="text-sm text-warning-700/90">{recommendedAction}</p>
-          </CardBody>
-        </Card>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setTab(item.id)}
+              className={cn(
+                "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold",
+                tab === item.id ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
 
-      {scanning ? (
-        <Card>
-          <CardBody className="space-y-3">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </CardBody>
-        </Card>
-      ) : results.length === 0 ? (
-        <Card>
-          <CardBody className="py-12 text-center">
-            <Radar className="mx-auto h-10 w-10 text-brand-700" />
-            <p className="mt-3 text-lg font-semibold text-semantic-text">Ready to scan</p>
-            <p className="mt-1 text-sm text-semantic-muted">Use weather and campaign mode to generate the next best leads.</p>
-          </CardBody>
-        </Card>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {results.map((lead) => (
-            <Card key={lead.id} className="transition hover:shadow-card">
+      {tab === "feed" && (
+        <section className="space-y-4">
+          {loading && (
+            <Card>
               <CardBody className="space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-semantic-text">{lead.name}</p>
-                    <p className="text-sm text-semantic-muted">{lead.service_type}</p>
-                  </div>
-                  <Badge variant={lead.urgency === "high" ? "warning" : lead.urgency === "medium" ? "brand" : "default"}>
-                    {lead.urgency}
-                  </Badge>
-                </div>
-
-                <p className="text-sm text-semantic-muted inline-flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  {lead.city}, {lead.state} {lead.postal}
-                </p>
-                <p className="text-sm text-semantic-muted inline-flex items-center gap-1">
-                  <Phone className="h-4 w-4" />
-                  {lead.phone}
-                </p>
-                <p className="text-xs text-semantic-muted">Source: {lead.sourceMode === "google_places" ? "Google Places mode" : "Signal synthesis"}</p>
-
-                <div>
-                  <p className="text-sm font-semibold text-semantic-text">Intent {lead.intentScore}%</p>
-                  <div className="mt-1.5 h-2.5 w-full rounded-full bg-semantic-surface2">
-                    <div
-                      className={`h-2.5 rounded-full ${lead.intentScore >= 75 ? "bg-success-500" : lead.intentScore >= 60 ? "bg-warning-500" : "bg-brand-500"}`}
-                      style={{ width: `${lead.intentScore}%` }}
-                    />
-                  </div>
-                </div>
-
-                <p className="line-clamp-2 text-sm text-semantic-muted">Why we found it: {lead.reason}</p>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Button size="sm" onClick={() => addToInbox(lead)} disabled={lead.added}>
-                    <Plus className="h-4 w-4" />
-                    Add as Lead
-                  </Button>
-                  <Button size="sm" variant="secondary" onClick={() => addAsJobScheduled(lead)} disabled={lead.added}>
-                    <CalendarPlus className="h-4 w-4" />
-                    Add as Job
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setPreview(lead)} className="col-span-2">
-                    <Eye className="h-4 w-4" />
-                    Preview
-                  </Button>
-                </div>
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
               </CardBody>
             </Card>
-          ))}
-        </div>
+          )}
+
+          {!loading && sortedEvents.length === 0 && (
+            <Card>
+              <CardBody className="py-12 text-center">
+                <Radar className="mx-auto h-10 w-10 text-brand-700" />
+                <p className="mt-3 text-lg font-semibold text-semantic-text">Scanner is listening</p>
+                <p className="mt-1 text-sm text-semantic-muted">Run a scan to populate live opportunities and dispatch actions.</p>
+              </CardBody>
+            </Card>
+          )}
+
+          {sortedEvents.map((event) => {
+            const nextAction = String(event.raw?.next_action || event.raw?.recommended_action || "Dispatch within SLA and send first contact.");
+            const reasonSummary = String(event.raw?.reason_summary || "Signal pattern indicates near-term service demand.");
+
+            return (
+              <Card key={event.id} className="transition hover:shadow-card">
+                <CardBody className="grid gap-4 lg:grid-cols-[180px_1fr_auto] lg:items-center">
+                  <div className="space-y-2">
+                    <Badge variant={event.intent_score >= 78 ? "warning" : event.intent_score >= 62 ? "brand" : "default"}>
+                      Intent {event.intent_score}
+                    </Badge>
+                    <p className="text-sm font-semibold text-semantic-text">{categoryLabel[event.category]}</p>
+                    <p className="inline-flex items-center gap-1 text-xs text-semantic-muted">
+                      <Gauge className="h-3.5 w-3.5" />
+                      Confidence {event.confidence}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-lg font-semibold text-semantic-text">{event.title}</p>
+                    <p className="text-sm text-semantic-muted">{event.description}</p>
+                    <p className="inline-flex items-center gap-1 text-sm text-semantic-muted">
+                      <MapPin className="h-4 w-4" />
+                      {event.location_text || "Service area"}
+                    </p>
+                    <p className="text-sm font-medium text-semantic-text">{reasonSummary}</p>
+                    <p className="text-sm text-semantic-muted">Next action: {nextAction}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Tags className="h-3.5 w-3.5 text-semantic-muted" />
+                      {(event.tags || []).map((tag) => (
+                        <span key={`${event.id}-${tag}`} className="rounded-full bg-semantic-surface2 px-3 py-1 text-xs font-semibold text-semantic-muted">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                    <Button size="lg" variant="secondary" onClick={() => setPreview(event)}>
+                      <Eye className="h-4 w-4" />
+                      Preview
+                    </Button>
+                    <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
+                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      Create Lead
+                    </Button>
+                    <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
+                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
+                      Create Job
+                    </Button>
+                    <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
+                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
+                      Dispatch
+                    </Button>
+                  </div>
+                </CardBody>
+              </Card>
+            );
+          })}
+        </section>
+      )}
+
+      {tab === "rules" && (
+        <section className="grid gap-5 xl:grid-cols-[1.2fr_1fr]">
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-semantic-text">Routing Rules</h2>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              {rulesLoading && (
+                <>
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="h-14 w-full" />
+                </>
+              )}
+
+              {!rulesLoading && rules.length === 0 && <p className="text-sm text-semantic-muted">No rules yet. Add one below.</p>}
+
+              {!rulesLoading &&
+                rules.map((rule) => (
+                  <article key={rule.id} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-semantic-text">{categoryLabel[rule.category]}</p>
+                        <p className="text-sm text-semantic-muted">
+                          Assignee: {rule.default_assignee || "Dispatch Queue"} · SLA: {rule.default_sla_minutes}m
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={rule.enabled ? "success" : "default"}>{rule.enabled ? "Enabled" : "Disabled"}</Badge>
+                        <Badge variant="brand">Default: {rule.default_create_mode.toUpperCase()}</Badge>
+                        <Badge variant="default">${(rule.default_job_value_cents / 100).toLocaleString()}</Badge>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => openEdit(rule)}>
+                        <Settings2 className="h-4 w-4" />
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteRule(rule.id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-semantic-text">{editing ? "Edit Rule" : "Add Rule"}</h2>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Category</span>
+                <Select value={ruleForm.category} onChange={(e) => setRuleForm((prev) => ({ ...prev, category: e.target.value as Category }))}>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>{categoryLabel[category]}</option>
+                  ))}
+                </Select>
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Default Assignee</span>
+                <Input value={ruleForm.default_assignee} onChange={(e) => setRuleForm((prev) => ({ ...prev, default_assignee: e.target.value }))} placeholder="Dispatch Queue" />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Create Mode</span>
+                  <Select
+                    value={ruleForm.default_create_mode}
+                    onChange={(e) =>
+                      setRuleForm((prev) => ({ ...prev, default_create_mode: e.target.value as "lead" | "job" }))
+                    }
+                  >
+                    <option value="lead">Lead</option>
+                    <option value="job">Job</option>
+                  </Select>
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">SLA Minutes</span>
+                  <Input
+                    type="number"
+                    value={ruleForm.default_sla_minutes}
+                    onChange={(e) => setRuleForm((prev) => ({ ...prev, default_sla_minutes: e.target.value }))}
+                  />
+                </label>
+              </div>
+
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Default Job Value (cents)</span>
+                <Input
+                  type="number"
+                  value={ruleForm.default_job_value_cents}
+                  onChange={(e) => setRuleForm((prev) => ({ ...prev, default_job_value_cents: e.target.value }))}
+                />
+              </label>
+
+              <label className="inline-flex items-center gap-2 text-sm text-semantic-text">
+                <input
+                  type="checkbox"
+                  checked={ruleForm.enabled}
+                  onChange={(e) => setRuleForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                />
+                Rule enabled
+              </label>
+
+              <div className="flex gap-2">
+                <Button onClick={saveRule}>{editing ? "Save Changes" : "Create Rule"}</Button>
+                {editing && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setEditing(null);
+                      setRuleForm({
+                        category: "general",
+                        default_assignee: "Dispatch Queue",
+                        default_create_mode: "lead",
+                        default_job_value_cents: "60000",
+                        default_sla_minutes: "60",
+                        enabled: true
+                      });
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Test Routing</p>
+                <p className="mt-1 text-sm text-semantic-text">
+                  {testRule
+                    ? `${categoryLabel[testRule.category]} → ${testRule.default_create_mode.toUpperCase()} · ${testRule.default_assignee || "Dispatch Queue"} · SLA ${testRule.default_sla_minutes}m`
+                    : `No enabled rule for ${categoryLabel[selectedCategories[0] || "general"]}. Dispatch falls back to intent-based routing.`}
+                </p>
+              </div>
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {tab === "harness" && (
+        <section className="space-y-4">
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-semantic-text">Live Test Harness</h2>
+            </CardHeader>
+            <CardBody className="grid gap-3 md:grid-cols-[1fr_180px_180px_auto]">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Service Area</p>
+                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, ST or ZIP" />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Duration (minutes)</p>
+                <Input type="number" value={harnessDuration} onChange={(e) => setHarnessDuration(e.target.value)} />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Every (seconds)</p>
+                <Input type="number" value={harnessInterval} onChange={(e) => setHarnessInterval(e.target.value)} />
+              </div>
+              <div className="self-end">
+                {harnessRunning ? (
+                  <Button variant="danger" onClick={stopHarness} fullWidth>
+                    <Square className="h-4 w-4" />
+                    Stop
+                  </Button>
+                ) : (
+                  <Button onClick={startHarness} fullWidth>
+                    <Play className="h-4 w-4" />
+                    Start Live Test
+                  </Button>
+                )}
+              </div>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-semantic-text">Captured Opportunities ({captured.length})</h2>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              {captured.length === 0 && (
+                <p className="text-sm text-semantic-muted">Run the harness to append opportunities every interval and export to CSV.</p>
+              )}
+              {captured.slice(0, 40).map((event) => (
+                <article key={`${event.id}-${event.created_at}`} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-semantic-text">{event.title}</p>
+                    <Badge variant={event.intent_score >= 75 ? "warning" : "default"}>{event.intent_score}</Badge>
+                  </div>
+                  <p className="text-sm text-semantic-muted">{event.location_text}</p>
+                </article>
+              ))}
+            </CardBody>
+          </Card>
+        </section>
       )}
 
       {preview && (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-neutral-900/50 p-0 sm:items-center sm:p-6">
-          <div className="absolute inset-0" onClick={() => setPreview(null)} />
-          <Card className="relative z-[81] w-full max-w-2xl rounded-t-3xl sm:rounded-2xl">
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-semibold text-semantic-text">{preview.name}</h3>
-                  <p className="text-sm text-semantic-muted">{preview.service_type} · Intent {preview.intentScore}%</p>
-                </div>
-                <button className="rounded-xl p-2 hover:bg-semantic-surface2" onClick={() => setPreview(null)}>
-                  <X className="h-5 w-5" />
-                </button>
+        <div className="fixed inset-0 z-[80] flex justify-end bg-neutral-900/45">
+          <button className="h-full w-full" aria-label="Close preview" onClick={() => setPreview(null)} />
+          <aside className="relative z-[81] h-full w-full max-w-xl overflow-y-auto border-l border-semantic-border bg-semantic-surface p-6">
+            <button
+              className="absolute right-4 top-4 rounded-lg p-2 text-semantic-muted hover:bg-semantic-surface2"
+              onClick={() => setPreview(null)}
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="space-y-4">
+              <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">
+                <Wrench className="h-3.5 w-3.5" />
+                {categoryLabel[preview.category]}
+              </p>
+              <h3 className="text-2xl font-semibold text-semantic-text">{preview.title}</h3>
+              <p className="text-sm text-semantic-muted">{preview.description}</p>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Detail label="Intent" value={String(preview.intent_score)} />
+                <Detail label="Confidence" value={String(preview.confidence)} />
+                <Detail label="Source" value={preview.source} />
+                <Detail label="Location" value={preview.location_text || "-"} />
               </div>
-            </CardHeader>
-            <CardBody className="space-y-4">
+
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Signals</p>
-                <div className="mt-2 space-y-2">
-                  {preview.signals.slice(0, 4).map((signal, idx) => (
-                    <div key={`${signal.title}-${idx}`} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium text-semantic-text">{signal.title}</p>
-                        <Badge variant={signal.score >= 75 ? "success" : signal.score >= 60 ? "warning" : "default"}>{signal.score}</Badge>
-                      </div>
-                      <p className="mt-1 text-sm text-semantic-muted">{signal.detail}</p>
-                    </div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Tags</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(preview.tags || []).map((tag) => (
+                    <span key={tag} className="rounded-full bg-semantic-surface2 px-3 py-1 text-xs font-semibold text-semantic-muted">
+                      {tag}
+                    </span>
                   ))}
                 </div>
               </div>
 
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Timeline</p>
-                <div className="mt-2 space-y-2 text-sm text-semantic-muted">
-                  <p>1. Scan detected high intent from weather + urgency indicators.</p>
-                  <p>2. Follow-up opportunity identified in this service radius.</p>
-                  <p>3. Ready for immediate lead or job creation.</p>
-                </div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Raw Payload</p>
+                <pre className="mt-2 max-h-[360px] overflow-auto rounded-xl border border-semantic-border bg-semantic-surface2 p-3 text-xs text-semantic-muted">
+                  {JSON.stringify(preview.raw || {}, null, 2)}
+                </pre>
               </div>
-            </CardBody>
-          </Card>
+            </div>
+          </aside>
         </div>
       )}
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-1 text-sm font-medium text-semantic-text">{value || "-"}</p>
     </div>
   );
 }

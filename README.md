@@ -16,6 +16,12 @@
    bash scripts/db-reset.sh
    ```
 
+## Review Mode
+- Review Mode is for local UI walkthroughs without auth friction.
+- Set `REVIEW_MODE=on` in `.env.local` (or run `npm run review`, which sets it automatically).
+- In Review Mode, `/dashboard/*` routes are accessible for product review.
+- Production behavior is unchanged: Review Mode only activates when `NODE_ENV=development` and `REVIEW_MODE=on`.
+
 Troubleshooting:
 - Twilio trial can only send to verified destination numbers (verify your phone in Twilio Console).
 - Twilio signature mismatch: `WEBHOOK_BASE_URL` must exactly equal your ngrok HTTPS origin.

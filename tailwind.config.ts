@@ -31,32 +31,32 @@ const config: Config = {
           danger: "rgb(var(--danger) / <alpha-value>)"
         },
         brand: {
-          50: "#f4fae8",
-          100: "#e4f3c7",
-          200: "#c9e890",
-          300: "#aad95b",
-          400: "#90cc35",
-          500: "#78BE20",
-          600: "#5f9918",
-          700: "#486f13",
-          800: "#2f490c",
-          900: "#1a2b07"
+          50: "#f4fae9",
+          100: "#e7f3d1",
+          200: "#cfe7a6",
+          300: "#b4d774",
+          400: "#9acb57",
+          500: "#88BC42",
+          600: "#6f9935",
+          700: "#557429",
+          800: "#3c511c",
+          900: "#243211"
         },
         neutral: {
-          50: "#f7f9fb",
-          100: "#f1f4f7",
-          200: "#dbe3ea",
-          300: "#bac8d3",
-          400: "#92a2b2",
-          500: "#708395",
-          600: "#52606d",
-          700: "#3d4b59",
-          800: "#273340",
-          900: "#1f2933"
+          50: "#f6f8f7",
+          100: "#eef2f0",
+          200: "#d8e0db",
+          300: "#bcc8c1",
+          400: "#93a399",
+          500: "#72847a",
+          600: "#5b6c64",
+          700: "#45524c",
+          800: "#2e3833",
+          900: "#1e2a24"
         },
         accent: {
-          500: "#D98C5F",
-          600: "#be7550"
+          500: "#DD9F74",
+          600: "#c3875e"
         },
         success: {
           100: "#e8f7eb",
@@ -72,20 +72,20 @@ const config: Config = {
           100: "#fdeaea",
           500: "#d64545",
           700: "#8e1f1f"
-        },
-        card: "#ffffff"
+        }
       },
       fontFamily: {
-        sans: ["Inter", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"]
+        sans: ["var(--font-inter)", "Inter", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+        heading: ["var(--font-manrope)", "Manrope", "Inter", "Segoe UI", "sans-serif"]
       },
       borderRadius: {
-        xl: "0.9rem",
-        "2xl": "1.25rem",
-        "3xl": "1.75rem"
+        xl: "12px",
+        "2xl": "14px",
+        "3xl": "20px"
       },
       boxShadow: {
-        soft: "0 4px 18px rgba(31, 41, 51, 0.08)",
-        card: "0 10px 30px rgba(31, 41, 51, 0.09)"
+        soft: "0 6px 20px rgba(30, 42, 36, 0.08)",
+        card: "0 14px 36px rgba(30, 42, 36, 0.12)"
       }
     }
   },

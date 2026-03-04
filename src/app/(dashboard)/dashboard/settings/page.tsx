@@ -4,11 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { WeatherSettingsForm } from "@/components/dashboard/weather-settings-form";
+import type { ReactNode } from "react";
 
 export default function DashboardSettingsPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" subtitle="Set quiet hours, routing, and defaults for faster daily ops." />
+      <PageHeader title="Settings" subtitle="Set defaults once so dispatch and follow-up run faster every day." />
 
       <section className="grid gap-5 xl:grid-cols-2">
         <Card>
@@ -16,50 +18,53 @@ export default function DashboardSettingsPage() {
             <h2 className="text-lg font-semibold text-semantic-text">Business Profile</h2>
           </CardHeader>
           <CardBody className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-semantic-muted">Business name</label>
+            <Field label="Business name">
               <Input defaultValue="ServiceButler Demo Plumbing" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-semantic-muted">Primary phone</label>
+            </Field>
+            <Field label="Primary phone">
               <Input defaultValue="+1 (813) 555-0182" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-semantic-muted">Review link</label>
+            </Field>
+            <Field label="Review link">
               <Input defaultValue="https://g.page/r/example/review" />
-            </div>
+            </Field>
           </CardBody>
         </Card>
 
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Automation Rules</h2>
+            <h2 className="text-lg font-semibold text-semantic-text">Dispatch Rules</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-semantic-muted">Quiet hours start</label>
+              <Field label="Quiet hours start">
                 <Input type="time" defaultValue="20:00" />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-semantic-muted">Quiet hours end</label>
+              </Field>
+              <Field label="Quiet hours end">
                 <Input type="time" defaultValue="07:00" />
-              </div>
+              </Field>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-semantic-muted">Default response channel</label>
+            <Field label="Default response channel">
               <Select defaultValue="SMS">
                 <option value="SMS">SMS first</option>
                 <option value="EMAIL">Email first</option>
               </Select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-semantic-muted">Dispatcher notes template</label>
+            </Field>
+            <Field label="Dispatcher notes template">
               <Textarea rows={5} defaultValue={"Issue:\nUrgency:\nBest arrival window:\nSpecial access instructions:"} />
-            </div>
+            </Field>
           </CardBody>
         </Card>
       </section>
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-semibold text-semantic-text">Weather Preferences</h2>
+          <p className="mt-1 text-sm text-semantic-muted">Forecast data drives urgency and demand signals on lead records.</p>
+        </CardHeader>
+        <CardBody>
+          <WeatherSettingsForm />
+        </CardBody>
+      </Card>
 
       <div className="flex flex-wrap gap-3">
         <Button size="lg">Save Changes</Button>
@@ -68,5 +73,14 @@ export default function DashboardSettingsPage() {
         </Button>
       </div>
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">{label}</span>
+      {children}
+    </label>
   );
 }

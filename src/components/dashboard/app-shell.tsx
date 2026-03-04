@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, LayoutGrid, Users, CalendarDays, MessageSquare, Settings, X } from "lucide-react";
+import { Menu, LayoutGrid, Users, CalendarDays, MessageSquare, Settings, X, Radar, KanbanSquare } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -18,6 +18,8 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/leads", label: "Lead Inbox", icon: Users },
+  { href: "/dashboard/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/dashboard/scanner", label: "Scanner", icon: Radar },
   { href: "/dashboard/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/dashboard/inbox", label: "Inbox", icon: MessageSquare },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
@@ -44,11 +46,11 @@ export function DashboardAppShell({
         >
           <div className="mb-8 flex items-center justify-between">
             <div className="space-y-3">
-              <Logo variant="lockup" size={34} />
+              <Logo variant="full" size={34} />
               <p className="text-xs uppercase tracking-[0.14em] text-semantic-muted">Ops Console</p>
             </div>
             <button
-              className="rounded-lg p-2 text-neutral-500 hover:bg-neutral-100 lg:hidden"
+              className="rounded-lg p-2 text-semantic-muted hover:bg-semantic-surface2 lg:hidden"
               onClick={() => setOpen(false)}
               aria-label="Close navigation"
             >
@@ -97,14 +99,14 @@ export function DashboardAppShell({
           <header className="sticky top-0 z-20 border-b border-semantic-border bg-semantic-surface/95 px-4 py-3 backdrop-blur sm:px-6">
             <div className="flex items-center gap-3">
               <button
-                className="rounded-lg p-2 text-neutral-600 hover:bg-neutral-100 lg:hidden"
+                className="rounded-lg p-2 text-semantic-muted hover:bg-semantic-surface2 lg:hidden"
                 onClick={() => setOpen(true)}
                 aria-label="Open navigation"
               >
                 <Menu className="h-5 w-5" />
               </button>
               <div className="md:hidden">
-                <Logo variant="wordmark" size={28} />
+                <Logo variant="mark" size={28} />
               </div>
               <AppTopBar />
             </div>

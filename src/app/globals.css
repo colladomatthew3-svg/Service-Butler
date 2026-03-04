@@ -3,14 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --bg: 244 247 245;
+  --bg: 246 248 247;
   --surface: 255 255 255;
-  --surface2: 247 250 248;
-  --border: 219 227 234;
-  --text: 31 41 51;
-  --muted: 82 96 109;
-  --brand: 120 190 32;
-  --brandHover: 96 153 24;
+  --surface2: 242 245 243;
+  --border: 216 224 219;
+  --text: 30 42 36;
+  --muted: 91 108 100;
+  --brand: 136 188 66;
+  --brandHover: 111 153 53;
   --success: 31 157 85;
   --warning: 217 145 0;
   --danger: 214 69 69;
@@ -23,7 +23,7 @@
 *,
 *::before,
 *::after {
-  border-color: var(--border);
+  border-color: rgb(var(--border));
 }
 
 @layer base {
@@ -36,13 +36,14 @@
   body {
     @apply bg-semantic-bg text-semantic-text font-sans;
     margin: 0;
+    min-height: 100dvh;
   }
 
   h1,
   h2,
   h3,
   h4 {
-    @apply tracking-tight text-neutral-900;
+    @apply font-heading tracking-tight text-semantic-text;
   }
 
   a {
@@ -64,9 +65,21 @@
 
 body {
   background: radial-gradient(1200px 600px at 10% -10%, rgb(var(--brand) / 0.16), transparent 50%),
-    radial-gradient(800px 500px at 100% 0%, rgb(217 140 95 / 0.12), transparent 45%),
+    radial-gradient(800px 500px at 100% 0%, rgb(221 159 116 / 0.12), transparent 45%),
     rgb(var(--bg));
   color: rgb(var(--text));
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .panel {

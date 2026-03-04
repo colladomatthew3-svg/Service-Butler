@@ -2,10 +2,12 @@
 
 These are local placeholder illustrations for development and UI layout testing.
 
-- `crew.svg` — generated in-repo placeholder
-- `truck.svg` — generated in-repo placeholder
-- `tools.svg` — generated in-repo placeholder
+- `crew.svg` — generated in-repo illustration
+- `truck.svg` — generated in-repo illustration
+- `tools.svg` — generated in-repo illustration
+- `weather.svg` — generated in-repo illustration
+- `schedule.svg` — generated in-repo illustration
 
 License notes:
-- Original vector placeholders created for this repository.
-- Replace with production-approved licensed photography/illustrations before release.
+- Original vector illustrations created for this repository and distributed under the repository license.
+- Replace with production-approved licensed photography/illustrations before release if needed.

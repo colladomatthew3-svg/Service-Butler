@@ -1,7 +1,20 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getReviewEmail, getReviewUserId, isReviewMode, resolveReviewAccountId } from "@/lib/services/review-mode";
 import type { AccountRole } from "@/types/domain";
 
 export async function getCurrentUserContext() {
+  if (isReviewMode()) {
+    const accountId = await resolveReviewAccountId();
+    return {
+      userId: getReviewUserId(),
+      email: getReviewEmail(),
+      accountId,
+      role: "ACCOUNT_OWNER" as AccountRole,
+      supabase: getSupabaseAdminClient()
+    };
+  }
+
   const supabase = await getSupabaseServerClient();
   const {
     data: { user },
@@ -21,6 +34,7 @@ export async function getCurrentUserContext() {
 
   return {
     userId: user.id,
+    email: user.email || null,
     accountId: membership.account_id as string,
     role: membership.role as AccountRole,
     supabase

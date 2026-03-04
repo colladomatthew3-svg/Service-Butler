@@ -10,7 +10,6 @@ do $$
 declare
   v_account_id uuid := '11111111-1111-1111-1111-111111111111';
   v_contact_id uuid := '22222222-2222-2222-2222-222222222222';
-  v_lead_id uuid := '33333333-3333-3333-3333-333333333333';
   v_template_id uuid := '44444444-4444-4444-4444-444444444444';
 
   v_owner_id uuid;
@@ -35,21 +34,39 @@ begin
     review_link,
     quiet_hours_start,
     quiet_hours_end,
-    business_hours
+    business_hours,
+    home_base_city,
+    home_base_state,
+    home_base_postal_code,
+    weather_location_label,
+    weather_lat,
+    weather_lng
   ) values (
     v_account_id,
     '+15551234567',
     'https://g.page/r/demo/review',
     '21:00',
     '08:00',
-    '{"mon":"08:00-17:00","tue":"08:00-17:00","wed":"08:00-17:00","thu":"08:00-17:00","fri":"08:00-17:00"}'::jsonb
+    '{"mon":"08:00-17:00","tue":"08:00-17:00","wed":"08:00-17:00","thu":"08:00-17:00","fri":"08:00-17:00"}'::jsonb,
+    'Brentwood',
+    'NY',
+    '11717',
+    'Brentwood, NY',
+    40.7812,
+    -73.2462
   )
   on conflict (account_id) do update
     set twilio_phone_number = excluded.twilio_phone_number,
         review_link = excluded.review_link,
         quiet_hours_start = excluded.quiet_hours_start,
         quiet_hours_end = excluded.quiet_hours_end,
-        business_hours = excluded.business_hours;
+        business_hours = excluded.business_hours,
+        home_base_city = excluded.home_base_city,
+        home_base_state = excluded.home_base_state,
+        home_base_postal_code = excluded.home_base_postal_code,
+        weather_location_label = excluded.weather_location_label,
+        weather_lat = excluded.weather_lat,
+        weather_lng = excluded.weather_lng;
 
   insert into public.users (id, account_id, email, full_name)
   values
@@ -74,13 +91,191 @@ begin
   values (v_contact_id, v_account_id, 'Alex', 'Customer', '+15557654321', 'alex.customer@example.com')
   on conflict (id) do nothing;
 
-  insert into public.leads (id, account_id, contact_id, source, stage)
-  values (v_lead_id, v_account_id, v_contact_id, 'WEB', 'NEW')
-  on conflict (id) do nothing;
+  delete from public.lead_intent_signals
+  where lead_id in (select id from public.leads where account_id = v_account_id and source in ('web_form', 'manual', 'import'));
+
+  delete from public.lead_jobs where account_id = v_account_id;
+  delete from public.jobs where account_id = v_account_id;
+
+  delete from public.leads
+  where account_id = v_account_id
+    and source in ('web_form', 'manual', 'import');
+
+  insert into public.leads (
+    id, account_id, source, stage, status, name, phone, service_type, address, city, state, postal_code,
+    requested_timeframe, notes, scheduled_for
+  ) values
+    ('30000000-0000-0000-0000-000000000001', v_account_id, 'web_form', 'NEW', 'new', 'James Roper', '+18135550182', 'HVAC', '124 Maple Ave', 'Brentwood', 'NY', '11717', 'Today PM', 'AC blowing warm air', null),
+    ('30000000-0000-0000-0000-000000000002', v_account_id, 'manual', 'CONTACTED', 'contacted', 'Maria Fernandez', '+14075550150', 'Plumbing', '88 Cedar St', 'Islip', 'NY', '11751', 'Tomorrow AM', 'Kitchen sink backing up', null),
+    ('30000000-0000-0000-0000-000000000003', v_account_id, 'web_form', 'BOOKED', 'scheduled', 'Chris Parker', '+19045550134', 'Roofing', '19 Harbor Rd', 'Bay Shore', 'NY', '11706', 'Tomorrow 9am', 'Storm leak by chimney', now() + interval '1 day'),
+    ('30000000-0000-0000-0000-000000000004', v_account_id, 'import', 'CONTACTED', 'contacted', 'Lana Brooks', '+17275550198', 'Electrical', '55 Oak Ln', 'Brentwood', 'NY', '11717', 'This week', 'EV charger install quote', null),
+    ('30000000-0000-0000-0000-000000000005', v_account_id, 'manual', 'NEW', 'new', 'Ethan Miles', '+16315550111', 'Plumbing', '320 Elm Dr', 'Deer Park', 'NY', '11729', 'ASAP', 'Burst pipe in laundry room', null),
+    ('30000000-0000-0000-0000-000000000006', v_account_id, 'web_form', 'QUALIFIED', 'contacted', 'Sophie Diaz', '+16315550112', 'HVAC', '44 W 2nd St', 'Huntington', 'NY', '11743', 'This weekend', 'Noisy furnace', null),
+    ('30000000-0000-0000-0000-000000000007', v_account_id, 'manual', 'BOOKED', 'scheduled', 'Noah Bennett', '+16315550113', 'Electrical', '9 Forest Ct', 'Commack', 'NY', '11725', 'Today 2pm', 'Breaker trips when dryer runs', now() + interval '6 hours'),
+    ('30000000-0000-0000-0000-000000000008', v_account_id, 'import', 'NEW', 'new', 'Ava Stone', '+16315550114', 'Roofing', '711 Pine St', 'Patchogue', 'NY', '11772', 'Next 48h', 'Missing shingles after wind', null),
+    ('30000000-0000-0000-0000-000000000009', v_account_id, 'web_form', 'COMPLETED', 'won', 'Mia Carter', '+16315550115', 'Plumbing', '88 Park Dr', 'Brentwood', 'NY', '11717', 'Completed', 'Water heater replacement done', now() - interval '2 days'),
+    ('30000000-0000-0000-0000-000000000010', v_account_id, 'manual', 'LOST', 'lost', 'Liam Ortiz', '+16315550116', 'HVAC', '20 Hillview Rd', 'Ronkonkoma', 'NY', '11779', 'No rush', 'Comparing quotes', null),
+    ('30000000-0000-0000-0000-000000000011', v_account_id, 'web_form', 'CONTACTED', 'contacted', 'Olivia White', '+16315550117', 'Electrical', '17 Lake Ave', 'Babylon', 'NY', '11702', 'Today', 'Outlet sparking in kitchen', null),
+    ('30000000-0000-0000-0000-000000000012', v_account_id, 'import', 'BOOKED', 'scheduled', 'Elijah Green', '+16315550118', 'Roofing', '201 Meadow Ln', 'Brentwood', 'NY', '11717', 'Tomorrow 1pm', 'Flat roof pooling water', now() + interval '1 day 4 hours'),
+    ('30000000-0000-0000-0000-000000000013', v_account_id, 'manual', 'NEW', 'new', 'Charlotte Hall', '+16315550119', 'HVAC', '75 Birch Rd', 'Islip Terrace', 'NY', '11752', 'Tonight', 'No heat on 2nd floor', null),
+    ('30000000-0000-0000-0000-000000000014', v_account_id, 'web_form', 'CONTACTED', 'contacted', 'Mason Price', '+16315550120', 'Plumbing', '501 South St', 'Brentwood', 'NY', '11717', 'This afternoon', 'Sewer smell in basement', null),
+    ('30000000-0000-0000-0000-000000000015', v_account_id, 'manual', 'BOOKED', 'scheduled', 'Amelia Shaw', '+16315550121', 'Electrical', '42 Pearl St', 'Bay Shore', 'NY', '11706', 'Friday 9am', 'Panel upgrade consult', now() + interval '3 days')
+  on conflict (id) do update set
+    status = excluded.status,
+    stage = excluded.stage,
+    name = excluded.name,
+    phone = excluded.phone,
+    service_type = excluded.service_type,
+    address = excluded.address,
+    city = excluded.city,
+    state = excluded.state,
+    postal_code = excluded.postal_code,
+    requested_timeframe = excluded.requested_timeframe,
+    notes = excluded.notes,
+    scheduled_for = excluded.scheduled_for,
+    source = excluded.source;
+
+  insert into public.jobs (
+    id, account_id, lead_id, status, pipeline_status, scheduled_for,
+    service_type, assigned_user_id, assigned_tech_name, estimated_value, notes, intent_score,
+    customer_name, customer_phone, address, city, state, postal_code
+  ) values
+    (
+      '70000000-0000-0000-0000-000000000001', v_account_id, '30000000-0000-0000-0000-000000000003',
+      'SCHEDULED', 'SCHEDULED', now() + interval '1 day',
+      'Roofing', v_tech_id, 'Nate (Roof Crew)', 2450.00, 'Storm leak inspection and patch', 84,
+      'Chris Parker', '+19045550134', '19 Harbor Rd', 'Bay Shore', 'NY', '11706'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000002', v_account_id, '30000000-0000-0000-0000-000000000007',
+      'IN_PROGRESS', 'IN_PROGRESS', now() + interval '6 hours',
+      'Electrical', v_dispatcher_id, 'Kim (Electrical)', 980.00, 'Breaker and outlet diagnostic in progress', 73,
+      'Noah Bennett', '+16315550113', '9 Forest Ct', 'Commack', 'NY', '11725'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000003', v_account_id, '30000000-0000-0000-0000-000000000009',
+      'COMPLETED', 'WON', now() - interval '2 days',
+      'Plumbing', v_tech_id, 'Ari (Plumbing)', 1850.00, 'Water heater replaced, customer requested review link', 79,
+      'Mia Carter', '+16315550115', '88 Park Dr', 'Brentwood', 'NY', '11717'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000004', v_account_id, '30000000-0000-0000-0000-000000000012',
+      'SCHEDULED', 'CONTACTED', now() + interval '1 day 4 hours',
+      'Roofing', v_dispatcher_id, 'Nate (Roof Crew)', 3200.00, 'Flat roof pooling water, estimate sent', 88,
+      'Elijah Green', '+16315550118', '201 Meadow Ln', 'Brentwood', 'NY', '11717'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000005', v_account_id, '30000000-0000-0000-0000-000000000015',
+      'SCHEDULED', 'SCHEDULED', now() + interval '3 days',
+      'Electrical', v_dispatcher_id, 'Kim (Electrical)', 2100.00, 'Panel upgrade consult and permit planning', 69,
+      'Amelia Shaw', '+16315550121', '42 Pearl St', 'Bay Shore', 'NY', '11706'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000006', v_account_id, '30000000-0000-0000-0000-000000000002',
+      'SCHEDULED', 'NEW', now() + interval '18 hours',
+      'Plumbing', v_tech_id, 'Ari (Plumbing)', 540.00, 'Kitchen backup, emergency snaking quote', 82,
+      'Maria Fernandez', '+14075550150', '88 Cedar St', 'Islip', 'NY', '11751'
+    )
+  on conflict (id) do update set
+    status = excluded.status,
+    pipeline_status = excluded.pipeline_status,
+    scheduled_for = excluded.scheduled_for,
+    service_type = excluded.service_type,
+    assigned_user_id = excluded.assigned_user_id,
+    assigned_tech_name = excluded.assigned_tech_name,
+    estimated_value = excluded.estimated_value,
+    notes = excluded.notes,
+    intent_score = excluded.intent_score,
+    customer_name = excluded.customer_name,
+    customer_phone = excluded.customer_phone,
+    address = excluded.address,
+    city = excluded.city,
+    state = excluded.state,
+    postal_code = excluded.postal_code;
+
+  insert into public.lead_jobs (account_id, lead_id, job_id)
+  values
+    (v_account_id, '30000000-0000-0000-0000-000000000003', '70000000-0000-0000-0000-000000000001'),
+    (v_account_id, '30000000-0000-0000-0000-000000000007', '70000000-0000-0000-0000-000000000002'),
+    (v_account_id, '30000000-0000-0000-0000-000000000009', '70000000-0000-0000-0000-000000000003'),
+    (v_account_id, '30000000-0000-0000-0000-000000000012', '70000000-0000-0000-0000-000000000004'),
+    (v_account_id, '30000000-0000-0000-0000-000000000015', '70000000-0000-0000-0000-000000000005'),
+    (v_account_id, '30000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000006')
+  on conflict (account_id, lead_id) do update set
+    job_id = excluded.job_id;
+
+  update public.leads l
+  set converted_job_id = lj.job_id
+  from public.lead_jobs lj
+  where lj.account_id = v_account_id
+    and lj.lead_id = l.id;
 
   insert into public.conversations (account_id, contact_id, lead_id, subject)
-  values (v_account_id, v_contact_id, v_lead_id, 'Seed conversation')
+  select v_account_id, null, l.id, 'Lead thread: ' || l.name
+  from public.leads l
+  where l.account_id = v_account_id
+    and l.source in ('web_form', 'manual', 'import')
   on conflict do nothing;
+
+  insert into public.lead_intent_signals (lead_id, signal_type, title, detail, score, payload)
+  select
+    l.id,
+    s.signal_type,
+    s.title,
+    s.detail,
+    s.score,
+    s.payload
+  from public.leads l
+  cross join lateral (
+    values
+      (
+        'urgency',
+        case
+          when l.requested_timeframe ilike '%asap%' or l.requested_timeframe ilike '%today%' then 'Urgent timeline request'
+          else 'Response window is manageable'
+        end,
+        case
+          when l.requested_timeframe ilike '%asap%' or l.requested_timeframe ilike '%today%' then 'Customer asked for immediate service. Fast callback improves close rate.'
+          else 'Lead requested a standard timeframe; follow-up within the same day is still recommended.'
+        end,
+        case
+          when l.requested_timeframe ilike '%asap%' or l.requested_timeframe ilike '%today%' then 88
+          else 58
+        end,
+        jsonb_build_object('requested_timeframe', l.requested_timeframe)
+      ),
+      (
+        'weather',
+        case
+          when l.service_type = 'Roofing' then 'Recent weather increases roof demand'
+          when l.service_type = 'HVAC' then 'Temperature swings drive HVAC calls'
+          else 'Weather impact is moderate'
+        end,
+        case
+          when l.service_type = 'Roofing' then 'Forecast suggests wind/rain patterns that often trigger roofing inspections.'
+          when l.service_type = 'HVAC' then 'Expected temperature changes typically increase no-cool/no-heat calls.'
+          else 'Current weather likely has secondary impact on this request type.'
+        end,
+        case
+          when l.service_type = 'Roofing' then 84
+          when l.service_type = 'HVAC' then 74
+          else 51
+        end,
+        jsonb_build_object('service_type', l.service_type)
+      ),
+      (
+        'local_demand',
+        'Local service demand trend',
+        'Similar jobs in this area are trending up this week; prioritize quick first response.',
+        case
+          when l.city = 'Brentwood' then 72
+          else 63
+        end,
+        jsonb_build_object('city', l.city, 'state', l.state)
+      )
+  ) as s(signal_type, title, detail, score, payload)
+  where l.account_id = v_account_id
+    and l.source in ('web_form', 'manual', 'import');
 
   insert into public.templates (id, account_id, name, channel, body)
   values (v_template_id, v_account_id, 'Default New Lead SMS', 'SMS', 'Thanks for reaching out. Reply with your preferred appointment time.')

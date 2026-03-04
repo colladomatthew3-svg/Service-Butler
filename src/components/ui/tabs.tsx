@@ -16,7 +16,9 @@ export function Tabs({ items }: { items: TabItem[] }) {
           href={item.href}
           className={cn(
             "rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap transition",
-            item.active ? "bg-semantic-surface text-semantic-text shadow-sm" : "text-semantic-muted hover:text-semantic-text"
+            item.active
+              ? "bg-semantic-surface text-brand-700 shadow-sm ring-1 ring-inset ring-brand-500/25"
+              : "text-semantic-muted hover:text-semantic-text"
           )}
         >
           {item.label}

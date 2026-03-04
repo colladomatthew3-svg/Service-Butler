@@ -3,6 +3,12 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  devQuickLoginEnabled,
+  ensureDevQuickLoginUser,
+  getDevAuthPassword,
+  isAllowedDevQuickLoginEmail
+} from "@/lib/auth/dev-quick-login";
 
 export async function signInWithMagicLink(formData: FormData) {
   const email = String(formData.get("email") || "").trim();
@@ -21,6 +27,26 @@ export async function signInWithMagicLink(formData: FormData) {
 
   if (error) throw new Error(error.message);
   redirect("/login?sent=1");
+}
+
+export async function signInWithDevQuickLogin(formData: FormData) {
+  if (!devQuickLoginEnabled()) throw new Error("Dev quick login is only available in development");
+
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  if (!email || !isAllowedDevQuickLoginEmail(email)) throw new Error("Invalid dev quick login email");
+
+  const password = getDevAuthPassword();
+  const supabase = await getSupabaseServerClient();
+
+  let { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    await ensureDevQuickLoginUser(email);
+    const retry = await supabase.auth.signInWithPassword({ email, password });
+    error = retry.error;
+  }
+
+  if (error) throw new Error(error.message);
+  redirect("/dashboard");
 }
 
 export async function signOut() {

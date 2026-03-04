@@ -34,7 +34,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div
               key={toast.id}
               className={cn(
-                "flex items-center gap-2 rounded-xl border border-semantic-border bg-semantic-surface px-4 py-3 shadow-card",
+                "animate-[toast-in_220ms_ease-out] flex items-center gap-2 rounded-xl border border-semantic-border bg-semantic-surface px-4 py-3 shadow-card",
                 "text-sm font-medium text-semantic-text"
               )}
             >

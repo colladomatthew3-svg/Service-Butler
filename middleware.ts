@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = [
   "/login",
+  "/__review",
   "/api/inngest",
   "/api/stripe/webhook",
   "/api/twilio/sms/inbound",
@@ -10,12 +11,20 @@ const PUBLIC_PATHS = [
   "/api/twilio/status"
 ];
 
+function isReviewMode() {
+  return process.env.NODE_ENV === "development" && process.env.REVIEW_MODE === "on";
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const pathname = req.nextUrl.pathname;
 
   if (pathname === "/") return res;
   if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) return res;
+
+  if (isReviewMode() && pathname.startsWith("/dashboard")) {
+    return res;
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

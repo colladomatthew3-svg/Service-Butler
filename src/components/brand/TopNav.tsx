@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 
 export function TopNav() {
   return (
-    <header className="sticky top-0 z-40 border-b border-semantic-border bg-semantic-surface/90 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-semantic-border/90 bg-semantic-surface/92 backdrop-blur">
       <div className="container flex min-h-20 items-center gap-4">
         <Link href="/" className="flex items-center">
-          <Logo variant="wordmark" size={34} />
+          <Logo variant="full" size={34} />
         </Link>
         <nav className="ml-auto hidden items-center gap-6 text-sm font-semibold text-semantic-muted md:flex">
           <a href="#how-it-works" className="hover:text-semantic-text">
@@ -23,6 +23,11 @@ export function TopNav() {
         <div className="ml-2 hidden md:block">
           <Link href="/login">
             <Button>Get Started</Button>
+          </Link>
+        </div>
+        <div className="ml-auto md:hidden">
+          <Link href="/login">
+            <Button size="sm">Login</Button>
           </Link>
         </div>
       </div>

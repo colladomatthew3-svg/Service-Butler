@@ -1,0 +1,207 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { CloudSun, Droplets, TriangleAlert, ChevronRight } from "lucide-react";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
+
+type Forecast = {
+  current: {
+    temp: number;
+    feelsLike?: number;
+    windKph?: number;
+    precipitationChance?: number;
+    condition: string;
+  };
+  next6Hours: Array<{ time: string; temp: number; precipChance: number; condition: string }>;
+  next5Days: Array<{ date: string; min: number; max: number; precipChance: number; condition: string }>;
+};
+
+export function WeatherTicker({
+  lat,
+  lng,
+  compact,
+  locationLabel
+}: {
+  lat?: number | null;
+  lng?: number | null;
+  compact?: boolean;
+  locationLabel?: string | null;
+}) {
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const query = useMemo(() => {
+    if (lat == null || lng == null) return null;
+    return `/api/weather?lat=${lat}&lng=${lng}`;
+  }, [lat, lng]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!query) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const res = await fetch(query);
+        if (!res.ok) throw new Error("weather unavailable");
+        const data = (await res.json()) as Forecast;
+        if (!cancelled) setForecast(data);
+      } catch {
+        if (!cancelled) setForecast(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [query]);
+
+  if (!query) {
+    return (
+      <Card>
+        <CardHeader>
+          <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-sm text-semantic-muted">Add your service area to unlock weather-based demand and urgency signals.</p>
+          <Link href="/dashboard/settings">
+            <Button size="sm" variant="secondary">
+              Set weather location
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  if (loading || !forecast) {
+    return (
+      <Card>
+        <CardHeader>
+          <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <Skeleton className="h-12 w-3/4" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const impact = weatherImpact(forecast);
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader>
+        <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-semantic-surface p-2 text-brand-700 shadow-sm">
+              <CloudSun className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-semantic-text">
+                {forecast.current.temp}° <span className="text-base font-medium text-semantic-muted">{forecast.current.condition}</span>
+              </p>
+              <p className="text-xs text-semantic-muted">
+                {forecast.current.feelsLike != null ? `Feels ${forecast.current.feelsLike}° · ` : ""}
+                {forecast.current.windKph != null ? `Wind ${forecast.current.windKph} kph` : "Wind n/a"}
+              </p>
+            </div>
+          </div>
+          {forecast.current.precipitationChance != null && (
+            <BadgeStat icon={<Droplets className="h-3 w-3" />} label={`Rain ${forecast.current.precipitationChance}%`} />
+          )}
+        </div>
+
+        <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next 6 Hours</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {forecast.next6Hours.slice(0, 3).map((h) => (
+              <div key={h.time} className="rounded-lg border border-semantic-border bg-semantic-surface px-3 py-2">
+                <p className="text-xs font-semibold text-semantic-muted">{h.time}</p>
+                <p className="text-sm font-semibold text-semantic-text">{h.temp}°</p>
+                <p className="text-xs text-semantic-muted">{h.precipChance}% precip</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-5 gap-2">
+          {forecast.next5Days.map((day) => (
+            <div key={day.date} className="rounded-lg border border-semantic-border bg-semantic-surface2 p-2 text-center">
+              <p className="text-[11px] font-semibold text-semantic-muted">{day.date.split(",")[0]}</p>
+              <p className="mt-1 text-sm font-semibold text-semantic-text">{day.max}°</p>
+              <p className="text-[11px] text-semantic-muted">{day.min}°</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+          {!compact && (
+            <div>
+              <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">
+                <TriangleAlert className="h-3.5 w-3.5" />
+                Impact
+              </p>
+              <p className="mt-1 text-sm font-medium text-semantic-text">{impact.title}</p>
+              <p className="text-sm text-semantic-muted">{impact.detail}</p>
+            </div>
+          )}
+          <Link href={`/dashboard/scanner${locationLabel ? `?location=${encodeURIComponent(locationLabel)}` : ""}`}>
+            <Button size="sm">
+              Generate Weather Leads
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function BadgeStat({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-semantic-surface px-3 py-1 text-xs font-semibold text-semantic-muted ring-1 ring-inset ring-semantic-border">
+      {icon}
+      {label}
+    </span>
+  );
+}
+
+export function weatherImpact(forecast: Forecast) {
+  const precip = forecast.current.precipitationChance ?? 0;
+  const wind = forecast.current.windKph ?? 0;
+  const nextWet = forecast.next6Hours.some((h) => h.precipChance >= 45);
+
+  if (precip >= 55 || wind >= 30 || nextWet) {
+    return {
+      title: "High storm risk",
+      detail: "Expect more urgent leak, roof, and outage calls. Keep same-day slots open."
+    };
+  }
+
+  if (precip >= 30 || wind >= 20) {
+    return {
+      title: "Moderate weather pressure",
+      detail: "Plan for slight volume lift and prioritize high-intent incoming leads."
+    };
+  }
+
+  return {
+    title: "Stable conditions",
+    detail: "Good window for scheduled maintenance and lower-priority follow-up jobs."
+  };
+}

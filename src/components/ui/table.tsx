@@ -18,5 +18,5 @@ export function TH({ className, ...props }: ThHTMLAttributes<HTMLTableCellElemen
 }
 
 export function TD({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn("px-4 py-3 align-top text-sm text-semantic-muted", className)} {...props} />;
+  return <td className={cn("px-4 py-3 align-top text-sm text-semantic-text", className)} {...props} />;
 }

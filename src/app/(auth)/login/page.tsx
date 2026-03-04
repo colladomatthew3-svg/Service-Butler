@@ -1,4 +1,4 @@
-import { signInWithMagicLink } from "@/actions/auth";
+import { signInWithDevQuickLogin, signInWithMagicLink } from "@/actions/auth";
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -17,7 +17,7 @@ export default async function LoginPage({
       <div className="mx-auto max-w-lg">
         <div className="mb-8 flex justify-center">
           <Link href="/">
-            <Logo variant="lockup" size={44} />
+            <Logo variant="full" size={44} />
           </Link>
         </div>
         <Card>
@@ -49,6 +49,37 @@ export default async function LoginPage({
             </form>
           </CardBody>
         </Card>
+
+        {process.env.NODE_ENV === "development" && (
+          <Card className="mt-5">
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-semantic-text">Dev Quick Login</h2>
+              <p className="mt-1 text-sm text-semantic-muted">
+                Development only. Uses `DEV_AUTH_PASSWORD` and redirects to dashboard.
+              </p>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              <form action={signInWithDevQuickLogin}>
+                <input type="hidden" name="email" value="owner@servicebutler.local" />
+                <Button type="submit" size="lg" fullWidth>
+                  Login as Owner
+                </Button>
+              </form>
+              <form action={signInWithDevQuickLogin}>
+                <input type="hidden" name="email" value="dispatcher@servicebutler.local" />
+                <Button type="submit" size="lg" variant="secondary" fullWidth>
+                  Login as Dispatcher
+                </Button>
+              </form>
+              <form action={signInWithDevQuickLogin}>
+                <input type="hidden" name="email" value="tech@servicebutler.local" />
+                <Button type="submit" size="lg" variant="secondary" fullWidth>
+                  Login as Tech
+                </Button>
+              </form>
+            </CardBody>
+          </Card>
+        )}
       </div>
     </main>
   );

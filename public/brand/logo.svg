@@ -1,16 +1,17 @@
-<svg width="620" height="160" viewBox="0 0 620 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="sb_word_grad" x1="16" y1="16" x2="144" y2="144" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#9CD65B" />
-      <stop offset="1" stop-color="#5F9918" />
-    </linearGradient>
-  </defs>
-  <rect x="8" y="8" width="144" height="144" rx="34" fill="url(#sb_word_grad)" />
-  <path
-    d="M48 52C48 43.1634 55.1634 36 64 36H100C108.837 36 116 43.1634 116 52C116 60.8366 108.837 68 100 68H64C61.7909 68 60 69.7909 60 72C60 74.2091 61.7909 76 64 76H96C106.493 76 115 84.5066 115 95C115 105.493 106.493 114 96 114H61C54.3726 114 49 108.627 49 102C49 95.3726 54.3726 90 61 90H96C98.7614 90 101 87.7614 101 85C101 82.2386 98.7614 80 96 80H64C55.1634 80 48 72.8366 48 64V52Z"
-    fill="white"
-  />
-  <text x="178" y="103" fill="#1F2933" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="66" font-weight="700" letter-spacing="-1.2">
-    ServiceButler
-  </text>
+<svg width="1200" height="340" viewBox="0 0 1200 340" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(20,10)">
+    <path d="M164 62L78 140" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M162 60L256 60L256 134" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M256 60L256 30L288 30L288 88" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M256 62L352 140" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M124 150L124 244C124 258 136 270 150 270H362C376 270 388 258 388 244V150" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="208" y="168" width="34" height="34" rx="6" fill="#88BC42"/>
+    <rect x="256" y="168" width="34" height="34" rx="6" fill="#88BC42"/>
+    <rect x="208" y="216" width="34" height="34" rx="6" fill="#88BC42"/>
+    <rect x="256" y="216" width="34" height="34" rx="6" fill="#88BC42"/>
+  </g>
+  <g transform="translate(440,0)">
+    <text x="0" y="240" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="700" fill="#88BC42">service</text>
+    <text x="498" y="240" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="400" fill="#DD9F74">butler</text>
+  </g>
 </svg>

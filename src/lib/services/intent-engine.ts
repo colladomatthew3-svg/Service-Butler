@@ -51,27 +51,35 @@ export function generateSignals({
 
   const urgency = urgencyScore(timeframe);
   const weatherBase =
-    service.includes("roof") ? 55 + weatherPrecip * 0.4 + weatherWind * 0.3 :
-    service.includes("hvac") ? 48 + Math.abs((forecast?.current.temp ?? 68) - 68) * 1.3 :
-    service.includes("plumb") ? 50 + weatherPrecip * 0.2 :
+    service.includes("roof") || service.includes("restor") ? 58 + weatherPrecip * 0.45 + weatherWind * 0.35 :
+    service.includes("hvac") ? 50 + Math.abs((forecast?.current.temp ?? 68) - 68) * 1.35 :
+    service.includes("plumb") ? 54 + weatherPrecip * 0.28 :
+    service.includes("elect") ? 49 + weatherWind * 0.24 + weatherPrecip * 0.16 :
+    service.includes("land") ? 47 + weatherWind * 0.3 :
     44 + weatherPrecip * 0.15;
 
   const localDemand =
     service.includes("hvac") ? 74 :
-    service.includes("roof") ? 70 :
+    service.includes("roof") || service.includes("restor") ? 76 :
     service.includes("plumb") ? 67 :
+    service.includes("elect") ? 66 :
+    service.includes("land") ? 63 :
     62;
 
   const seasonality =
     service.includes("hvac") ? 76 :
     service.includes("roof") ? 71 :
+    service.includes("restor") ? 74 :
+    service.includes("plumb") ? 69 :
     service.includes("electrical") ? 60 :
+    service.includes("land") ? 64 :
     58;
 
   const propertyContext =
-    service.includes("roof") ? 73 :
+    service.includes("roof") || service.includes("restor") ? 75 :
     service.includes("plumb") ? 69 :
-    service.includes("electrical") ? 64 :
+    service.includes("elect") ? 66 :
+    service.includes("land") ? 62 :
     61;
 
   return [

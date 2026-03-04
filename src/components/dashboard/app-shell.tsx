@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, LayoutGrid, Users, CalendarDays, MessageSquare, Settings, X, Radar, KanbanSquare } from "lucide-react";
+import { Menu, LayoutGrid, Users, CalendarDays, MessageSquare, Settings, X, Radar, KanbanSquare, BriefcaseBusiness } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -19,6 +19,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/leads", label: "Lead Inbox", icon: Users },
   { href: "/dashboard/pipeline", label: "Pipeline", icon: KanbanSquare },
+  { href: "/dashboard/jobs", label: "Jobs", icon: BriefcaseBusiness },
   { href: "/dashboard/scanner", label: "Scanner", icon: Radar },
   { href: "/dashboard/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/dashboard/inbox", label: "Inbox", icon: MessageSquare },

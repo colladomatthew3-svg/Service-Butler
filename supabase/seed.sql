@@ -301,4 +301,65 @@ begin
   on conflict (stripe_subscription_id) do update set
     status = excluded.status,
     current_period_end = excluded.current_period_end;
+
+  insert into public.routing_rules (
+    account_id, category, default_assignee, default_create_mode, default_job_value_cents, default_sla_minutes, enabled
+  ) values
+    (v_account_id, 'plumbing', 'Ari (Plumbing)', 'job', 85000, 45, true),
+    (v_account_id, 'electrical', 'Kim (Electrical)', 'lead', 65000, 60, true),
+    (v_account_id, 'landscaping', 'Field Team B', 'lead', 42000, 180, true),
+    (v_account_id, 'restoration', 'Storm Crew A', 'job', 220000, 30, true),
+    (v_account_id, 'general', 'Dispatch Queue', 'lead', 35000, 90, true)
+  on conflict (account_id, category) do update set
+    default_assignee = excluded.default_assignee,
+    default_create_mode = excluded.default_create_mode,
+    default_job_value_cents = excluded.default_job_value_cents,
+    default_sla_minutes = excluded.default_sla_minutes,
+    enabled = excluded.enabled;
+
+  delete from public.scanner_events where account_id = v_account_id and source in ('demo', 'weather', 'public_feed');
+
+  insert into public.scanner_events (
+    account_id, source, category, title, description, location_text, lat, lon, intent_score, confidence, tags, raw
+  ) values
+    (
+      v_account_id, 'weather', 'restoration',
+      'Flash flood advisory near Brentwood',
+      'NWS alert indicates localized flood risk in low-lying streets. Sump and water extraction demand likely to spike.',
+      'Brentwood, NY', 40.7812, -73.2462, 89, 85,
+      array['flood', 'urgent', 'weather'],
+      jsonb_build_object('source_id', 'seed-weather-1', 'severity', 'moderate')
+    ),
+    (
+      v_account_id, 'public_feed', 'electrical',
+      'Grid disturbance report',
+      'Regional outage chatter suggests follow-up demand for panel checks and surge diagnostics.',
+      'Bay Shore, NY', 40.7251, -73.2454, 72, 67,
+      array['outage', 'panel', 'diagnostic'],
+      jsonb_build_object('source_id', 'seed-feed-1', 'confidence_reason', 'incident-density')
+    ),
+    (
+      v_account_id, 'demo', 'plumbing',
+      'Burst pipe keyword spike in Islip',
+      'Multiple homeowner posts mention basement water and frozen lines in the last 2 hours.',
+      'Islip, NY', 40.7304, -73.2109, 83, 74,
+      array['burst-pipe', 'asap', 'local-demand'],
+      jsonb_build_object('source_id', 'seed-demo-1', 'keywords', array['burst pipe', 'water in basement'])
+    ),
+    (
+      v_account_id, 'demo', 'landscaping',
+      'Tree limb cleanup demand after wind gusts',
+      'High-wind burst likely created short-term cleanup jobs in residential zones.',
+      'Huntington, NY', 40.8682, -73.4260, 64, 62,
+      array['wind', 'cleanup', 'same-day'],
+      jsonb_build_object('source_id', 'seed-demo-2', 'gust_kph', 46)
+    ),
+    (
+      v_account_id, 'demo', 'general',
+      'Weekend handyman demand lift',
+      'Search and review volume suggests homeowners are booking miscellaneous repair visits.',
+      'Patchogue, NY', 40.7657, -73.0151, 58, 59,
+      array['weekend', 'general-repair'],
+      jsonb_build_object('source_id', 'seed-demo-3', 'pattern', 'review-spike')
+    );
 end $$;

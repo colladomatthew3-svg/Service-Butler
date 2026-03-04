@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
-import { getForecastByLatLng } from "@/lib/services/weather";
 import {
-  fetchGooglePlacesLeads,
-  generateSyntheticScannerLeads,
-  weatherRisk,
-  type CampaignMode
+  type CampaignMode,
+  runScanner,
+  opportunityToLeadPayload
 } from "@/lib/services/scanner";
 
 const CAMPAIGNS: CampaignMode[] = ["Storm Response", "Roofing", "Water Damage", "HVAC Emergency"];
@@ -24,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   const location = body.location?.trim();
   const service = body.service?.trim();
-  const radius = Number.isFinite(body.radius) ? Number(body.radius) : 10;
+  const radius = Number.isFinite(body.radius) ? Number(body.radius) : 25;
   const triggers = Array.isArray(body.triggers) ? body.triggers.filter(Boolean).slice(0, 6) : [];
 
   if (!location || !service) {
@@ -37,41 +35,61 @@ export async function POST(req: NextRequest) {
     .eq("account_id", accountId)
     .maybeSingle();
 
-  let forecast = null;
-  if (settings?.weather_lat != null && settings?.weather_lng != null) {
-    try {
-      forecast = await getForecastByLatLng(Number(settings.weather_lat), Number(settings.weather_lng));
-    } catch {
-      forecast = null;
-    }
-  }
+  const lat = settings?.weather_lat != null ? Number(settings.weather_lat) : null;
+  const lon = settings?.weather_lng != null ? Number(settings.weather_lng) : null;
+  const fallbackCategory = String(service || "general").toLowerCase();
+  const category =
+    fallbackCategory.includes("plumb")
+      ? "plumbing"
+      : fallbackCategory.includes("elect")
+        ? "electrical"
+        : fallbackCategory.includes("land")
+          ? "landscaping"
+          : fallbackCategory.includes("roof") || fallbackCategory.includes("restor") || fallbackCategory.includes("water")
+            ? "restoration"
+            : "general";
 
-  const risk = weatherRisk(forecast);
+  const scan = await runScanner({
+    mode: "demo",
+    location,
+    categories: [category],
+    limit: 16,
+    lat,
+    lon,
+    radius,
+    campaignMode: body.campaignMode,
+    triggers
+  });
+  const risk = scan.weatherRisk;
+
   const campaignMode = CAMPAIGNS.includes(body.campaignMode || "Storm Response")
     ? (body.campaignMode as CampaignMode)
     : risk.highRisk
       ? "Storm Response"
       : "Roofing";
 
-  let leads = await fetchGooglePlacesLeads({
-    location,
-    service,
-    radius,
-    triggers,
-    forecast,
-    campaignMode
+  const leads = scan.opportunities.map((op) => {
+    const base = opportunityToLeadPayload(op);
+    const urgency = String(base.requested_timeframe || "").toLowerCase().includes("asap")
+      ? "high"
+      : String(base.requested_timeframe || "").toLowerCase().includes("today")
+        ? "medium"
+        : "low";
+    return {
+      id: op.id,
+      name: base.name,
+      phone: base.phone,
+      city: base.city,
+      state: base.state,
+      postal: base.postal_code,
+      service_type: service,
+      urgency,
+      intentScore: op.intentScore,
+      reason: op.reasonSummary,
+      sourceMode: op.source === "google_places" ? "google_places" : "synthetic",
+      signals: []
+    };
   });
-
-  if (leads.length === 0) {
-    leads = generateSyntheticScannerLeads({
-      location,
-      service,
-      radius,
-      triggers,
-      forecast,
-      campaignMode
-    });
-  }
 
   return NextResponse.json({
     campaignMode,
@@ -79,6 +97,7 @@ export async function POST(req: NextRequest) {
     recommendedAction: risk.highRisk
       ? "High weather pressure detected. Prioritize storm response and fast outbound callbacks."
       : "Conditions are stable. Focus on scheduled maintenance and high-intent prospects.",
-    leads
+    leads,
+    opportunities: scan.opportunities
   });
 }

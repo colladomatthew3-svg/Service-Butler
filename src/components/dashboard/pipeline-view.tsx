@@ -61,6 +61,13 @@ export function PipelineView() {
     }, {} as Record<Pipeline, JobRow[]>);
   }, [jobs]);
 
+  const summary = useMemo(() => {
+    const active = jobs.filter((job) => !["WON", "LOST"].includes(job.pipeline_status)).length;
+    const scheduled = jobs.filter((job) => !!job.scheduled_for).length;
+    const value = jobs.reduce((sum, job) => sum + Number(job.estimated_value || 0), 0);
+    return { active, scheduled, value };
+  }, [jobs]);
+
   async function move(job: JobRow, next: Pipeline) {
     const res = await fetch(`/api/jobs/${job.id}`, {
       method: "PATCH",
@@ -81,13 +88,19 @@ export function PipelineView() {
     <div className="space-y-6">
       <PageHeader
         title="Pipeline"
-        subtitle="Move work from first contact to completed revenue."
+        subtitle="Move work from first contact to booked, completed revenue."
         actions={
           <Link href="/dashboard/leads">
-            <Button size="lg">Add from Leads</Button>
+            <Button size="lg">Convert Lead to Job</Button>
           </Link>
         }
       />
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <SummaryCard label="Active Jobs" value={summary.active.toString()} />
+        <SummaryCard label="Scheduled" value={summary.scheduled.toString()} />
+        <SummaryCard label="Pipeline Value" value={`$${summary.value.toLocaleString()}`} />
+      </section>
 
       {loading ? (
         <Card>
@@ -188,7 +201,7 @@ function PipelineColumn({
               <CalendarClock className="h-4 w-4" />
               {job.scheduled_for ? formatDate(job.scheduled_for) : "Not scheduled"}
             </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-1 gap-2">
               {job.customer_phone ? (
                 <a href={`tel:${job.customer_phone}`}>
                   <Button size="sm" fullWidth>
@@ -204,16 +217,27 @@ function PipelineColumn({
               )}
               <Link href={`/dashboard/jobs/${job.id}`}>
                 <Button size="sm" variant="secondary" fullWidth>
-                  Open
+                  Open Job
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
             </div>
-            <button className="mt-2 inline-flex items-center text-sm font-semibold text-brand-700" onClick={() => onMove(job)}>
+            <button className="mt-3 inline-flex items-center text-sm font-semibold text-brand-700" onClick={() => onMove(job)}>
               Move stage <MoveRight className="ml-1 h-4 w-4" />
             </button>
           </article>
         ))}
+      </CardBody>
+    </Card>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardBody className="py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-semantic-muted">{label}</p>
+        <p className="mt-1 text-2xl font-semibold text-semantic-text">{value}</p>
       </CardBody>
     </Card>
   );

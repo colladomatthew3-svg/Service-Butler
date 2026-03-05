@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarPlus, MessageSquare, PhoneCall, RefreshCw, Save, Clock3, Wrench, Gauge } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -49,6 +49,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
   const [notesDraft, setNotesDraft] = useState("");
   const [statusDraft, setStatusDraft] = useState("new");
   const [customSchedule, setCustomSchedule] = useState("");
+  const scheduleSectionRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToast();
   const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 
@@ -225,6 +226,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
   }
 
   const missingPhone = !lead?.phone?.trim();
+  const scrollToSchedule = () => scheduleSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   if (loading || !lead) {
     return (
@@ -296,7 +298,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               <MessageSquare className="h-4 w-4" />
               Text
             </Button>
-            <Button size="lg" variant="secondary" onClick={() => showToast("Use scheduler below")}> 
+            <Button size="lg" variant="secondary" onClick={scrollToSchedule}>
               <CalendarPlus className="h-4 w-4" />
               Schedule
             </Button>
@@ -318,6 +320,17 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           Next scheduled time: <span className="font-semibold">{formatDateLong(lead.scheduled_for)}</span>
         </div>
       )}
+
+      <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-4 py-3 text-sm text-semantic-muted">
+        <span className="font-semibold text-semantic-text">Next best action:</span>{" "}
+        {lead.status === "new"
+          ? "Call now, confirm urgency, and lock a time before competitors respond."
+          : lead.status === "contacted"
+            ? "Send confirmation text and secure a schedule window."
+            : lead.status === "scheduled"
+              ? "Prepare dispatch notes and confirm crew assignment."
+              : "Review notes and move the lead to won/lost quickly."}
+      </div>
 
       <section className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
         <div className="space-y-5">
@@ -342,7 +355,8 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             </CardBody>
           </Card>
 
-          <Card>
+          <div ref={scheduleSectionRef}>
+            <Card>
             <CardHeader>
               <h2 className="text-lg font-semibold text-semantic-text">Scheduling</h2>
             </CardHeader>
@@ -370,7 +384,8 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                 </Button>
               </div>
             </CardBody>
-          </Card>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>
@@ -481,7 +496,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <MessageSquare className="h-4 w-4" />
             Text
           </Button>
-          <Button size="lg" variant="secondary" onClick={() => showToast("Use scheduler card")}> 
+          <Button size="lg" variant="secondary" onClick={scrollToSchedule}>
             <CalendarPlus className="h-4 w-4" />
             Schedule
           </Button>

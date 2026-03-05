@@ -13,10 +13,14 @@ export function AppTopBar() {
         <Input placeholder="Search leads, jobs, customers..." className="h-11" />
       </div>
       <div className="ml-auto hidden items-center gap-3 sm:flex">
-        <Button size="md">New Lead</Button>
-        <Button variant="secondary" size="md">
-          Create Job
-        </Button>
+        <Link href="/dashboard/leads">
+          <Button size="md">New Lead</Button>
+        </Link>
+        <Link href="/dashboard/pipeline">
+          <Button variant="secondary" size="md">
+            Open Pipeline
+          </Button>
+        </Link>
       </div>
     </div>
   );

@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "clean:next": "node -e \"const fs=require('fs');['.next','node_modules/.cache/next'].forEach((p)=>fs.rmSync(p,{recursive:true,force:true}));\"",
+    "build": "npm run clean:next && next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test:e2e": "playwright test",
     "db:start": "npx supabase start",
     "db:reset": "npx supabase db reset",

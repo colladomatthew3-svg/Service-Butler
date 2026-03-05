@@ -31,9 +31,9 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/brand/logo.png",
+        url: "/brand/servicebutler_logo.svg",
         width: 1200,
-        height: 630,
+        height: 916,
         alt: "Service Butler"
       }
     ]
@@ -42,15 +42,16 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Service Butler | AI Lead and Job Management for Contractors",
     description: "Lead intake, dispatch, scheduling, and follow-up software for premium home service teams.",
-    images: ["/brand/logo.png"]
+    images: ["/brand/servicebutler_logo.svg"]
   },
   robots: {
     index: true,
     follow: true
   },
   icons: {
-    icon: [{ url: "/favicon.ico" }, { url: "/brand/logo-mark.png", type: "image/png" }],
-    apple: [{ url: "/brand/logo-mark.png", type: "image/png" }]
+    icon: [{ url: "/brand/servicebutler_icon.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/brand/servicebutler_icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/brand/servicebutler_icon.svg", type: "image/svg+xml" }]
   }
 };
 

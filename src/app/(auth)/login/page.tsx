@@ -21,7 +21,7 @@ export default async function LoginPage({
         <div className="mx-auto max-w-lg">
           <div className="mb-8 flex justify-center">
             <Link href="/">
-              <Logo variant="full" size={44} />
+              <Logo variant="full" size={56} className="h-12 w-auto sm:h-14" />
             </Link>
           </div>
           <Card>

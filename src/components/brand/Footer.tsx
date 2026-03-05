@@ -26,7 +26,7 @@ export function Footer() {
       <div className="container py-14">
         <div className="grid gap-12 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr]">
           <div className="max-w-sm">
-            <Logo size={40} />
+            <Logo size={46} className="h-11 w-auto" />
             <p className="mt-5 text-sm leading-7 text-semantic-muted">
               Service Butler gives home service operators one polished system for lead capture, dispatch, messaging,
               and follow-up.

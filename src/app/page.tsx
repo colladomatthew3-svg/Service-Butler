@@ -143,7 +143,10 @@ export default function HomePage() {
                   </div>
 
                   <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-                    <div className="rounded-[1.6rem] border border-semantic-border bg-[#142118] p-5 text-white shadow-[var(--shadow-lift)]">
+                    <div
+                      className="rounded-[1.6rem] border border-semantic-border p-5 text-white shadow-[var(--shadow-lift)]"
+                      style={{ backgroundColor: "var(--sb-bg)" }}
+                    >
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-semibold text-white/90">Today&apos;s booked revenue</p>
@@ -255,9 +258,9 @@ export default function HomePage() {
                   </div>
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     {[
-                      ["New", "18", "bg-[#213228]"],
-                      ["Qualified", "11", "bg-[#2d261d]"],
-                      ["Booked", "7", "bg-[#1a2d38]"]
+                      ["New", "18", "bg-brand-900"],
+                      ["Qualified", "11", "bg-accent-500/25"],
+                      ["Booked", "7", "bg-neutral-800"]
                     ].map(([label, value, tone]) => (
                       <div key={label} className={`rounded-2xl px-4 py-4 ${tone}`}>
                         <p className="text-xs uppercase tracking-[0.14em] text-white/55">{label}</p>
@@ -324,7 +327,10 @@ export default function HomePage() {
 
         <section className="page-section">
           <div className="container">
-            <div className="rounded-[2rem] bg-[#172119] px-6 py-10 text-white shadow-[var(--shadow-lift)] sm:px-10 sm:py-14">
+            <div
+              className="rounded-[2rem] px-6 py-10 text-white shadow-[var(--shadow-lift)] sm:px-10 sm:py-14"
+              style={{ backgroundColor: "var(--sb-bg)" }}
+            >
               <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
                 <div>
                   <p className="eyebrow bg-white/10 text-white">Trust and credibility</p>
@@ -403,7 +409,10 @@ export default function HomePage() {
 
         <section className="page-section pt-0">
           <div className="container">
-            <div className="rounded-[2rem] bg-[linear-gradient(135deg,#1f3023,#111816)] px-6 py-12 text-white shadow-[var(--shadow-lift)] sm:px-10 sm:py-16">
+            <div
+              className="rounded-[2rem] px-6 py-12 text-white shadow-[var(--shadow-lift)] sm:px-10 sm:py-16"
+              style={{ background: "linear-gradient(135deg, var(--sb-green), var(--sb-bg))" }}
+            >
               <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
                 <div className="max-w-2xl">
                   <p className="eyebrow bg-white/10 text-white">Ready to upgrade the customer experience?</p>

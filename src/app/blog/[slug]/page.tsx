@@ -32,9 +32,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
         authors: [post.author],
         images: [
           {
-            url: "/brand/logo.png",
+            url: "/brand/servicebutler_logo.svg",
             width: 1200,
-            height: 630,
+            height: 916,
             alt: post.title
           }
         ]
@@ -43,7 +43,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
         card: "summary_large_image",
         title: post.title,
         description: post.excerpt,
-        images: ["/brand/logo.png"]
+        images: ["/brand/servicebutler_logo.svg"]
       }
     };
   } catch {

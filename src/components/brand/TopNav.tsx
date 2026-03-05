@@ -13,11 +13,11 @@ const navLinks = [
 export function TopNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-semantic-border/80 bg-semantic-surface/90 backdrop-blur-xl">
-      <div className="container flex min-h-20 items-center gap-4 py-3">
+      <div className="container flex min-h-24 items-center gap-4 py-4">
         <Link href="/" className="min-w-0 flex-1 md:flex-none">
-          <Logo variant="full" size={38} className="max-w-full" />
+          <Logo variant="full" size={52} className="h-10 w-auto max-w-[230px] md:h-[52px] md:max-w-none" />
         </Link>
-        <nav className="ml-auto hidden items-center gap-7 text-sm font-semibold text-semantic-muted lg:flex">
+        <nav className="ml-auto hidden items-center gap-7 text-base font-semibold text-semantic-muted lg:flex">
           {navLinks.map((link) => (
             <Link key={link.label} href={link.href} className="transition hover:text-semantic-text">
               {link.label}
@@ -30,7 +30,7 @@ export function TopNav() {
           </Link>
         </div>
         <details className="relative ml-auto lg:hidden">
-          <summary className="flex h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-sm font-semibold text-semantic-text marker:hidden">
+          <summary className="flex h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-base font-semibold text-semantic-text marker:hidden">
             Menu
           </summary>
           <div className="absolute right-0 top-[calc(100%+0.75rem)] w-72 rounded-2xl border border-semantic-border bg-semantic-surface p-3 shadow-card">

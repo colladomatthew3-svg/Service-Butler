@@ -7,7 +7,7 @@ export function AppTopBar() {
   return (
     <div className="flex items-center gap-3">
       <Link href="/dashboard" className="hidden items-center md:flex">
-        <Logo variant="full" size={30} />
+        <Logo variant="full" size={36} className="h-9 w-auto" />
       </Link>
       <div className="w-full max-w-md">
         <Input placeholder="Search leads, jobs, customers..." className="h-11" />

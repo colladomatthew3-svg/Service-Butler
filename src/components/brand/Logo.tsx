@@ -3,6 +3,9 @@ import { cn } from "@/lib/utils/cn";
 
 type LogoVariant = "full" | "mark" | "wordmark" | "lockup";
 
+const FULL_LOGO_RATIO = 1228 / 938;
+const MARK_RATIO = 581 / 492;
+
 export function Logo({
   variant = "full",
   size = 40,
@@ -13,13 +16,14 @@ export function Logo({
   className?: string;
 }) {
   const isMark = variant === "mark";
+  const width = Math.round(size * (isMark ? MARK_RATIO : FULL_LOGO_RATIO));
 
   if (isMark) {
     return (
       <Image
-        src="/brand/logo-mark.svg"
-        alt="Service Butler logo mark"
-        width={size}
+        src="/brand/servicebutler_icon.svg"
+        alt="Service Butler icon"
+        width={width}
         height={size}
         className={cn("h-auto w-auto object-contain", className)}
         priority
@@ -28,29 +32,13 @@ export function Logo({
   }
 
   return (
-    <span className={cn("inline-flex items-center gap-3", className)}>
-      <Image
-        src="/brand/logo-mark.svg"
-        alt="Service Butler logo mark"
-        width={size}
-        height={size}
-        className="h-auto w-auto shrink-0 object-contain"
-        priority
-      />
-      <span className="flex flex-col leading-none">
-        <span
-          className="font-heading font-bold tracking-[-0.045em] text-semantic-text"
-          style={{ fontSize: Math.round(size * 0.62) }}
-        >
-          Service Butler
-        </span>
-        <span
-          className="mt-1 font-sans font-semibold uppercase tracking-[0.22em] text-semantic-muted"
-          style={{ fontSize: Math.max(10, Math.round(size * 0.18)) }}
-        >
-          AI Ops for Home Services
-        </span>
-      </span>
-    </span>
+    <Image
+      src="/brand/servicebutler_logo.svg"
+      alt="Service Butler logo"
+      width={width}
+      height={size}
+      className={cn("h-auto w-auto object-contain", className)}
+      priority
+    />
   );
 }

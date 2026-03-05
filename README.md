@@ -32,6 +32,10 @@
   - `http://localhost:3000/dashboard`
   - `http://localhost:3000/dashboard/scanner`
 
+Demoability contract references:
+- `docs/DEMO_MODE.md` defines the exact local demo contract and verification steps.
+- `docs/AGENTS.md` defines branch ownership, scope boundaries, and no-direct-main policy.
+
 Troubleshooting:
 - Twilio trial can only send to verified destination numbers (verify your phone in Twilio Console).
 - Twilio signature mismatch: `WEBHOOK_BASE_URL` must exactly equal your ngrok HTTPS origin.

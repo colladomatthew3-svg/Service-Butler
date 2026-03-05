@@ -279,14 +279,21 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               <option value="won">won</option>
               <option value="lost">lost</option>
             </Select>
+            <Button size="lg" onClick={convertToJob}>
+              {lead.converted_job_id ? "Open Job" : "Convert to Job"}
+            </Button>
+            <Button size="lg" onClick={scrollToSchedule}>
+              <CalendarPlus className="h-4 w-4" />
+              Schedule
+            </Button>
             {missingPhone ? (
-              <Button size="lg" disabled title="No phone on file">
+              <Button size="lg" variant="secondary" disabled title="No phone on file">
                 <PhoneCall className="h-4 w-4" />
                 Call
               </Button>
             ) : (
               <a href={`tel:${lead.phone}`}>
-                <Button size="lg" fullWidth>
+                <Button size="lg" variant="secondary" fullWidth>
                   <PhoneCall className="h-4 w-4" />
                   Call
                 </Button>
@@ -296,6 +303,15 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               <MessageSquare className="h-4 w-4" />
               Text
             </Button>
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
             <Button size="lg" variant="secondary" onClick={() => showToast("Use scheduler below")}> 
               <CalendarPlus className="h-4 w-4" />
               Schedule
@@ -303,6 +319,24 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <Button size="lg" variant="secondary" onClick={convertToJob}>
               {lead.converted_job_id ? "Open Job" : "Convert to Job"}
             </Button>
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
           </div>
         </CardBody>
       </Card>
@@ -463,15 +497,22 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
       </Link>
 
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-semantic-border bg-semantic-surface/95 p-3 pb-[max(0.85rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="lg" onClick={convertToJob}>
+            {lead.converted_job_id ? "Open Job" : "Convert to Job"}
+          </Button>
+          <Button size="lg" onClick={scrollToSchedule}>
+            <CalendarPlus className="h-4 w-4" />
+            Schedule
+          </Button>
           {missingPhone ? (
-            <Button size="lg" disabled title="No phone on file">
+            <Button size="lg" variant="secondary" disabled title="No phone on file">
               <PhoneCall className="h-4 w-4" />
               Call
             </Button>
           ) : (
             <a href={`tel:${lead.phone}`}>
-              <Button size="lg" fullWidth>
+              <Button size="lg" variant="secondary" fullWidth>
                 <PhoneCall className="h-4 w-4" />
                 Call
               </Button>
@@ -481,10 +522,37 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <MessageSquare className="h-4 w-4" />
             Text
           </Button>
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
           <Button size="lg" variant="secondary" onClick={() => showToast("Use scheduler card")}> 
             <CalendarPlus className="h-4 w-4" />
             Schedule
           </Button>
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
         </div>
       </div>
     </div>

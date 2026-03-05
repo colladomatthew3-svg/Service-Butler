@@ -15,6 +15,7 @@ export type ScannerOpportunity = {
   lat: number | null;
   lon: number | null;
   intentScore: number;
+  priorityLabel: "Call now" | "Follow up" | "Schedule later";
   confidence: number;
   tags: string[];
   nextAction: string;
@@ -35,6 +36,7 @@ export type ScannerLead = {
   service_type: string;
   urgency: "high" | "medium" | "low";
   intentScore: number;
+  priorityLabel: "Call now" | "Follow up" | "Schedule later";
   reason: string;
   signals: ReturnType<typeof generateSignals>;
   sourceMode: "synthetic" | "google_places";
@@ -142,6 +144,57 @@ function scoreOpportunity(category: ScannerCategory, tags: string[], forecast?: 
   return { intentScore, confidence };
 }
 
+function priorityLabelForOpportunity({
+  intentScore,
+  tags,
+  title,
+  description,
+  reasonSummary,
+  raw
+}: {
+  intentScore: number;
+  tags: string[];
+  title: string;
+  description: string;
+  reasonSummary: string;
+  raw?: Record<string, unknown>;
+}): "Call now" | "Follow up" | "Schedule later" {
+  const normalizedTags = tags.map((tag) => String(tag || "").toLowerCase());
+  const text = `${title} ${description} ${reasonSummary}`.toLowerCase();
+
+  // Deterministic thresholding strategy:
+  // - Base score from model intent.
+  // - Add urgency points when explicit emergency signals are present.
+  // - Apply conservative penalties for lower urgency signals.
+  // Final threshold mapping:
+  //   >= 86 => Call now
+  //   >= 68 => Follow up
+  //   < 68 => Schedule later
+  let weightedScore = intentScore;
+
+  const immediateSignals = ["emergency", "urgent", "immediate", "burst pipe", "flood", "fire damage", "collapsed ceiling"];
+  if (immediateSignals.some((signal) => normalizedTags.includes(signal) || text.includes(signal))) {
+    weightedScore += 10;
+  }
+
+  const mediumSignals = ["storm", "insurance claim", "water damage", "inspection", "asbestos", "weather"];
+  if (mediumSignals.some((signal) => normalizedTags.includes(signal) || text.includes(signal))) {
+    weightedScore += 4;
+  }
+
+  if (normalizedTags.includes("quote") || text.includes("this week") || text.includes("scheduled")) {
+    weightedScore -= 6;
+  }
+
+  if (String(raw?.urgency || "").toLowerCase() === "immediate") {
+    weightedScore += 8;
+  }
+
+  if (weightedScore >= 86) return "Call now";
+  if (weightedScore >= 68) return "Follow up";
+  return "Schedule later";
+}
+
 function suggestedNextAction(category: ScannerCategory, intentScore: number, locationText: string) {
   if (intentScore >= 80) {
     return `Call within 10 minutes and offer same-day dispatch near ${locationText}.`;
@@ -211,6 +264,7 @@ function toLeadFromOpportunity(op: ScannerOpportunity): ScannerLead {
     service_type: displayService(op.category),
     urgency,
     intentScore: op.intentScore,
+    priorityLabel: op.priorityLabel,
     reason: op.reasonSummary,
     signals: generateSignals({ lead: signalLead }),
     sourceMode: op.source === "google_places" ? "google_places" : "synthetic"
@@ -277,6 +331,14 @@ function createDemoOpportunities({
       lat: null,
       lon: null,
       intentScore,
+      priorityLabel: priorityLabelForOpportunity({
+        intentScore,
+        tags,
+        title: `${phrase} near ${locationText}`,
+        description: `Signals indicate ${displayService(category).toLowerCase()} demand lift in this zone.`,
+        reasonSummary: `Intent boosted by ${tags.join(", ")} and real-time market pressure.`,
+        raw: { mode: "demo", category, triggers: triggers || [] }
+      }),
       confidence,
       tags,
       nextAction: suggestedNextAction(category, intentScore, locationText),
@@ -355,6 +417,21 @@ async function fetchNwsOpportunities({
       lat,
       lon,
       intentScore: intent,
+      priorityLabel: priorityLabelForOpportunity({
+        intentScore: intent,
+        tags,
+        title: props.headline || props.event || "Weather alert",
+        description: props.description || `Active weather alert for ${props.areaDesc || "your area"}.`,
+        reasonSummary: "NWS issued an active alert that historically increases inbound service requests.",
+        raw: {
+          provider: "NWS",
+          id: feature.id,
+          event: props.event,
+          severity: props.severity,
+          urgency: props.urgency,
+          sent: props.sent
+        }
+      }),
       confidence: scored.confidence,
       tags,
       nextAction: suggestedNextAction(category, intent, props.areaDesc || "service area"),
@@ -454,6 +531,21 @@ async function fetchUsgsOpportunities({
       lat: eLat,
       lon: eLon,
       intentScore: intent,
+      priorityLabel: priorityLabelForOpportunity({
+        intentScore: intent,
+        tags,
+        title: props.title || "Local seismic activity",
+        description: `USGS event near service area (${Math.round(dist)} mi). Monitor for inspection and emergency requests.`,
+        reasonSummary: "Public seismic feed indicates possible property impact and urgent inspection demand.",
+        raw: {
+          provider: "USGS",
+          id: feature.id,
+          magnitude: props.mag,
+          tsunami: props.tsunami,
+          alert: props.alert,
+          time: props.time
+        }
+      }),
       confidence: scored.confidence,
       tags,
       nextAction: suggestedNextAction("restoration", intent, props.place || "local area"),

@@ -77,6 +77,32 @@ export function PipelineView() {
     showToast("Job moved");
   }
 
+  async function scheduleJob(job: JobRow) {
+    const slot = new Date();
+    slot.setDate(slot.getDate() + 1);
+    slot.setHours(9, 0, 0, 0);
+
+    const res = await fetch(`/api/jobs/${job.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scheduled_for: slot.toISOString(), pipeline_status: job.pipeline_status === "NEW" ? "SCHEDULED" : job.pipeline_status })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast((data as { error?: string }).error || "Could not schedule job");
+      return;
+    }
+
+    setJobs((prev) =>
+      prev.map((row) =>
+        row.id === job.id
+          ? { ...row, scheduled_for: slot.toISOString(), pipeline_status: row.pipeline_status === "NEW" ? "SCHEDULED" : row.pipeline_status }
+          : row
+      )
+    );
+    showToast("Scheduled");
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -117,13 +143,14 @@ export function PipelineView() {
             <PipelineColumn
               title={activeMobile}
               items={grouped[activeMobile]}
+              onSchedule={scheduleJob}
               onMove={(job) => setSelectedJob(job)}
             />
           </div>
 
           <div className="hidden gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-7">
             {columns.map((col) => (
-              <PipelineColumn key={col} title={col} items={grouped[col]} onMove={(job) => setSelectedJob(job)} />
+              <PipelineColumn key={col} title={col} items={grouped[col]} onSchedule={scheduleJob} onMove={(job) => setSelectedJob(job)} />
             ))}
           </div>
         </>
@@ -157,10 +184,12 @@ export function PipelineView() {
 function PipelineColumn({
   title,
   items,
+  onSchedule,
   onMove
 }: {
   title: Pipeline;
   items: JobRow[];
+  onSchedule: (job: JobRow) => void;
   onMove: (job: JobRow) => void;
 }) {
   return (
@@ -188,16 +217,72 @@ function PipelineColumn({
               <CalendarClock className="h-4 w-4" />
               {job.scheduled_for ? formatDate(job.scheduled_for) : "Not scheduled"}
             </p>
+<<<<<<< ours
             <div className="mt-3 grid grid-cols-2 gap-2">
+=======
+            <div className="mt-3 grid grid-cols-1 gap-2">
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+              <Button size="sm" fullWidth onClick={() => onSchedule(job)}>
+                <CalendarClock className="h-4 w-4" />
+                {job.scheduled_for ? "Reschedule" : "Schedule"}
+              </Button>
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+              <Link href={`/dashboard/jobs/${job.id}`}>
+                <Button size="sm" fullWidth>
+                  <CalendarClock className="h-4 w-4" />
+                  {job.scheduled_for ? "Reschedule" : "Schedule"}
+                </Button>
+              </Link>
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
               {job.customer_phone ? (
                 <a href={`tel:${job.customer_phone}`}>
-                  <Button size="sm" fullWidth>
+                  <Button size="sm" variant="secondary" fullWidth>
                     <PhoneCall className="h-4 w-4" />
                     Call
                   </Button>
                 </a>
               ) : (
-                <Button size="sm" fullWidth disabled>
+                <Button size="sm" variant="secondary" fullWidth disabled>
                   <PhoneCall className="h-4 w-4" />
                   Call
                 </Button>

@@ -180,6 +180,29 @@ export default async function DashboardOverviewPage() {
         <StatTile label="Win Rate" value={`${winRate}%`} icon={<Gauge className="h-5 w-5" />} />
       </section>
 
+<<<<<<< ours
+=======
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-semibold text-semantic-text">Quick Actions</h2>
+        </CardHeader>
+        <CardBody className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <Link href="/dashboard/leads">
+            <Button size="lg" fullWidth>Convert to Job</Button>
+          </Link>
+          <Link href="/dashboard/schedule">
+            <Button size="lg" variant="secondary" fullWidth>Schedule Jobs</Button>
+          </Link>
+          <Link href="/dashboard/pipeline">
+            <Button size="lg" variant="secondary" fullWidth>Advance Pipeline</Button>
+          </Link>
+          <Link href="/dashboard/scanner">
+            <Button size="lg" variant="secondary" fullWidth>Find New Leads</Button>
+          </Link>
+        </CardBody>
+      </Card>
+
+>>>>>>> theirs
       <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <Card>
           <CardHeader>

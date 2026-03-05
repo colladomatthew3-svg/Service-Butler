@@ -1,7 +1,4 @@
-"use client";
-
 import Image from "next/image";
-import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils/cn";
 
 type LogoVariant = "full" | "mark" | "wordmark" | "lockup";
@@ -15,35 +12,45 @@ export function Logo({
   size?: number;
   className?: string;
 }) {
-  const [broken, setBroken] = useState(false);
-  const normalized = variant === "wordmark" || variant === "lockup" ? "full" : variant;
-  const isMark = normalized === "mark";
+  const isMark = variant === "mark";
 
-  const source = useMemo(() => (isMark ? "/brand/logo-mark.png" : "/brand/logo.png"), [isMark]);
-  const width = isMark ? size : Math.round(size * 3.9);
-
-  if (broken) {
+  if (isMark) {
     return (
-      <span
-        className={cn(
-          "inline-flex items-center rounded-lg bg-semantic-surface2 px-3 py-1.5 text-sm font-semibold text-semantic-text",
-          className
-        )}
-      >
-        ServiceButler
-      </span>
+      <Image
+        src="/brand/logo-mark.svg"
+        alt="Service Butler logo mark"
+        width={size}
+        height={size}
+        className={cn("h-auto w-auto object-contain", className)}
+        priority
+      />
     );
   }
 
   return (
-    <Image
-      src={source}
-      alt={isMark ? "ServiceButler logo mark" : "ServiceButler logo"}
-      width={width}
-      height={size}
-      className={cn("h-auto w-auto object-contain", className)}
-      onError={() => setBroken(true)}
-      priority={!isMark}
-    />
+    <span className={cn("inline-flex items-center gap-3", className)}>
+      <Image
+        src="/brand/logo-mark.svg"
+        alt="Service Butler logo mark"
+        width={size}
+        height={size}
+        className="h-auto w-auto shrink-0 object-contain"
+        priority
+      />
+      <span className="flex flex-col leading-none">
+        <span
+          className="font-heading font-bold tracking-[-0.045em] text-semantic-text"
+          style={{ fontSize: Math.round(size * 0.62) }}
+        >
+          Service Butler
+        </span>
+        <span
+          className="mt-1 font-sans font-semibold uppercase tracking-[0.22em] text-semantic-muted"
+          style={{ fontSize: Math.max(10, Math.round(size * 0.18)) }}
+        >
+          AI Ops for Home Services
+        </span>
+      </span>
+    </span>
   );
 }

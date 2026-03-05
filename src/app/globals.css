@@ -6,14 +6,22 @@
   --bg: 246 248 247;
   --surface: 255 255 255;
   --surface2: 242 245 243;
+  --surface3: 234 239 236;
   --border: 216 224 219;
   --text: 30 42 36;
   --muted: 91 108 100;
   --brand: 136 188 66;
   --brandHover: 111 153 53;
+  --brandSoft: 231 243 209;
+  --accent: 221 159 116;
+  --accentSoft: 245 224 209;
   --success: 31 157 85;
   --warning: 217 145 0;
   --danger: 214 69 69;
+  --radius-control: 12px;
+  --radius-card: 16px;
+  --shadow-soft: 0 10px 30px rgba(30, 42, 36, 0.08);
+  --shadow-card: 0 18px 48px rgba(30, 42, 36, 0.14);
 }
 
 * {
@@ -64,8 +72,8 @@
 }
 
 body {
-  background: radial-gradient(1200px 600px at 10% -10%, rgb(var(--brand) / 0.16), transparent 50%),
-    radial-gradient(800px 500px at 100% 0%, rgb(221 159 116 / 0.12), transparent 45%),
+  background: radial-gradient(1200px 600px at 10% -10%, rgb(var(--brandSoft) / 0.85), transparent 50%),
+    radial-gradient(900px 540px at 100% 0%, rgb(var(--accentSoft) / 0.72), transparent 45%),
     rgb(var(--bg));
   color: rgb(var(--text));
 }
@@ -87,4 +95,26 @@ body {
   border: 1px solid rgb(var(--border));
   border-radius: 1rem;
   padding: 1rem;
+}
+
+.section-title {
+  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-size: clamp(2rem, 2.4vw, 3.25rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  background: rgb(var(--brandSoft));
+  color: rgb(var(--brandHover));
+  padding: 0.45rem 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }

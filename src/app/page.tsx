@@ -6,7 +6,7 @@ export default function HomePage() {
     <>
       <TopNav />
       <main className="pb-24">
-      <section className="container pt-12 sm:pt-16">
+      <section className="container pt-12 sm:pt-16" id="home">
         <div className="rounded-3xl bg-gradient-to-br from-brand-200/70 via-brand-100/30 to-transparent p-[1px] shadow-card">
           <div className="grid items-center gap-10 rounded-3xl bg-semantic-surface px-6 py-10 sm:px-10 sm:py-14 lg:grid-cols-[1fr_1.05fr]">
           <div>
@@ -164,6 +164,20 @@ export default function HomePage() {
           <div className="mt-7">
             <a href="/login" className="inline-flex h-14 items-center rounded-xl bg-accent-500 px-6 text-sm font-semibold text-white hover:bg-accent-600">
               Book Your Demo
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing" className="container py-12">
+        <div className="rounded-3xl border border-semantic-border bg-semantic-surface/90 px-6 py-8 shadow-soft sm:px-10">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">Pricing</p>
+              <h2 className="mt-2 text-2xl font-semibold text-semantic-text">Simple plans for growing service teams</h2>
+            </div>
+            <a href="/login" className="inline-flex h-12 items-center rounded-xl bg-semantic-brand px-5 text-sm font-semibold text-white hover:bg-semantic-brandHover">
+              Request Pricing
             </a>
           </div>
         </div>

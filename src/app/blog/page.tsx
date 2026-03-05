@@ -1,3 +1,4 @@
+import { Footer } from "@/components/brand/Footer";
 import { TopNav } from "@/components/brand/TopNav";
 
 export default function BlogPage() {
@@ -13,6 +14,7 @@ export default function BlogPage() {
           </p>
         </div>
       </main>
+      <Footer />
     </>
   );
 }

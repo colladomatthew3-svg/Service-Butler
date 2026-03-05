@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Footer } from "@/components/brand/Footer";
 import { TopNav } from "@/components/brand/TopNav";
 
 export default function HomePage() {
@@ -183,6 +184,7 @@ export default function HomePage() {
         </div>
       </section>
       </main>
+      <Footer />
     </>
   );
 }

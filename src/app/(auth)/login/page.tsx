@@ -1,6 +1,7 @@
 import { signInWithDevQuickLogin, signInWithMagicLink } from "@/actions/auth";
 import { hasDevAuthPassword } from "@/lib/auth/dev-quick-login";
 import Link from "next/link";
+import { Footer } from "@/components/brand/Footer";
 import { Logo } from "@/components/brand/Logo";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,85 +16,88 @@ export default async function LoginPage({
   const devQuickLoginConfigured = process.env.NODE_ENV === "development" && hasDevAuthPassword();
 
   return (
-    <main className="container py-16">
-      <div className="mx-auto max-w-lg">
-        <div className="mb-8 flex justify-center">
-          <Link href="/">
-            <Logo variant="full" size={44} />
-          </Link>
-        </div>
-        <Card>
-          <CardHeader>
-            <h1 className="text-2xl font-semibold text-semantic-text">Sign in</h1>
-            <p className="mt-1 text-sm text-semantic-muted">Use your work email to get a secure magic link.</p>
-          </CardHeader>
-          <CardBody>
-            {params.membership === "required" && (
-              <p className="mb-4 rounded-xl border border-danger-500/25 bg-danger-100 px-4 py-3 text-sm text-danger-700">
-                Your user does not have an active account membership. Seed users or assign an account role first.
-              </p>
-            )}
-
-            {params.sent === "1" && (
-              <p className="mb-4 rounded-xl border border-success-500/25 bg-success-100 px-4 py-3 text-sm text-success-700">
-                Magic link sent. Check your inbox.
-              </p>
-            )}
-            {params.devQuickLogin && (
-              <p className="mb-4 rounded-xl border border-warning-500/25 bg-warning-100 px-4 py-3 text-sm text-warning-700">
-                Dev quick login unavailable ({params.devQuickLogin}). Configure DEV_AUTH_PASSWORD to enable it.
-              </p>
-            )}
-
-            <form action={signInWithMagicLink} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-semibold text-semantic-muted">Email</label>
-                <Input name="email" type="email" placeholder="you@company.com" required />
-              </div>
-              <Button type="submit" size="lg" fullWidth>
-                Send Magic Link
-              </Button>
-            </form>
-          </CardBody>
-        </Card>
-
-        {process.env.NODE_ENV === "development" && (
-          <Card className="mt-5">
+    <>
+      <main className="container py-16">
+        <div className="mx-auto max-w-lg">
+          <div className="mb-8 flex justify-center">
+            <Link href="/">
+              <Logo variant="full" size={44} />
+            </Link>
+          </div>
+          <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Dev Quick Login</h2>
-              {devQuickLoginConfigured ? (
-                <p className="mt-1 text-sm text-semantic-muted">
-                  Development only. Uses `DEV_AUTH_PASSWORD` and redirects to dashboard.
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-semantic-muted">
-                  Dev quick login not configured. Set DEV_AUTH_PASSWORD in .env.local to enable.
+              <h1 className="text-2xl font-semibold text-semantic-text">Sign in</h1>
+              <p className="mt-1 text-sm text-semantic-muted">Use your work email to get a secure magic link.</p>
+            </CardHeader>
+            <CardBody>
+              {params.membership === "required" && (
+                <p className="mb-4 rounded-xl border border-danger-500/25 bg-danger-100 px-4 py-3 text-sm text-danger-700">
+                  Your user does not have an active account membership. Seed users or assign an account role first.
                 </p>
               )}
-            </CardHeader>
-            <CardBody className="space-y-3">
-              <form action={signInWithDevQuickLogin}>
-                <input type="hidden" name="email" value="owner@servicebutler.local" />
-                <Button type="submit" size="lg" fullWidth disabled={!devQuickLoginConfigured}>
-                  Login as Owner
-                </Button>
-              </form>
-              <form action={signInWithDevQuickLogin}>
-                <input type="hidden" name="email" value="dispatcher@servicebutler.local" />
-                <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
-                  Login as Dispatcher
-                </Button>
-              </form>
-              <form action={signInWithDevQuickLogin}>
-                <input type="hidden" name="email" value="tech@servicebutler.local" />
-                <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
-                  Login as Tech
+
+              {params.sent === "1" && (
+                <p className="mb-4 rounded-xl border border-success-500/25 bg-success-100 px-4 py-3 text-sm text-success-700">
+                  Magic link sent. Check your inbox.
+                </p>
+              )}
+              {params.devQuickLogin && (
+                <p className="mb-4 rounded-xl border border-warning-500/25 bg-warning-100 px-4 py-3 text-sm text-warning-700">
+                  Dev quick login unavailable ({params.devQuickLogin}). Configure DEV_AUTH_PASSWORD to enable it.
+                </p>
+              )}
+
+              <form action={signInWithMagicLink} className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-semantic-muted">Email</label>
+                  <Input name="email" type="email" placeholder="you@company.com" required />
+                </div>
+                <Button type="submit" size="lg" fullWidth>
+                  Send Magic Link
                 </Button>
               </form>
             </CardBody>
           </Card>
-        )}
-      </div>
-    </main>
+
+          {process.env.NODE_ENV === "development" && (
+            <Card className="mt-5">
+              <CardHeader>
+                <h2 className="text-lg font-semibold text-semantic-text">Dev Quick Login</h2>
+                {devQuickLoginConfigured ? (
+                  <p className="mt-1 text-sm text-semantic-muted">
+                    Development only. Uses `DEV_AUTH_PASSWORD` and redirects to dashboard.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-semantic-muted">
+                    Dev quick login not configured. Set DEV_AUTH_PASSWORD in .env.local to enable.
+                  </p>
+                )}
+              </CardHeader>
+              <CardBody className="space-y-3">
+                <form action={signInWithDevQuickLogin}>
+                  <input type="hidden" name="email" value="owner@servicebutler.local" />
+                  <Button type="submit" size="lg" fullWidth disabled={!devQuickLoginConfigured}>
+                    Login as Owner
+                  </Button>
+                </form>
+                <form action={signInWithDevQuickLogin}>
+                  <input type="hidden" name="email" value="dispatcher@servicebutler.local" />
+                  <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
+                    Login as Dispatcher
+                  </Button>
+                </form>
+                <form action={signInWithDevQuickLogin}>
+                  <input type="hidden" name="email" value="tech@servicebutler.local" />
+                  <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
+                    Login as Tech
+                  </Button>
+                </form>
+              </CardBody>
+            </Card>
+          )}
+        </div>
+      </main>
+      <Footer />
+    </>
   );
 }

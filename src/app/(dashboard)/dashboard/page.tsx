@@ -185,17 +185,17 @@ export default async function DashboardOverviewPage() {
           <h2 className="text-lg font-semibold text-semantic-text">Quick Actions</h2>
         </CardHeader>
         <CardBody className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Link href="/dashboard/scanner">
-            <Button size="lg" fullWidth>Claim Opportunity</Button>
-          </Link>
           <Link href="/dashboard/leads">
-            <Button size="lg" variant="secondary" fullWidth>Call New Leads</Button>
-          </Link>
-          <Link href="/dashboard/pipeline">
-            <Button size="lg" variant="secondary" fullWidth>Move Pipeline</Button>
+            <Button size="lg" fullWidth>Convert to Job</Button>
           </Link>
           <Link href="/dashboard/schedule">
-            <Button size="lg" variant="secondary" fullWidth>Review Schedule</Button>
+            <Button size="lg" variant="secondary" fullWidth>Schedule Jobs</Button>
+          </Link>
+          <Link href="/dashboard/pipeline">
+            <Button size="lg" variant="secondary" fullWidth>Advance Pipeline</Button>
+          </Link>
+          <Link href="/dashboard/scanner">
+            <Button size="lg" variant="secondary" fullWidth>Find New Leads</Button>
           </Link>
         </CardBody>
       </Card>

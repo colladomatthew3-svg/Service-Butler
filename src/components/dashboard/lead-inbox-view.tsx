@@ -402,42 +402,40 @@ export function LeadInboxView() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
-                      {lead.phone ? (
-                        <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()}>
-                          <Button size="lg" fullWidth>
-                            <PhoneCall className="h-4 w-4" />
-                            Call
-                          </Button>
-                        </a>
-                      ) : (
-                        <Button size="lg" disabled title="No phone on file">
-                          <PhoneCall className="h-4 w-4" />
-                          Call
-                        </Button>
-                      )}
-                      <Button size="lg" variant="secondary" onClick={(e) => { e.preventDefault(); handleTextLead(lead); }}>
-                        Text
-                      </Button>
                       <Button
                         size="lg"
-                        variant="secondary"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          scheduleLead(lead.id, "todayPm");
-                        }}
-                      >
-                        <CalendarPlus className="h-4 w-4" />
-                        Today PM
-                      </Button>
-                      <Button
-                        size="lg"
-                        variant="secondary"
                         onClick={(e) => {
                           e.preventDefault();
                           convertLeadToJob(lead);
                         }}
                       >
                         {lead.converted_job_id ? "Open Job" : "Convert to Job"}
+                      </Button>
+                      <Button
+                        size="lg"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          scheduleLead(lead.id, "todayPm");
+                        }}
+                      >
+                        <CalendarPlus className="h-4 w-4" />
+                        Schedule
+                      </Button>
+                      {lead.phone ? (
+                        <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()}>
+                          <Button size="lg" variant="secondary" fullWidth>
+                            <PhoneCall className="h-4 w-4" />
+                            Call
+                          </Button>
+                        </a>
+                      ) : (
+                        <Button size="lg" variant="secondary" disabled title="No phone on file">
+                          <PhoneCall className="h-4 w-4" />
+                          Call
+                        </Button>
+                      )}
+                      <Button size="lg" variant="secondary" onClick={(e) => { e.preventDefault(); handleTextLead(lead); }}>
+                        Text
                       </Button>
                       <Button
                         size="lg"
@@ -499,29 +497,29 @@ export function LeadInboxView() {
                         <p className="text-xs text-semantic-muted">{lead.scheduled_for ? `Scheduled ${formatDateShort(lead.scheduled_for)}` : "No slot yet"}</p>
                       </TD>
                       <TD>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button size="sm" onClick={() => convertLeadToJob(lead)}>
+                            {lead.converted_job_id ? "Open Job" : "Convert to Job"}
+                          </Button>
+                          <Button size="sm" onClick={() => scheduleLead(lead.id, "tomorrowAm")}>
+                            <CalendarPlus className="h-4 w-4" />
+                            Schedule
+                          </Button>
                           {lead.phone ? (
                             <a href={`tel:${lead.phone}`}>
-                              <Button size="sm">
+                              <Button size="sm" variant="secondary">
                                 <PhoneCall className="h-4 w-4" />
                                 Call
                               </Button>
                             </a>
                           ) : (
-                            <Button size="sm" disabled title="No phone on file">
+                            <Button size="sm" variant="secondary" disabled title="No phone on file">
                               <PhoneCall className="h-4 w-4" />
                               Call
                             </Button>
                           )}
                           <Button size="sm" variant="secondary" onClick={() => handleTextLead(lead)}>
                             Text
-                          </Button>
-                          <Button size="sm" variant="secondary" onClick={() => scheduleLead(lead.id, "tomorrowAm")}>
-                            <CalendarPlus className="h-4 w-4" />
-                            Tomorrow AM
-                          </Button>
-                          <Button size="sm" variant="secondary" onClick={() => convertLeadToJob(lead)}>
-                            {lead.converted_job_id ? "Open Job" : "Convert to Job"}
                           </Button>
                           <Link href={`/dashboard/leads/${lead.id}`}>
                             <Button size="sm" variant="ghost">

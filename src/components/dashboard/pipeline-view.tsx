@@ -202,15 +202,21 @@ function PipelineColumn({
               {job.scheduled_for ? formatDate(job.scheduled_for) : "Not scheduled"}
             </p>
             <div className="mt-3 grid grid-cols-1 gap-2">
+              <Link href={`/dashboard/jobs/${job.id}`}>
+                <Button size="sm" fullWidth>
+                  <CalendarClock className="h-4 w-4" />
+                  {job.scheduled_for ? "Reschedule" : "Schedule"}
+                </Button>
+              </Link>
               {job.customer_phone ? (
                 <a href={`tel:${job.customer_phone}`}>
-                  <Button size="sm" fullWidth>
+                  <Button size="sm" variant="secondary" fullWidth>
                     <PhoneCall className="h-4 w-4" />
                     Call
                   </Button>
                 </a>
               ) : (
-                <Button size="sm" fullWidth disabled>
+                <Button size="sm" variant="secondary" fullWidth disabled>
                   <PhoneCall className="h-4 w-4" />
                   Call
                 </Button>

@@ -8,7 +8,7 @@
     "build": "npm run clean:next && next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "npm run clean:next && tsc --noEmit",
     "test:e2e": "playwright test",
     "db:start": "npx supabase start",
     "db:reset": "npx supabase db reset",

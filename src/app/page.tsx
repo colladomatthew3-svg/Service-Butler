@@ -42,9 +42,9 @@ const trustMetrics = [
 ] as const;
 
 const testimonials = [
-  ['"It finally feels like our phones, dispatch board, and follow-up playbooks belong to the same company."', "Jackson Price", "HVAC owner, Tampa"],
-  ['"Customers get answers quicker, and my team no longer has to reconstruct context from five different tools."', "Erica Molina", "Plumbing dispatcher, Orlando"],
-  ['"We look more professional because every handoff is cleaner, faster, and documented."', "Marcus Vaughn", "Electrical contractor, Jacksonville"]
+  ["It finally feels like our phones, dispatch board, and follow-up playbooks belong to the same company.", "Jackson Price", "HVAC owner, Tampa"],
+  ["Customers get answers quicker, and my team no longer has to reconstruct context from five different tools.", "Erica Molina", "Plumbing dispatcher, Orlando"],
+  ["We look more professional because every handoff is cleaner, faster, and documented.", "Marcus Vaughn", "Electrical contractor, Jacksonville"]
 ] as const;
 
 const pricingTiers = [
@@ -323,7 +323,7 @@ export default function HomePage() {
                           <Star key={index} className="h-4 w-4 fill-current" />
                         ))}
                       </div>
-                      <p className="mt-4 text-sm leading-7 text-white/80">{quote}</p>
+                      <p className="mt-4 text-sm leading-7 text-white/80">&ldquo;{quote}&rdquo;</p>
                       <footer className="mt-5">
                         <p className="text-sm font-semibold text-white">{name}</p>
                         <p className="text-sm text-white/55">{company}</p>

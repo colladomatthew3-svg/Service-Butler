@@ -41,10 +41,10 @@ export function Footer() {
         <div className="mt-12 flex flex-col gap-4 border-t border-semantic-border pt-6 text-sm text-semantic-muted sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 Service Butler. Built for premium home service operations.</p>
           <div className="flex flex-wrap gap-5">
-            <Link href="/" className="transition hover:text-semantic-text">
+            <Link href="/privacy" className="transition hover:text-semantic-text">
               Privacy
             </Link>
-            <Link href="/" className="transition hover:text-semantic-text">
+            <Link href="/terms" className="transition hover:text-semantic-text">
               Terms
             </Link>
           </div>

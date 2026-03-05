@@ -25,17 +25,26 @@ const sizeClass: Record<ButtonSize, string> = {
   lg: "h-14 px-6 text-base"
 };
 
+export function buttonStyles({
+  className,
+  variant = "primary",
+  size = "md",
+  fullWidth
+}: Pick<ButtonProps, "className" | "variant" | "size" | "fullWidth"> = {}) {
+  return cn(
+    "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold tracking-[0.01em] transition duration-200 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed",
+    "focus-visible:ring-semantic-brand/45 focus-visible:ring-offset-2 focus-visible:ring-offset-semantic-surface disabled:border disabled:border-semantic-border disabled:bg-semantic-surface2 disabled:text-semantic-muted disabled:opacity-75 disabled:shadow-none",
+    variantClass[variant],
+    sizeClass[size],
+    fullWidth && "w-full",
+    className
+  );
+}
+
 export function Button({ className, variant = "primary", size = "md", fullWidth, ...props }: ButtonProps) {
   return (
     <button
-      className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold tracking-[0.01em] transition duration-200 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed",
-        "focus-visible:ring-semantic-brand/45 focus-visible:ring-offset-2 focus-visible:ring-offset-semantic-surface disabled:border disabled:border-semantic-border disabled:bg-semantic-surface2 disabled:text-semantic-muted disabled:opacity-75 disabled:shadow-none",
-        variantClass[variant],
-        sizeClass[size],
-        fullWidth && "w-full",
-        className
-      )}
+      className={buttonStyles({ className, variant, size, fullWidth })}
       {...props}
     />
   );

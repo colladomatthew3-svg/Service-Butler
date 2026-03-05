@@ -5,7 +5,7 @@ import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { getAccountBillingState } from "@/lib/services/account-billing";
 import { DashboardAppShell } from "@/components/dashboard/app-shell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonStyles } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
@@ -34,15 +34,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       demoMode={demoMode}
       onSignOut={
         <div className="space-y-3">
-          <Link href="/billing" className="block">
-            <Button variant="secondary" fullWidth>
-              Billing
-            </Button>
+          <Link href="/billing" className={buttonStyles({ variant: "secondary", fullWidth: true })}>
+            Billing
           </Link>
-          <Link href="/pipeline" className="block">
-            <Button variant="ghost" fullWidth>
-              Legacy Pipeline
-            </Button>
+          <Link href="/pipeline" className={buttonStyles({ variant: "ghost", fullWidth: true })}>
+            Legacy Pipeline
           </Link>
           <form action={signOut}>
             <Button variant="danger" fullWidth type="submit">
@@ -69,8 +65,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
               </Badge>
               <p className="mt-2 text-sm text-neutral-700">{bannerText}</p>
             </div>
-            <Link href="/billing">
-              <Button variant="secondary">Open Billing</Button>
+            <Link href="/billing" className={buttonStyles({ variant: "secondary" })}>
+              Open Billing
             </Link>
           </CardBody>
         </Card>

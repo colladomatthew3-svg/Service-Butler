@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
-import { Button } from "@/components/ui/button";
+import { buttonStyles } from "@/components/ui/button";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -25,8 +25,8 @@ export function TopNav() {
           ))}
         </nav>
         <div className="ml-2 hidden lg:block">
-          <Link href="/login">
-            <Button className="min-w-32">Start Free Trial</Button>
+          <Link href="/login" className={buttonStyles({ className: "min-w-32" })}>
+            Start Free Trial
           </Link>
         </div>
         <details className="relative ml-auto lg:hidden">
@@ -45,10 +45,8 @@ export function TopNav() {
                 </Link>
               ))}
             </nav>
-            <Link href="/login" className="mt-3 block">
-              <Button size="sm" fullWidth>
-                Start Free Trial
-              </Button>
+            <Link href="/login" className={buttonStyles({ size: "sm", fullWidth: true, className: "mt-3" })}>
+              Start Free Trial
             </Link>
           </div>
         </details>

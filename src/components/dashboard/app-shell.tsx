@@ -8,6 +8,7 @@ import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { AppTopBar } from "@/components/brand/AppTopBar";
+import { buttonStyles } from "@/components/ui/button";
 
 type NavItem = {
   href: string;
@@ -120,14 +121,14 @@ export function DashboardAppShell({
               <AppTopBar />
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 lg:hidden">
-              <Link href="/dashboard/scanner">
-                <button className="h-11 w-full rounded-xl bg-semantic-brand px-3 text-sm font-semibold text-white">Scan</button>
+              <Link href="/dashboard/scanner" className={buttonStyles({ size: "sm", className: "w-full" })}>
+                Scan
               </Link>
-              <Link href="/dashboard/leads">
-                <button className="h-11 w-full rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-sm font-semibold text-semantic-text">Leads</button>
+              <Link href="/dashboard/leads" className={buttonStyles({ size: "sm", variant: "secondary", className: "w-full" })}>
+                Leads
               </Link>
-              <Link href="/dashboard/pipeline">
-                <button className="h-11 w-full rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-sm font-semibold text-semantic-text">Pipeline</button>
+              <Link href="/dashboard/pipeline" className={buttonStyles({ size: "sm", variant: "secondary", className: "w-full" })}>
+                Pipeline
               </Link>
             </div>
           </header>

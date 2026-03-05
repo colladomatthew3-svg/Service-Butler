@@ -119,6 +119,17 @@ export function DashboardAppShell({
               </div>
               <AppTopBar />
             </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 lg:hidden">
+              <Link href="/dashboard/scanner">
+                <button className="h-11 w-full rounded-xl bg-semantic-brand px-3 text-sm font-semibold text-white">Scan</button>
+              </Link>
+              <Link href="/dashboard/leads">
+                <button className="h-11 w-full rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-sm font-semibold text-semantic-text">Leads</button>
+              </Link>
+              <Link href="/dashboard/pipeline">
+                <button className="h-11 w-full rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-sm font-semibold text-semantic-text">Pipeline</button>
+              </Link>
+            </div>
           </header>
 
           <main className="w-full px-4 py-6 sm:px-6 sm:py-8">{children}</main>

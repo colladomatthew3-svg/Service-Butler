@@ -86,6 +86,17 @@ export function LeadInboxView() {
     return items;
   }, [leads, sort]);
 
+  const kpis = useMemo(() => {
+    const now = Date.now();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const newToday = leads.filter((lead) => new Date(lead.created_at).getTime() >= today.getTime()).length;
+    const highIntent = leads.filter((lead) => lead.intentScore >= 75 && lead.status !== "won" && lead.status !== "lost").length;
+    const needsSchedule = leads.filter((lead) => !lead.scheduled_for && lead.status !== "lost" && lead.status !== "won").length;
+    const stale = leads.filter((lead) => now - new Date(lead.created_at).getTime() > 1000 * 60 * 60 * 24).length;
+    return { newToday, highIntent, needsSchedule, stale };
+  }, [leads]);
+
   async function loadLeads() {
     setLoading(true);
     const params = new URLSearchParams();
@@ -331,6 +342,13 @@ export function LeadInboxView() {
         </CardBody>
       </Card>
 
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <QuickKpi label="New Today" value={kpis.newToday} />
+        <QuickKpi label="High Intent" value={kpis.highIntent} tone="warning" />
+        <QuickKpi label="Need Schedule" value={kpis.needsSchedule} tone="brand" />
+        <QuickKpi label="Over 24h Old" value={kpis.stale} />
+      </section>
+
       {loading ? (
         <Card>
           <CardBody className="space-y-3">
@@ -379,6 +397,9 @@ export function LeadInboxView() {
                     </div>
 
                     <IntentMeter score={lead.intentScore} signalCount={lead.signalCount} />
+                    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-3 py-2 text-sm text-semantic-muted">
+                      <span className="font-semibold text-semantic-text">Next step:</span> {nextStepLabel(lead)}
+                    </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       {lead.phone ? (
@@ -397,10 +418,6 @@ export function LeadInboxView() {
                       <Button size="lg" variant="secondary" onClick={(e) => { e.preventDefault(); handleTextLead(lead); }}>
                         Text
                       </Button>
-                      <Button size="lg" variant="secondary" onClick={(e) => e.preventDefault()}>
-                        <CalendarPlus className="h-4 w-4" />
-                        Open
-                      </Button>
                       <Button
                         size="lg"
                         variant="secondary"
@@ -409,6 +426,7 @@ export function LeadInboxView() {
                           scheduleLead(lead.id, "todayPm");
                         }}
                       >
+                        <CalendarPlus className="h-4 w-4" />
                         Today PM
                       </Button>
                       <Button
@@ -421,9 +439,19 @@ export function LeadInboxView() {
                       >
                         {lead.converted_job_id ? "Open Job" : "Convert to Job"}
                       </Button>
-                    </div>
-                    <div className="flex items-center justify-end text-sm font-semibold text-brand-700">
-                      Open <ChevronRight className="h-4 w-4" />
+                      <Button
+                        size="lg"
+                        variant="ghost"
+                        fullWidth
+                        className="col-span-2"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          window.location.href = `/dashboard/leads/${lead.id}`;
+                        }}
+                      >
+                        Open Lead
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
                     </div>
                   </CardBody>
                 </Card>
@@ -493,7 +521,7 @@ export function LeadInboxView() {
                             Tomorrow AM
                           </Button>
                           <Button size="sm" variant="secondary" onClick={() => convertLeadToJob(lead)}>
-                            {lead.converted_job_id ? "Open Job" : "Convert"}
+                            {lead.converted_job_id ? "Open Job" : "Convert to Job"}
                           </Button>
                           <Link href={`/dashboard/leads/${lead.id}`}>
                             <Button size="sm" variant="ghost">
@@ -662,6 +690,18 @@ function FilterChips({
   );
 }
 
+function QuickKpi({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "warning" | "brand" }) {
+  const toneClass = tone === "warning" ? "text-warning-700" : tone === "brand" ? "text-brand-700" : "text-semantic-text";
+  return (
+    <Card>
+      <CardBody className="space-y-1 py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-semantic-muted">{label}</p>
+        <p className={cn("text-2xl font-semibold", toneClass)}>{value}</p>
+      </CardBody>
+    </Card>
+  );
+}
+
 function statusBadge(status: string) {
   if (status === "new") return "warning" as const;
   if (status === "won") return "success" as const;
@@ -692,6 +732,13 @@ function relativeTime(dateString: string) {
 
 function formatDateShort(dateString: string) {
   return new Date(dateString).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function nextStepLabel(lead: LeadRow) {
+  if (lead.converted_job_id) return "Open job and confirm crew assignment.";
+  if (lead.status === "new") return "Call now and qualify scope.";
+  if (!lead.scheduled_for) return "Offer next available time slot.";
+  return `Show up ${formatDateShort(lead.scheduled_for)} and close the job.`;
 }
 
 function intentTone(score: number) {

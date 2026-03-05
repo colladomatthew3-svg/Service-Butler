@@ -82,3 +82,4 @@ bash scripts/dev-down.sh
 - Webhook idempotency is enforced in `webhook_events(provider,event_id)`.
 - Missed-call follow-up is guarded once per `CallSid` via `missed_followup:{CallSid}`.
 - Stripe gating is strict by default. `ALLOW_OUTBOUND_WITHOUT_STRIPE=true` only allows outbound when subscription row is missing.
+# Service-Butler

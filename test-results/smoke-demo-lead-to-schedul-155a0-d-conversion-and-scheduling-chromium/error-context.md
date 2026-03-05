@@ -1,0 +1,83 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e6]:
+        - img "ServiceButler logo" [ref=e7]
+        - paragraph [ref=e8]: Ops Console
+      - navigation [ref=e9]:
+        - link "Dashboard" [ref=e10] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e11]
+          - text: Dashboard
+        - link "Leads" [ref=e16] [cursor=pointer]:
+          - /url: /dashboard/leads
+          - img [ref=e17]
+          - text: Leads
+        - link "Pipeline" [ref=e22] [cursor=pointer]:
+          - /url: /dashboard/pipeline
+          - img [ref=e23]
+          - text: Pipeline
+        - link "Jobs" [ref=e25] [cursor=pointer]:
+          - /url: /dashboard/jobs
+          - img [ref=e26]
+          - text: Jobs
+        - link "Scanner" [ref=e30] [cursor=pointer]:
+          - /url: /dashboard/scanner
+          - img [ref=e31]
+          - text: Scanner
+        - link "Outbound" [ref=e38] [cursor=pointer]:
+          - /url: /dashboard/outbound
+          - img [ref=e39]
+          - text: Outbound
+        - link "Schedule" [ref=e42] [cursor=pointer]:
+          - /url: /dashboard/schedule
+          - img [ref=e43]
+          - text: Schedule
+        - link "Inbox" [ref=e45] [cursor=pointer]:
+          - /url: /dashboard/inbox
+          - img [ref=e46]
+          - text: Inbox
+        - link "Settings" [ref=e48] [cursor=pointer]:
+          - /url: /dashboard/settings
+          - img [ref=e49]
+          - text: Settings
+      - generic [ref=e52]:
+        - paragraph [ref=e53]: Today
+        - paragraph [ref=e54]: Prioritize new high-urgency leads first.
+      - generic [ref=e56]:
+        - link "Billing" [ref=e57] [cursor=pointer]:
+          - /url: /billing
+          - button "Billing" [ref=e58]
+        - link "Legacy Pipeline" [ref=e59] [cursor=pointer]:
+          - /url: /pipeline
+          - button "Legacy Pipeline" [ref=e60]
+        - button "Sign out" [ref=e62] [cursor=pointer]
+    - generic [ref=e63]:
+      - banner [ref=e64]:
+        - generic [ref=e65]: Demo Mode (no auth)
+        - generic [ref=e67]:
+          - link "ServiceButler logo" [ref=e68] [cursor=pointer]:
+            - /url: /dashboard
+            - img "ServiceButler logo" [ref=e69]
+          - textbox "Search leads, jobs, customers..." [ref=e71]
+          - generic [ref=e72]:
+            - button "New Lead" [ref=e73] [cursor=pointer]
+            - button "Create Job" [ref=e74] [cursor=pointer]
+      - main [ref=e75]:
+        - generic [ref=e77]:
+          - generic [ref=e78]:
+            - generic [ref=e79]: Outbound enabled
+            - paragraph [ref=e80]: Billing is disabled in MVP mode. Outbound features are available.
+          - link "Open Billing" [ref=e81] [cursor=pointer]:
+            - /url: /billing
+            - button "Open Billing" [ref=e82]
+        - generic [ref=e84]:
+          - heading "404" [level=1] [ref=e85]
+          - heading "This page could not be found." [level=2] [ref=e87]
+  - button "Open Next.js Dev Tools" [ref=e93] [cursor=pointer]:
+    - img [ref=e94]
+  - alert [ref=e97]: "404: This page could not be found."
+```

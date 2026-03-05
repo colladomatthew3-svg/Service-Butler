@@ -217,63 +217,11 @@ function PipelineColumn({
               <CalendarClock className="h-4 w-4" />
               {job.scheduled_for ? formatDate(job.scheduled_for) : "Not scheduled"}
             </p>
-<<<<<<< ours
-            <div className="mt-3 grid grid-cols-2 gap-2">
-=======
             <div className="mt-3 grid grid-cols-1 gap-2">
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
               <Button size="sm" fullWidth onClick={() => onSchedule(job)}>
                 <CalendarClock className="h-4 w-4" />
                 {job.scheduled_for ? "Reschedule" : "Schedule"}
               </Button>
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-              <Link href={`/dashboard/jobs/${job.id}`}>
-                <Button size="sm" fullWidth>
-                  <CalendarClock className="h-4 w-4" />
-                  {job.scheduled_for ? "Reschedule" : "Schedule"}
-                </Button>
-              </Link>
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
               {job.customer_phone ? (
                 <a href={`tel:${job.customer_phone}`}>
                   <Button size="sm" variant="secondary" fullWidth>

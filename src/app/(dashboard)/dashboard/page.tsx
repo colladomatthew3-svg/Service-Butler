@@ -180,8 +180,6 @@ export default async function DashboardOverviewPage() {
         <StatTile label="Win Rate" value={`${winRate}%`} icon={<Gauge className="h-5 w-5" />} />
       </section>
 
-<<<<<<< ours
-=======
       <Card>
         <CardHeader>
           <h2 className="text-lg font-semibold text-semantic-text">Quick Actions</h2>
@@ -202,7 +200,6 @@ export default async function DashboardOverviewPage() {
         </CardBody>
       </Card>
 
->>>>>>> theirs
       <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <Card>
           <CardHeader>

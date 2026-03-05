@@ -189,6 +189,10 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
     showToast("Scheduled");
   }
 
+  function scrollToSchedule() {
+    document.getElementById("lead-schedule-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function handleTextLead() {
     if (!lead?.phone) {
       showToast("No phone on file");
@@ -303,15 +307,6 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               <MessageSquare className="h-4 w-4" />
               Text
             </Button>
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
             <Button size="lg" variant="secondary" onClick={() => showToast("Use scheduler below")}> 
               <CalendarPlus className="h-4 w-4" />
               Schedule
@@ -319,24 +314,6 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <Button size="lg" variant="secondary" onClick={convertToJob}>
               {lead.converted_job_id ? "Open Job" : "Convert to Job"}
             </Button>
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
           </div>
         </CardBody>
       </Card>
@@ -355,7 +332,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
       <section className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
         <div className="space-y-5">
-          <Card>
+          <Card id="lead-schedule-card">
             <CardHeader>
               <h2 className="text-lg font-semibold text-semantic-text">Customer & Job Details</h2>
             </CardHeader>
@@ -522,37 +499,10 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <MessageSquare className="h-4 w-4" />
             Text
           </Button>
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
           <Button size="lg" variant="secondary" onClick={() => showToast("Use scheduler card")}> 
             <CalendarPlus className="h-4 w-4" />
             Schedule
           </Button>
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
         </div>
       </div>
     </div>

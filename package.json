@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "clean:next": "node -e \"const fs=require('fs');['.next','node_modules/.cache/next'].forEach((p)=>fs.rmSync(p,{recursive:true,force:true}));\"",
+    "build": "npm run clean:next && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

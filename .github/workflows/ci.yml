@@ -19,10 +19,39 @@ jobs:
           cache: npm
 
       - name: Install
-        run: npm install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck
 
       - name: Build
         run: npm run build
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.54.2-noble
+      options: --ipc=host
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Smoke E2E
+        env:
+          DEMO_MODE: on
+          REVIEW_MODE: off
+          DEV_AUTH_PASSWORD: demo123
+        run: npm run test:e2e

@@ -56,10 +56,34 @@ export async function POST(req: NextRequest) {
   });
 
   if (result.opportunities.length > 0) {
-    await supabase.from("scanner_events").insert(
+    const rows = result.opportunities.map((op) => ({
+      account_id: accountId,
+      source: op.source,
+      category: op.category,
+      title: op.title,
+      description: op.description,
+      location_text: op.locationText,
+      lat: op.lat,
+      lon: op.lon,
+      intent_score: op.intentScore,
+      confidence: op.confidence,
+      tags: op.tags,
+      raw: {
+        ...op.raw,
+        scanner_opportunity_id: op.id,
+        next_action: op.nextAction,
+        reason_summary: op.reasonSummary,
+        recommended_create_mode: op.recommendedCreateMode,
+        recommended_schedule_iso: op.recommendedScheduleIso
+      }
+    }));
+
+    await supabase.from("scanner_events").insert(rows);
+
+    await supabase.from("opportunities").insert(
       result.opportunities.map((op) => ({
         account_id: accountId,
-        source: op.source,
+        source_id: null,
         category: op.category,
         title: op.title,
         description: op.description,
@@ -69,8 +93,12 @@ export async function POST(req: NextRequest) {
         intent_score: op.intentScore,
         confidence: op.confidence,
         tags: op.tags,
+        suggested_action: op.nextAction,
+        status: "new",
         raw: {
           ...op.raw,
+          source: op.source,
+          scanner_opportunity_id: op.id,
           next_action: op.nextAction,
           reason_summary: op.reasonSummary,
           recommended_create_mode: op.recommendedCreateMode,

@@ -39,14 +39,14 @@ export async function POST(req: NextRequest) {
   const lon = settings?.weather_lng != null ? Number(settings.weather_lng) : null;
   const fallbackCategory = String(service || "general").toLowerCase();
   const category =
-    fallbackCategory.includes("plumb")
-      ? "plumbing"
-      : fallbackCategory.includes("elect")
-        ? "electrical"
-        : fallbackCategory.includes("land")
-          ? "landscaping"
-          : fallbackCategory.includes("roof") || fallbackCategory.includes("restor") || fallbackCategory.includes("water")
-            ? "restoration"
+    fallbackCategory.includes("restor") || fallbackCategory.includes("water") || fallbackCategory.includes("fire") || fallbackCategory.includes("mold")
+      ? "restoration"
+      : fallbackCategory.includes("plumb")
+        ? "plumbing"
+        : fallbackCategory.includes("demo") || fallbackCategory.includes("collapse")
+          ? "demolition"
+          : fallbackCategory.includes("asbestos")
+            ? "asbestos"
             : "general";
 
   const scan = await runScanner({

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { Search, Plus, PhoneCall, CalendarPlus, ChevronRight, X, Clock3, SlidersHorizontal } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, Plus, PhoneCall, CalendarPlus, ChevronRight, X, Clock3, SlidersHorizontal, Upload } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,8 @@ export function LeadInboxView() {
   const [sort, setSort] = useState<SortMode>("intent");
   const [showAdd, setShowAdd] = useState(false);
   const [savingLead, setSavingLead] = useState(false);
+  const [importingCsv, setImportingCsv] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -199,16 +201,85 @@ export function LeadInboxView() {
     window.location.href = `/dashboard/jobs/${data.jobId}`;
   }
 
+  async function importCsvFile(file: File) {
+    setImportingCsv(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) {
+        showToast("CSV has no valid rows");
+        setImportingCsv(false);
+        return;
+      }
+      const outboundRes = await fetch("/api/outbound/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ rows })
+      });
+      const outboundData = await outboundRes.json().catch(() => ({}));
+      if (!outboundRes.ok) {
+        showToast((outboundData as { error?: string }).error || "CSV import failed");
+        setImportingCsv(false);
+        return;
+      }
+
+      const leadRows = rows.slice(0, 40);
+      const created: string[] = [];
+      for (const row of leadRows) {
+        const res = await fetch("/api/leads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: row.name,
+            phone: row.phone,
+            service_type: row.service_type || "General",
+            city: row.city,
+            state: row.state,
+            postal_code: row.postal_code,
+            requested_timeframe: "Today",
+            source: "import",
+            notes: "Imported from CSV outbound prospecting"
+          })
+        });
+        if (res.ok) created.push(row.name || "Lead");
+      }
+
+      showToast(`Imported ${rows.length} contacts, created ${created.length} leads`);
+      await loadLeads();
+    } catch {
+      showToast("Could not parse CSV file");
+    } finally {
+      setImportingCsv(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Lead Inbox"
         subtitle="Prioritize by intent and move the next call into a booked job."
         actions={
-          <Button size="lg" onClick={() => setShowAdd(true)}>
-            <Plus className="h-4 w-4" />
-            Add Lead
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importCsvFile(file);
+              }}
+            />
+            <Button size="lg" variant="secondary" onClick={() => csvInputRef.current?.click()} disabled={importingCsv}>
+              {importingCsv ? <Clock3 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              Import CSV
+            </Button>
+            <Button size="lg" onClick={() => setShowAdd(true)}>
+              <Plus className="h-4 w-4" />
+              Add Lead
+            </Button>
+          </div>
         }
       />
 
@@ -658,4 +729,46 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function textTemplate(lead: LeadRow) {
   return `Hey ${lead.name || "there"} - this is Service Butler. We can get you a crew for ${lead.service_type || "your request"}. Reply YES and a good time today.`;
+}
+
+function parseCsv(input: string) {
+  const lines = input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const header = lines[0].split(",").map((col) => col.trim().toLowerCase());
+  const rows: Array<{
+    name: string;
+    phone: string;
+    email: string;
+    service_type: string;
+    city: string;
+    state: string;
+    postal_code: string;
+    tags: string[];
+  }> = [];
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const values = lines[i].split(",").map((cell) => cell.trim());
+    const row = Object.fromEntries(header.map((key, idx) => [key, values[idx] || ""])) as Record<string, string>;
+    const name = row.name || row.full_name || "";
+    if (!name) continue;
+    rows.push({
+      name,
+      phone: row.phone || row.phone_e164 || "",
+      email: row.email || "",
+      service_type: row.service_type || row.service || "General",
+      city: row.city || "",
+      state: row.state || "",
+      postal_code: row.postal_code || row.zip || "",
+      tags: (row.tags || "")
+        .split("|")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    });
+  }
+
+  return rows;
 }

@@ -3,7 +3,7 @@ import { geocodeLocation, getForecastByLatLng, type ForecastSummary } from "@/li
 
 export type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
 export type ScannerMode = "demo" | "live";
-export type ScannerCategory = "plumbing" | "electrical" | "landscaping" | "restoration" | "general";
+export type ScannerCategory = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
 
 export type ScannerOpportunity = {
   id: string;
@@ -40,7 +40,7 @@ export type ScannerLead = {
   sourceMode: "synthetic" | "google_places";
 };
 
-const VALID_CATEGORIES: ScannerCategory[] = ["plumbing", "electrical", "landscaping", "restoration", "general"];
+const VALID_CATEGORIES: ScannerCategory[] = ["restoration", "plumbing", "demolition", "asbestos", "general"];
 
 function hash(str: string) {
   let h = 2166136261;
@@ -122,16 +122,16 @@ function weatherBoost(category: ScannerCategory, forecast?: ForecastSummary | nu
   const wind = forecast.current.windKph ?? 0;
   if (category === "restoration") return precip * 0.35 + wind * 0.45;
   if (category === "plumbing") return precip * 0.25 + wind * 0.1;
-  if (category === "landscaping") return wind * 0.3;
-  if (category === "electrical") return wind * 0.18 + precip * 0.1;
+  if (category === "demolition") return wind * 0.2 + precip * 0.08;
+  if (category === "asbestos") return precip * 0.15;
   return precip * 0.12;
 }
 
 function scoreOpportunity(category: ScannerCategory, tags: string[], forecast?: ForecastSummary | null, confidenceBase = 55) {
   const baseByCategory: Record<ScannerCategory, number> = {
     plumbing: 62,
-    electrical: 57,
-    landscaping: 52,
+    demolition: 58,
+    asbestos: 54,
     restoration: 66,
     general: 49
   };
@@ -146,8 +146,8 @@ function suggestedNextAction(category: ScannerCategory, intentScore: number, loc
   if (intentScore >= 80) {
     return `Call within 10 minutes and offer same-day dispatch near ${locationText}.`;
   }
-  if (category === "landscaping") {
-    return `Send photo-request text and quote window for ${locationText}.`;
+  if (category === "asbestos") {
+    return `Qualify safety scope and schedule site inspection for ${locationText}.`;
   }
   return `Dispatch to lead inbox and follow up within 30 minutes for ${locationText}.`;
 }
@@ -164,17 +164,17 @@ function suggestedSchedule(intentScore: number, slaMinutes = 90) {
 
 function toCategory(service?: string): ScannerCategory {
   const value = String(service || "").toLowerCase();
+  if (value.includes("restor") || value.includes("water") || value.includes("fire") || value.includes("mold")) return "restoration";
   if (value.includes("plumb")) return "plumbing";
-  if (value.includes("elect")) return "electrical";
-  if (value.includes("land")) return "landscaping";
-  if (value.includes("roof") || value.includes("water") || value.includes("restor") || value.includes("flood")) return "restoration";
+  if (value.includes("demo") || value.includes("collapse")) return "demolition";
+  if (value.includes("asbestos")) return "asbestos";
   return "general";
 }
 
 function displayService(category: ScannerCategory) {
   if (category === "plumbing") return "Plumbing";
-  if (category === "electrical") return "Electrical";
-  if (category === "landscaping") return "Landscaping";
+  if (category === "demolition") return "Demolition";
+  if (category === "asbestos") return "Asbestos";
   if (category === "restoration") return "Restoration";
   return "General";
 }
@@ -236,19 +236,19 @@ function createDemoOpportunities({
   const rand = pseudo(seed);
 
   const phrases: Record<ScannerCategory, string[]> = {
-    plumbing: ["Burst pipe chatter", "Sewer backup complaints", "Drainage overflow reports"],
-    electrical: ["Power flicker complaints", "Breaker trip pattern", "Panel inspection demand"],
-    landscaping: ["Tree cleanup requests", "Drainage grading interest", "Storm debris removal"],
-    restoration: ["Water intrusion reports", "Roof leak spike", "Storm response requests"],
-    general: ["Handyman demand increase", "Property repair interest", "Maintenance booking spike"]
+    plumbing: ["Burst pipe reports", "Water in basement alerts", "Emergency drain overflow chatter"],
+    demolition: ["Collapsed ceiling reports", "Demo needed calls", "Post-fire strip-out demand"],
+    asbestos: ["Mold and asbestos concern inquiries", "Abatement keyword spike", "Inspection request wave"],
+    restoration: ["Fire damage reports", "Smoke smell complaints", "Water damage response demand"],
+    general: ["Emergency homeowner requests", "Insurance claim mentions", "Local service demand lift"]
   };
 
   const tagsByCategory: Record<ScannerCategory, string[]> = {
-    plumbing: ["leak", "drain", "asap", "flooding"],
-    electrical: ["outage", "panel", "sparking", "safety"],
-    landscaping: ["wind", "cleanup", "tree", "drainage"],
-    restoration: ["storm", "water-damage", "urgent", "roof"],
-    general: ["maintenance", "review-spike", "local-demand", "quote"]
+    plumbing: ["emergency", "burst pipe", "water in basement", "insurance claim"],
+    demolition: ["collapsed ceiling", "demo needed", "fire damage", "urgent"],
+    asbestos: ["asbestos", "mold", "inspection", "safety"],
+    restoration: ["fire damage", "smoke smell", "water damage", "insurance claim"],
+    general: ["emergency", "local-demand", "review-spike", "quote"]
   };
 
   const count = Math.max(8, Math.min(20, limit));
@@ -310,9 +310,9 @@ type NwsAlertsResponse = {
 function categoryFromAlert(eventText: string): ScannerCategory {
   const t = eventText.toLowerCase();
   if (t.includes("flood") || t.includes("storm") || t.includes("tornado") || t.includes("hail")) return "restoration";
-  if (t.includes("wind") || t.includes("tree")) return "landscaping";
+  if (t.includes("wind") || t.includes("collapse") || t.includes("debris")) return "demolition";
   if (t.includes("freeze") || t.includes("pipe")) return "plumbing";
-  if (t.includes("outage") || t.includes("lightning")) return "electrical";
+  if (t.includes("smoke") || t.includes("air quality")) return "asbestos";
   return "general";
 }
 

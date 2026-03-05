@@ -42,6 +42,13 @@ export default async function DashboardOverviewPage() {
       .order("scheduled_for", { ascending: true, nullsFirst: false })
   ]);
 
+  const { data: opportunities } = await supabase
+    .from("opportunities")
+    .select("id,category,title,location_text,intent_score,confidence,created_at")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
   const leadRows = leads || [];
   const jobRows = jobs || [];
 
@@ -116,6 +123,23 @@ export default async function DashboardOverviewPage() {
     return acc;
   }, {});
 
+  const zipDemand = (opportunities || []).reduce<Record<string, { count: number; avgIntent: number }>>((acc, row) => {
+    const match = String(row.location_text || "").match(/\b\d{5}\b/);
+    const zip = match?.[0] || "Unknown";
+    if (!acc[zip]) acc[zip] = { count: 0, avgIntent: 0 };
+    acc[zip].count += 1;
+    acc[zip].avgIntent += Number(row.intent_score || 0);
+    return acc;
+  }, {});
+  const heatRows = Object.entries(zipDemand)
+    .map(([zip, value]) => ({
+      zip,
+      count: value.count,
+      avgIntent: Math.round(value.avgIntent / Math.max(1, value.count))
+    }))
+    .sort((a, b) => b.count - a.count || b.avgIntent - a.avgIntent)
+    .slice(0, 6);
+
   return (
     <div className="space-y-8">
       <div className="grid gap-4 lg:grid-cols-[1fr_400px] lg:items-start">
@@ -176,6 +200,63 @@ export default async function DashboardOverviewPage() {
                 <Button size="sm" variant="secondary">Storm Response Campaign</Button>
               </Link>
             </div>
+          </CardBody>
+        </Card>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-semantic-text">Opportunity Feed</h2>
+              <Link href="/dashboard/scanner">
+                <Button size="sm" variant="secondary">Open Scanner</Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            {(opportunities || []).slice(0, 6).map((item) => (
+              <Link key={item.id} href="/dashboard/scanner" className="block rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-semantic-text">{item.title}</p>
+                    <p className="text-sm text-semantic-muted">{item.category} · {item.location_text || "Service area"}</p>
+                  </div>
+                  <Badge variant={Number(item.intent_score) >= 75 ? "warning" : "default"}>
+                    {Number(item.intent_score) || 0}
+                  </Badge>
+                </div>
+              </Link>
+            ))}
+            {(opportunities || []).length === 0 && (
+              <p className="text-sm text-semantic-muted">No opportunities yet. Run a scanner sweep to detect jobs.</p>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-semantic-text">Demand Heat Map</h2>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            {heatRows.map((row) => (
+              <div key={row.zip} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-semibold text-semantic-text">ZIP {row.zip}</p>
+                  <span className="text-sm font-semibold text-semantic-text">{row.count} signals</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-semantic-border">
+                  <div
+                    className="h-2 rounded-full bg-semantic-brand"
+                    style={{ width: `${Math.max(12, Math.min(100, row.avgIntent))}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-semantic-muted">Avg intent {row.avgIntent}</p>
+              </div>
+            ))}
+            {heatRows.length === 0 && (
+              <p className="text-sm text-semantic-muted">Heat map will populate after opportunities are captured.</p>
+            )}
           </CardBody>
         </Card>
       </section>

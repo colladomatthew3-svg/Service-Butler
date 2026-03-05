@@ -119,7 +119,12 @@ begin
     ('30000000-0000-0000-0000-000000000012', v_account_id, 'import', 'BOOKED', 'scheduled', 'Elijah Green', '+16315550118', 'Roofing', '201 Meadow Ln', 'Brentwood', 'NY', '11717', 'Tomorrow 1pm', 'Flat roof pooling water', now() + interval '1 day 4 hours'),
     ('30000000-0000-0000-0000-000000000013', v_account_id, 'manual', 'NEW', 'new', 'Charlotte Hall', '+16315550119', 'HVAC', '75 Birch Rd', 'Islip Terrace', 'NY', '11752', 'Tonight', 'No heat on 2nd floor', null),
     ('30000000-0000-0000-0000-000000000014', v_account_id, 'web_form', 'CONTACTED', 'contacted', 'Mason Price', '+16315550120', 'Plumbing', '501 South St', 'Brentwood', 'NY', '11717', 'This afternoon', 'Sewer smell in basement', null),
-    ('30000000-0000-0000-0000-000000000015', v_account_id, 'manual', 'BOOKED', 'scheduled', 'Amelia Shaw', '+16315550121', 'Electrical', '42 Pearl St', 'Bay Shore', 'NY', '11706', 'Friday 9am', 'Panel upgrade consult', now() + interval '3 days')
+    ('30000000-0000-0000-0000-000000000015', v_account_id, 'manual', 'BOOKED', 'scheduled', 'Amelia Shaw', '+16315550121', 'Electrical', '42 Pearl St', 'Bay Shore', 'NY', '11706', 'Friday 9am', 'Panel upgrade consult', now() + interval '3 days'),
+    ('30000000-0000-0000-0000-000000000016', v_account_id, 'web_form', 'NEW', 'new', 'Ricky Nolan', '+16315550122', 'Restoration', '90 River Rd', 'Sayville', 'NY', '11782', 'ASAP', 'Fire damage in kitchen, smoke smell', null),
+    ('30000000-0000-0000-0000-000000000017', v_account_id, 'manual', 'CONTACTED', 'contacted', 'Danielle Cruz', '+16315550123', 'Demolition', '22 Rose St', 'Ronkonkoma', 'NY', '11779', 'Today', 'Collapsed ceiling, demo needed', null),
+    ('30000000-0000-0000-0000-000000000018', v_account_id, 'import', 'NEW', 'new', 'Keith Wagner', '+16315550124', 'Asbestos', '11 South Ave', 'Patchogue', 'NY', '11772', 'This week', 'Mold + possible asbestos in basement', null),
+    ('30000000-0000-0000-0000-000000000019', v_account_id, 'web_form', 'BOOKED', 'scheduled', 'Monica Patel', '+16315550125', 'Plumbing', '17 Seaview Dr', 'Islip', 'NY', '11751', 'Tomorrow 8am', 'Burst pipe near water heater', now() + interval '1 day 1 hour'),
+    ('30000000-0000-0000-0000-000000000020', v_account_id, 'manual', 'CONTACTED', 'contacted', 'Brian Otero', '+16315550126', 'Restoration', '311 Main St', 'Brentwood', 'NY', '11717', 'Today', 'Water in basement after storm', null)
   on conflict (id) do update set
     status = excluded.status,
     stage = excluded.stage,
@@ -175,6 +180,30 @@ begin
       'SCHEDULED', 'NEW', now() + interval '18 hours',
       'Plumbing', v_tech_id, 'Ari (Plumbing)', 540.00, 'Kitchen backup, emergency snaking quote', 82,
       'Maria Fernandez', '+14075550150', '88 Cedar St', 'Islip', 'NY', '11751'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000007', v_account_id, '30000000-0000-0000-0000-000000000016',
+      'SCHEDULED', 'CONTACTED', now() + interval '7 hours',
+      'Restoration', v_dispatcher_id, 'Dutton Restoration', 4800.00, 'Smoke cleanup and board-up estimate', 91,
+      'Ricky Nolan', '+16315550122', '90 River Rd', 'Sayville', 'NY', '11782'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000008', v_account_id, '30000000-0000-0000-0000-000000000017',
+      'SCHEDULED', 'SCHEDULED', now() + interval '1 day 2 hours',
+      'Demolition', v_dispatcher_id, 'Dutton Demolition', 6200.00, 'Ceiling collapse selective demo', 86,
+      'Danielle Cruz', '+16315550123', '22 Rose St', 'Ronkonkoma', 'NY', '11779'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000009', v_account_id, '30000000-0000-0000-0000-000000000018',
+      'SCHEDULED', 'NEW', now() + interval '2 days 1 hours',
+      'Asbestos', v_tech_id, 'Dutton Demolition', 7400.00, 'Abatement inspection and containment planning', 79,
+      'Keith Wagner', '+16315550124', '11 South Ave', 'Patchogue', 'NY', '11772'
+    ),
+    (
+      '70000000-0000-0000-0000-000000000010', v_account_id, '30000000-0000-0000-0000-000000000019',
+      'SCHEDULED', 'IN_PROGRESS', now() + interval '20 hours',
+      'Plumbing', v_tech_id, 'Demonte Plumbing', 1300.00, 'Burst pipe emergency repair', 88,
+      'Monica Patel', '+16315550125', '17 Seaview Dr', 'Islip', 'NY', '11751'
     )
   on conflict (id) do update set
     status = excluded.status,
@@ -200,7 +229,11 @@ begin
     (v_account_id, '30000000-0000-0000-0000-000000000009', '70000000-0000-0000-0000-000000000003'),
     (v_account_id, '30000000-0000-0000-0000-000000000012', '70000000-0000-0000-0000-000000000004'),
     (v_account_id, '30000000-0000-0000-0000-000000000015', '70000000-0000-0000-0000-000000000005'),
-    (v_account_id, '30000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000006')
+    (v_account_id, '30000000-0000-0000-0000-000000000002', '70000000-0000-0000-0000-000000000006'),
+    (v_account_id, '30000000-0000-0000-0000-000000000016', '70000000-0000-0000-0000-000000000007'),
+    (v_account_id, '30000000-0000-0000-0000-000000000017', '70000000-0000-0000-0000-000000000008'),
+    (v_account_id, '30000000-0000-0000-0000-000000000018', '70000000-0000-0000-0000-000000000009'),
+    (v_account_id, '30000000-0000-0000-0000-000000000019', '70000000-0000-0000-0000-000000000010')
   on conflict (account_id, lead_id) do update set
     job_id = excluded.job_id;
 
@@ -305,10 +338,10 @@ begin
   insert into public.routing_rules (
     account_id, category, default_assignee, default_create_mode, default_job_value_cents, default_sla_minutes, enabled
   ) values
-    (v_account_id, 'plumbing', 'Ari (Plumbing)', 'job', 85000, 45, true),
-    (v_account_id, 'electrical', 'Kim (Electrical)', 'lead', 65000, 60, true),
-    (v_account_id, 'landscaping', 'Field Team B', 'lead', 42000, 180, true),
-    (v_account_id, 'restoration', 'Storm Crew A', 'job', 220000, 30, true),
+    (v_account_id, 'restoration', 'Dutton Restoration', 'job', 220000, 30, true),
+    (v_account_id, 'plumbing', 'Demonte Plumbing', 'job', 95000, 45, true),
+    (v_account_id, 'demolition', 'Dutton Demolition', 'job', 340000, 75, true),
+    (v_account_id, 'asbestos', 'Dutton Demolition', 'job', 420000, 60, true),
     (v_account_id, 'general', 'Dispatch Queue', 'lead', 35000, 90, true)
   on conflict (account_id, category) do update set
     default_assignee = excluded.default_assignee,
@@ -316,6 +349,65 @@ begin
     default_job_value_cents = excluded.default_job_value_cents,
     default_sla_minutes = excluded.default_sla_minutes,
     enabled = excluded.enabled;
+
+  delete from public.contractors where account_id = v_account_id;
+  insert into public.contractors (account_id, name, service_types, territory_zips, phone, active)
+  values
+    (v_account_id, 'Dutton Restoration', array['restoration'], array['11705','11788','10019'], '+16315551001', true),
+    (v_account_id, 'Dutton Demolition', array['demolition','asbestos'], array['11705','11788','10019'], '+16315551002', true),
+    (v_account_id, 'Demonte Plumbing', array['plumbing'], array['11705','11788','10019'], '+16315551003', true);
+
+  insert into public.sources (account_id, source_key, name, source_type)
+  values
+    (v_account_id, 'weather_nws', 'NWS Alerts', 'public_feed'),
+    (v_account_id, 'usgs_quake', 'USGS Feed', 'public_feed'),
+    (v_account_id, 'demo_stream', 'Demo Stream', 'demo')
+  on conflict (account_id, source_key) do update set
+    name = excluded.name,
+    source_type = excluded.source_type;
+
+  delete from public.opportunities where account_id = v_account_id;
+  insert into public.opportunities (
+    account_id, source_id, category, title, description, location_text, lat, lon, intent_score, confidence, tags, suggested_action, status, raw
+  )
+  select
+    v_account_id,
+    null,
+    (array['restoration','plumbing','demolition','asbestos'])[((gs - 1) % 4) + 1],
+    (array[
+      'Emergency job signal: water in basement',
+      'Burst pipe alert in monitored zip',
+      'Collapsed ceiling demo request',
+      'Smoke smell / asbestos concern reported'
+    ])[((gs - 1) % 4) + 1],
+    (array[
+      'Intent keywords detected: emergency, water in basement, insurance claim.',
+      'Intent keywords detected: burst pipe, emergency, demo needed.',
+      'Intent keywords detected: collapsed ceiling, demo needed, fire damage.',
+      'Intent keywords detected: smoke smell, mold, asbestos.'
+    ])[((gs - 1) % 4) + 1],
+    (array['11705','11788','10019'])[((gs - 1) % 3) + 1],
+    null,
+    null,
+    55 + ((gs * 7) % 43),
+    52 + ((gs * 9) % 41),
+    (array[
+      array['emergency','water in basement','insurance claim']::text[],
+      array['burst pipe','emergency','plumbing']::text[],
+      array['collapsed ceiling','demo needed','fire damage']::text[],
+      array['smoke smell','mold','asbestos']::text[]
+    ])[((gs - 1) % 4) + 1],
+    'Call within SLA and claim opportunity',
+    'new',
+    jsonb_build_object('seed', true, 'zip_seed', (array['11705','11788','10019'])[((gs - 1) % 3) + 1], 'sequence', gs)
+  from generate_series(1, 30) gs;
+
+  delete from public.outbound_contacts where account_id = v_account_id and source = 'csv';
+  insert into public.outbound_contacts (account_id, name, phone, email, service_type, city, state, postal_code, tags, source)
+  values
+    (v_account_id, 'Sam Keller', '+16315552001', 'sam.keller@example.com', 'restoration', 'Bay Shore', 'NY', '11705', array['emergency','water in basement'], 'csv'),
+    (v_account_id, 'Teresa Cole', '+16315552002', 'teresa.cole@example.com', 'plumbing', 'Port Jefferson', 'NY', '11788', array['burst pipe'], 'csv'),
+    (v_account_id, 'Michael Haynes', '+12125552003', 'michael.haynes@example.com', 'demolition', 'New York', 'NY', '10019', array['demo needed'], 'csv');
 
   delete from public.scanner_events where account_id = v_account_id and source in ('demo', 'weather', 'public_feed');
 
@@ -331,11 +423,11 @@ begin
       jsonb_build_object('source_id', 'seed-weather-1', 'severity', 'moderate')
     ),
     (
-      v_account_id, 'public_feed', 'electrical',
-      'Grid disturbance report',
-      'Regional outage chatter suggests follow-up demand for panel checks and surge diagnostics.',
+      v_account_id, 'public_feed', 'demolition',
+      'Structural debris incident report',
+      'Regional incident chatter suggests selective demolition demand in affected blocks.',
       'Bay Shore, NY', 40.7251, -73.2454, 72, 67,
-      array['outage', 'panel', 'diagnostic'],
+      array['collapsed ceiling', 'demo needed', 'incident'],
       jsonb_build_object('source_id', 'seed-feed-1', 'confidence_reason', 'incident-density')
     ),
     (
@@ -347,12 +439,12 @@ begin
       jsonb_build_object('source_id', 'seed-demo-1', 'keywords', array['burst pipe', 'water in basement'])
     ),
     (
-      v_account_id, 'demo', 'landscaping',
-      'Tree limb cleanup demand after wind gusts',
-      'High-wind burst likely created short-term cleanup jobs in residential zones.',
-      'Huntington, NY', 40.8682, -73.4260, 64, 62,
-      array['wind', 'cleanup', 'same-day'],
-      jsonb_build_object('source_id', 'seed-demo-2', 'gust_kph', 46)
+      v_account_id, 'demo', 'asbestos',
+      'Asbestos concern after renovation',
+      'Homeowner reports smoke smell and mold after wall opening; abatement consult likely.',
+      'Huntington, NY', 40.8682, -73.4260, 76, 68,
+      array['smoke smell', 'mold', 'asbestos'],
+      jsonb_build_object('source_id', 'seed-demo-2', 'intent_keywords', array['smoke smell', 'mold', 'asbestos'])
     ),
     (
       v_account_id, 'demo', 'general',
@@ -362,4 +454,25 @@ begin
       array['weekend', 'general-repair'],
       jsonb_build_object('source_id', 'seed-demo-3', 'pattern', 'review-spike')
     );
+
+  insert into public.scanner_events (
+    account_id, source, category, title, description, location_text, lat, lon, intent_score, confidence, tags, raw
+  )
+  select
+    v_account_id,
+    'demo',
+    o.category,
+    o.title,
+    o.description,
+    o.location_text,
+    o.lat,
+    o.lon,
+    o.intent_score,
+    o.confidence,
+    o.tags,
+    o.raw
+  from public.opportunities o
+  where o.account_id = v_account_id
+  order by o.created_at desc
+  limit 30;
 end $$;

@@ -33,10 +33,10 @@ function recommendedSchedule(intent: number, slaMinutes: number) {
 
 function categoryService(category: string) {
   const c = String(category || "general").toLowerCase();
-  if (c === "plumbing") return "Plumbing";
-  if (c === "electrical") return "Electrical";
-  if (c === "landscaping") return "Landscaping";
   if (c === "restoration") return "Restoration";
+  if (c === "plumbing") return "Plumbing";
+  if (c === "demolition") return "Demolition";
+  if (c === "asbestos") return "Asbestos";
   return "General";
 }
 
@@ -82,6 +82,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const mode = normalizeMode(body.createMode) || (rule?.default_create_mode as CreateMode | null) || (Number(event.intent_score) >= 75 ? "job" : "lead");
   const assignee = (body.assignee || rule?.default_assignee || "Dispatch Queue").trim();
+  const { data: contractor } = await supabase
+    .from("contractors")
+    .select("id")
+    .eq("account_id", accountId)
+    .eq("name", assignee)
+    .maybeSingle();
 
   const location = String(event.location_text || "");
   const city = location.split(",")[0]?.trim() || "Service Area";
@@ -127,6 +133,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (mode === "lead") {
+    await supabase
+      .from("opportunities")
+      .update({ status: "claimed", claimed_by_contractor_id: contractor?.id || null })
+      .eq("account_id", accountId)
+      .contains("raw", { scanner_opportunity_id: id });
+
     return NextResponse.json({
       dispatched: true,
       mode,
@@ -177,6 +189,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .update({ converted_job_id: job.id, stage: "BOOKED", status: "scheduled", scheduled_for: scheduleIso })
     .eq("account_id", accountId)
     .eq("id", lead.id);
+
+  await supabase
+    .from("opportunities")
+    .update({ status: "claimed", claimed_by_contractor_id: contractor?.id || null })
+    .eq("account_id", accountId)
+    .contains("raw", { scanner_opportunity_id: id });
 
   return NextResponse.json({
     dispatched: true,

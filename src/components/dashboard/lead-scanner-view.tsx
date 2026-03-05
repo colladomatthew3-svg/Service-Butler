@@ -31,7 +31,7 @@ import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 
 type Mode = "demo" | "live";
-type Category = "plumbing" | "electrical" | "landscaping" | "restoration" | "general";
+type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
 type Tab = "feed" | "rules" | "harness";
 
 type ScannerEvent = {
@@ -62,12 +62,12 @@ type RoutingRule = {
   updated_at: string;
 };
 
-const categories: Category[] = ["plumbing", "electrical", "landscaping", "restoration", "general"];
+const categories: Category[] = ["restoration", "plumbing", "demolition", "asbestos", "general"];
 
 const categoryLabel: Record<Category, string> = {
   plumbing: "Plumbing",
-  electrical: "Electrical",
-  landscaping: "Landscaping",
+  demolition: "Demolition",
+  asbestos: "Asbestos",
   restoration: "Restoration",
   general: "General"
 };

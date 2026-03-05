@@ -1,0 +1,38 @@
+name: Autopilot Fix
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: read
+
+jobs:
+  fix:
+    if: github.event.label.name == 'autopilot:fix'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Run Codex minimal issue fix
+        uses: openai/codex-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You are the Service Butler autopilot fixer.
+
+            Read GitHub issue #${{ github.event.issue.number }} and implement the smallest safe fix.
+
+            Requirements:
+            - Safe demo-friendly changes only.
+            - Keep scope tightly limited to resolving the issue.
+            - Create a new branch for the fix.
+            - Open a pull request to main.
+            - PR title should start with: "autopilot: fix #${{ github.event.issue.number }}".
+            - PR body must include: "Closes #${{ github.event.issue.number }}".
+            - Include a concise test/verification note in the PR body.

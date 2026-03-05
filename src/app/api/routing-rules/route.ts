@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 
+function isMissingTableError(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  const message = String(error.message || "").toLowerCase();
+  return code === "PGRST205" || code === "42P01" || message.includes("routing_rules") || message.includes("does not exist");
+}
+
 function normalizeCreateMode(value: unknown): "lead" | "job" {
   return String(value || "lead").toLowerCase() === "job" ? "job" : "lead";
 }
@@ -14,7 +21,12 @@ export async function GET() {
     .eq("account_id", accountId)
     .order("category", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    if (isMissingTableError(error)) {
+      return NextResponse.json({ rules: [], emptyStateMessage: "No routing rules configured yet", tableMissing: true });
+    }
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
   return NextResponse.json({ rules: data || [] });
 }
 

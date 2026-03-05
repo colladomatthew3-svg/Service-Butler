@@ -85,10 +85,12 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([...categories]);
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<ScannerEvent[]>([]);
+  const [eventsEmptyStateMessage, setEventsEmptyStateMessage] = useState("");
   const [preview, setPreview] = useState<ScannerEvent | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
 
   const [rules, setRules] = useState<RoutingRule[]>([]);
+  const [rulesEmptyStateMessage, setRulesEmptyStateMessage] = useState("");
   const [rulesLoading, setRulesLoading] = useState(false);
   const [editing, setEditing] = useState<RoutingRule | null>(null);
   const [ruleForm, setRuleForm] = useState({
@@ -132,24 +134,36 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
   const loadEvents = useCallback(async () => {
     const res = await fetch("/api/scanner/events?limit=100");
-    const data = (await res.json().catch(() => ({}))) as { events?: ScannerEvent[]; error?: string };
+    const data = (await res.json().catch(() => ({}))) as {
+      events?: ScannerEvent[];
+      error?: string;
+      emptyStateMessage?: string;
+      tableMissing?: boolean;
+    };
     if (!res.ok) {
       showToast(data.error || "Could not load scanner feed");
       return;
     }
     setEvents(data.events || []);
+    setEventsEmptyStateMessage(data.emptyStateMessage || "");
   }, [showToast]);
 
   const loadRules = useCallback(async () => {
     setRulesLoading(true);
     const res = await fetch("/api/routing-rules");
-    const data = (await res.json().catch(() => ({}))) as { rules?: RoutingRule[]; error?: string };
+    const data = (await res.json().catch(() => ({}))) as {
+      rules?: RoutingRule[];
+      error?: string;
+      emptyStateMessage?: string;
+      tableMissing?: boolean;
+    };
     if (!res.ok) {
       showToast(data.error || "Could not load routing rules");
       setRulesLoading(false);
       return;
     }
     setRules(data.rules || []);
+    setRulesEmptyStateMessage(data.emptyStateMessage || "");
     setRulesLoading(false);
   }, [showToast]);
 
@@ -583,7 +597,9 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               <CardBody className="py-12 text-center">
                 <Radar className="mx-auto h-10 w-10 text-brand-700" />
                 <p className="mt-3 text-lg font-semibold text-semantic-text">Scanner is listening</p>
-                <p className="mt-1 text-sm text-semantic-muted">Run a scan to populate live opportunities and dispatch actions.</p>
+                <p className="mt-1 text-sm text-semantic-muted">
+                  {eventsEmptyStateMessage || "Run a scan to populate live opportunities and dispatch actions."}
+                </p>
               </CardBody>
             </Card>
           )}
@@ -667,7 +683,9 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 </>
               )}
 
-              {!rulesLoading && rules.length === 0 && <p className="text-sm text-semantic-muted">No rules yet. Add one below.</p>}
+              {!rulesLoading && rules.length === 0 && (
+                <p className="text-sm text-semantic-muted">{rulesEmptyStateMessage || "No rules yet. Add one below."}</p>
+              )}
 
               {!rulesLoading &&
                 rules.map((rule) => (

@@ -1,0 +1,56 @@
+name: Autopilot Scan
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Codex repo audit
+        uses: openai/codex-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            You are the Service Butler autopilot scanner.
+
+            Audit this repository for:
+            1) demo blockers,
+            2) UI/UX issues,
+            3) missing fallbacks,
+            4) runtime errors.
+
+            Constraints:
+            - Do not modify repository files.
+            - Focus on safe, demo-friendly recommendations.
+            - Write your findings to AUTOPILOT_SCAN_REPORT.md.
+            - If there are no findings, output a short "No blockers found" report.
+
+      - name: Ensure scan report exists
+        run: |
+          if [ ! -f AUTOPILOT_SCAN_REPORT.md ]; then
+            cat <<'REPORT' > AUTOPILOT_SCAN_REPORT.md
+            # Autopilot Scan Report
+
+            Codex did not output a report file. Please inspect this run manually.
+            REPORT
+          fi
+
+      - name: Create issue from scan report
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "[autopilot:scan] Nightly repository audit"
+          content-filepath: AUTOPILOT_SCAN_REPORT.md
+          labels: |
+            autopilot:scan
+            autopilot:review

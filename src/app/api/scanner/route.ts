@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
       service_type: service,
       urgency,
       intentScore: op.intentScore,
+      priorityLabel: op.priorityLabel,
       reason: op.reasonSummary,
       sourceMode: op.source === "google_places" ? "google_places" : "synthetic",
       signals: []

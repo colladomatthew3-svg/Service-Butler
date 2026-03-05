@@ -7,8 +7,16 @@ export function isReviewMode(): boolean {
   return process.env.NODE_ENV === "development" && process.env.REVIEW_MODE === "on";
 }
 
+export function isDemoMode(): boolean {
+  return process.env.NODE_ENV === "development" && process.env.DEMO_MODE === "on";
+}
+
+export function isLocalBypassMode(): boolean {
+  return isReviewMode() || isDemoMode();
+}
+
 export async function resolveReviewAccountId(): Promise<string> {
-  if (!isReviewMode()) return FALLBACK_ACCOUNT_ID;
+  if (!isLocalBypassMode()) return FALLBACK_ACCOUNT_ID;
 
   try {
     const admin = getSupabaseAdminClient();

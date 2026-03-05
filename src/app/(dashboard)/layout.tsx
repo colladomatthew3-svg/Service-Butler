@@ -11,6 +11,7 @@ import { Card, CardBody } from "@/components/ui/card";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const demoMode = process.env.NODE_ENV === "development" && process.env.DEMO_MODE === "on";
   let accountId: string;
   try {
     ({ accountId } = await getCurrentUserContext());
@@ -30,6 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <DashboardAppShell
+      demoMode={demoMode}
       onSignOut={
         <div className="space-y-3">
           <Link href="/billing" className="block">

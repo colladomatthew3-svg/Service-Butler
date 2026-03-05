@@ -14,10 +14,12 @@ export function isAllowedDevQuickLoginEmail(email: string) {
   return DEV_QUICK_LOGIN_EMAILS.includes(email as (typeof DEV_QUICK_LOGIN_EMAILS)[number]);
 }
 
+export function hasDevAuthPassword(): boolean {
+  return typeof process.env.DEV_AUTH_PASSWORD === "string" && process.env.DEV_AUTH_PASSWORD.trim().length > 0;
+}
+
 export function getDevAuthPassword() {
-  const value = process.env.DEV_AUTH_PASSWORD;
-  if (!value) throw new Error("DEV_AUTH_PASSWORD is not set");
-  return value;
+  return hasDevAuthPassword() ? String(process.env.DEV_AUTH_PASSWORD) : "";
 }
 
 export async function ensureDevQuickLoginUser(email: string) {

@@ -49,6 +49,11 @@ export function JobDetailView({ jobId }: { jobId: string }) {
   const [valueDraft, setValueDraft] = useState(0);
   const [assignedDraft, setAssignedDraft] = useState("");
   const [scheduleDraft, setScheduleDraft] = useState("");
+  const [insuranceCarrier, setInsuranceCarrier] = useState("");
+  const [claimNumber, setClaimNumber] = useState("");
+  const [adjusterName, setAdjusterName] = useState("");
+  const [adjusterPhone, setAdjusterPhone] = useState("");
+  const [insuranceStage, setInsuranceStage] = useState("Filed");
   const { showToast } = useToast();
 
   const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
@@ -69,6 +74,12 @@ export function JobDetailView({ jobId }: { jobId: string }) {
     setValueDraft(Number(payload.job.estimated_value || 0));
     setAssignedDraft(payload.job.assigned_tech_name || "");
     setScheduleDraft(payload.job.scheduled_for ? toDatetimeLocal(payload.job.scheduled_for) : "");
+    const insurance = parseInsurance(payload.job.notes || "");
+    setInsuranceCarrier(insurance.carrier || "");
+    setClaimNumber(insurance.claimNumber || "");
+    setAdjusterName(insurance.adjusterName || "");
+    setAdjusterPhone(insurance.adjusterPhone || "");
+    setInsuranceStage(insurance.stage || "Filed");
     setLoading(false);
   }
 
@@ -229,6 +240,58 @@ export function JobDetailView({ jobId }: { jobId: string }) {
               </Button>
             </CardBody>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-semantic-text">Insurance</h2>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">Carrier</span>
+                  <Input value={insuranceCarrier} onChange={(e) => setInsuranceCarrier(e.target.value)} placeholder="State Farm" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">Claim #</span>
+                  <Input value={claimNumber} onChange={(e) => setClaimNumber(e.target.value)} placeholder="CLM-12345" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">Adjuster Name</span>
+                  <Input value={adjusterName} onChange={(e) => setAdjusterName(e.target.value)} placeholder="Jamie Rivera" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">Adjuster Phone</span>
+                  <Input value={adjusterPhone} onChange={(e) => setAdjusterPhone(e.target.value)} placeholder="+1..." />
+                </label>
+              </div>
+              <label>
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">Stage</span>
+                <Select value={insuranceStage} onChange={(e) => setInsuranceStage(e.target.value)}>
+                  <option value="Filed">Filed</option>
+                  <option value="Adjuster Scheduled">Adjuster Scheduled</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Denied">Denied</option>
+                </Select>
+              </label>
+              <Button
+                size="lg"
+                onClick={() => {
+                  const mergedNotes = mergeInsuranceBlock(notes, {
+                    carrier: insuranceCarrier,
+                    claimNumber,
+                    adjusterName,
+                    adjusterPhone,
+                    stage: insuranceStage
+                  });
+                  setNotes(mergedNotes);
+                  update({ notes: mergedNotes }, "Insurance saved");
+                }}
+              >
+                <Save className="h-4 w-4" />
+                Save Insurance
+              </Button>
+            </CardBody>
+          </Card>
         </div>
 
         <div className="space-y-5">
@@ -288,4 +351,42 @@ function toDatetimeLocal(iso: string) {
   const d = new Date(iso);
   const tzOffset = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+}
+
+function parseInsurance(notes: string) {
+  const match = notes.match(/\[INSURANCE\]([\s\S]*?)\[\/INSURANCE\]/);
+  if (!match) return {} as Record<string, string>;
+  const lines = match[1]
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const obj: Record<string, string> = {};
+  for (const line of lines) {
+    const [k, ...rest] = line.split(":");
+    obj[k.trim()] = rest.join(":").trim();
+  }
+  return {
+    carrier: obj.carrier || "",
+    claimNumber: obj.claim_number || "",
+    adjusterName: obj.adjuster_name || "",
+    adjusterPhone: obj.adjuster_phone || "",
+    stage: obj.stage || ""
+  };
+}
+
+function mergeInsuranceBlock(
+  notes: string,
+  values: { carrier: string; claimNumber: string; adjusterName: string; adjusterPhone: string; stage: string }
+) {
+  const stripped = notes.replace(/\n?\[INSURANCE\][\s\S]*?\[\/INSURANCE\]\n?/g, "\n").trim();
+  const block = [
+    "[INSURANCE]",
+    `carrier: ${values.carrier || "-"}`,
+    `claim_number: ${values.claimNumber || "-"}`,
+    `adjuster_name: ${values.adjusterName || "-"}`,
+    `adjuster_phone: ${values.adjusterPhone || "-"}`,
+    `stage: ${values.stage || "-"}`,
+    "[/INSURANCE]"
+  ].join("\n");
+  return [stripped, block].filter(Boolean).join("\n\n").trim();
 }

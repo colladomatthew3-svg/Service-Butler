@@ -15,6 +15,10 @@ function isReviewMode() {
   return process.env.NODE_ENV === "development" && process.env.REVIEW_MODE === "on";
 }
 
+function isDemoMode() {
+  return process.env.NODE_ENV === "development" && process.env.DEMO_MODE === "on";
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next();
   const pathname = req.nextUrl.pathname;
@@ -22,7 +26,7 @@ export async function middleware(req: NextRequest) {
   if (pathname === "/") return res;
   if (PUBLIC_PATHS.some((path) => pathname.startsWith(path))) return res;
 
-  if (isReviewMode() && pathname.startsWith("/dashboard")) {
+  if ((isReviewMode() || isDemoMode()) && pathname.startsWith("/dashboard")) {
     return res;
   }
 

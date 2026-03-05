@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, LayoutGrid, Users, CalendarDays, MessageSquare, Settings, X, Radar, KanbanSquare, BriefcaseBusiness } from "lucide-react";
+import { Menu, LayoutGrid, Users, CalendarDays, MessageSquare, Settings, X, Radar, KanbanSquare, BriefcaseBusiness, Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
@@ -21,6 +21,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/pipeline", label: "Pipeline", icon: KanbanSquare },
   { href: "/dashboard/jobs", label: "Jobs", icon: BriefcaseBusiness },
   { href: "/dashboard/scanner", label: "Scanner", icon: Radar },
+  { href: "/dashboard/outbound", label: "Outbound", icon: Megaphone },
   { href: "/dashboard/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/dashboard/inbox", label: "Inbox", icon: MessageSquare },
   { href: "/dashboard/settings", label: "Settings", icon: Settings }
@@ -28,10 +29,12 @@ const navItems: NavItem[] = [
 
 export function DashboardAppShell({
   children,
-  onSignOut
+  onSignOut,
+  demoMode
 }: {
   children: ReactNode;
   onSignOut: ReactNode;
+  demoMode?: boolean;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -98,6 +101,11 @@ export function DashboardAppShell({
 
         <div className="flex min-h-screen flex-1 flex-col lg:pl-0">
           <header className="sticky top-0 z-20 border-b border-semantic-border bg-semantic-surface/95 px-4 py-3 backdrop-blur sm:px-6">
+            {demoMode && (
+              <div className="mb-3 rounded-xl border border-brand-500/30 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700">
+                Demo Mode (no auth)
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <button
                 className="rounded-lg p-2 text-semantic-muted hover:bg-semantic-surface2 lg:hidden"

@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils/cn";
 type Mode = "demo" | "live";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
 type Tab = "feed" | "rules" | "harness";
+type CampaignMode = "Restoration" | "Plumbing" | "Demo / Asbestos";
 
 type ScannerEvent = {
   id: string;
@@ -75,7 +76,8 @@ const categoryLabel: Record<Category, string> = {
 export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   const [mode, setMode] = useState<Mode>("demo");
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [location, setLocation] = useState("Brentwood, NY");
+  const [location, setLocation] = useState("11788");
+  const [campaignMode, setCampaignMode] = useState<CampaignMode>("Restoration");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
   const [radius, setRadius] = useState("25");
@@ -169,6 +171,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       body: JSON.stringify({
         mode,
         location,
+        campaignMode,
         categories: selectedCategories,
         limit: Number(limit) || 20,
         radius: Number(radius) || 25,
@@ -437,7 +440,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
       <Card>
         <CardBody className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[140px_1fr_140px_120px_120px]">
+          <div className="grid gap-3 lg:grid-cols-[140px_1fr_180px_120px_120px]">
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Mode</p>
               <Select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
@@ -448,7 +451,25 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Service Area</p>
-              <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City/ZIP or leave for account weather location" />
+              <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="ZIP or city (11788, 11705, 10019)" />
+            </div>
+
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Campaign</p>
+              <Select
+                value={campaignMode}
+                onChange={(e) => {
+                  const next = e.target.value as CampaignMode;
+                  setCampaignMode(next);
+                  if (next === "Restoration") setSelectedCategories(["restoration"]);
+                  if (next === "Plumbing") setSelectedCategories(["plumbing"]);
+                  if (next === "Demo / Asbestos") setSelectedCategories(["demolition", "asbestos"]);
+                }}
+              >
+                <option value="Restoration">Restoration</option>
+                <option value="Plumbing">Plumbing</option>
+                <option value="Demo / Asbestos">Demo / Asbestos</option>
+              </Select>
             </div>
 
             <div>
@@ -475,6 +496,14 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 Scan Now
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {["11705", "11788", "10019"].map((zip) => (
+              <Button key={zip} size="sm" variant={location === zip ? "primary" : "secondary"} onClick={() => setLocation(zip)}>
+                {zip}
+              </Button>
+            ))}
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -541,6 +570,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
           {loading && (
             <Card>
               <CardBody className="space-y-3">
+                <p className="text-sm font-semibold text-semantic-text">Scanning neighborhood signals and contractor boards...</p>
                 <Skeleton className="h-16 w-full" />
                 <Skeleton className="h-24 w-full" />
                 <Skeleton className="h-24 w-full" />
@@ -583,6 +613,9 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       <MapPin className="h-4 w-4" />
                       {event.location_text || "Service area"}
                     </p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-semantic-muted">
+                      {sourceLabel(event.source)} · {relativeAge(event.created_at)}
+                    </p>
                     <p className="text-sm font-medium text-semantic-text">{reasonSummary}</p>
                     <p className="text-sm text-semantic-muted">Next action: {nextAction}</p>
                     <div className="flex flex-wrap items-center gap-2">
@@ -602,15 +635,15 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     </Button>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                      Create Lead
+                      Add as Lead
                     </Button>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
-                      Create Job
+                      Add as Job
                     </Button>
                     <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
-                      Dispatch
+                      Claim Job
                     </Button>
                   </div>
                 </CardBody>
@@ -835,6 +868,10 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               </p>
               <h3 className="text-2xl font-semibold text-semantic-text">{preview.title}</h3>
               <p className="text-sm text-semantic-muted">{preview.description}</p>
+              <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Live Post (Demo)</p>
+                <p className="mt-2 text-sm text-semantic-text">{conversationStylePost(preview)}</p>
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <Detail label="Intent" value={String(preview.intent_score)} />
@@ -875,4 +912,27 @@ function Detail({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-medium text-semantic-text">{value || "-"}</p>
     </div>
   );
+}
+
+function sourceLabel(source: string) {
+  if (source === "weather") return "Contractor Board";
+  if (source === "public_feed") return "Neighborhood Forum";
+  return "FB Group";
+}
+
+function relativeAge(iso: string) {
+  const delta = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (delta < 60) return `${delta}s ago`;
+  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
+  return `${Math.floor(delta / 86400)}d ago`;
+}
+
+function conversationStylePost(event: ScannerEvent) {
+  const snippets = [
+    `Need help fast in ${event.location_text || "my area"} - ${event.title.toLowerCase()}.`,
+    "Insurance claim likely, looking for someone today.",
+    "If anyone has a trusted contractor please DM ASAP."
+  ];
+  return `${snippets.join(" ")} Signals: ${(event.tags || []).join(", ")}.`;
 }

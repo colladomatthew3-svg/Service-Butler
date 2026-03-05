@@ -93,7 +93,7 @@ export default async function DashboardOverviewPage() {
   const nextUp = jobRows
     .filter((j) => j.scheduled_for && new Date(j.scheduled_for as string) >= new Date())
     .sort((a, b) => new Date(a.scheduled_for as string).getTime() - new Date(b.scheduled_for as string).getTime())
-    .slice(0, 3);
+    .slice(0, 5);
 
   const lat = settings?.weather_lat != null ? Number(settings.weather_lat) : null;
   const lng = settings?.weather_lng != null ? Number(settings.weather_lng) : null;
@@ -142,10 +142,30 @@ export default async function DashboardOverviewPage() {
 
   return (
     <div className="space-y-8">
+      <Card className="border-brand-500/25 bg-brand-50/50">
+        <CardBody className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Opportunities Near You</p>
+            <h1 className="mt-1 text-3xl font-semibold text-semantic-text">Find and claim jobs before your competitors.</h1>
+            <p className="mt-2 text-sm text-semantic-muted">
+              Scanner intelligence across Long Island and NYC. Focus zip seeds: 11705, 11788, 10019.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/dashboard/scanner">
+              <Button size="lg">Run Scanner</Button>
+            </Link>
+            <Link href="/dashboard/leads">
+              <Button size="lg" variant="secondary">Open Leads</Button>
+            </Link>
+          </div>
+        </CardBody>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-[1fr_400px] lg:items-start">
         <PageHeader
-          title="Overview"
-          subtitle="Jobs and revenue first: keep the pipeline moving and crews booked."
+          title="Dispatch Dashboard"
+          subtitle="Where are the jobs, what to do next, and who to contact first."
           actions={<Badge variant="brand">Live ops view</Badge>}
         />
         <div className="lg:pt-1">

@@ -16,7 +16,8 @@
     "db:validate": "echo 'Run: psql \"$SUPABASE_DB_URL\" -f scripts/validate-db.sql'",
     "inngest:dev": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json",
-    "review": "bash scripts/review.sh"
+    "review": "bash scripts/review.sh",
+    "demo": "bash scripts/demo.sh"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.5",

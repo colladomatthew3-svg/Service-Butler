@@ -22,6 +22,16 @@
 - In Review Mode, `/dashboard/*` routes are accessible for product review.
 - Production behavior is unchanged: Review Mode only activates when `NODE_ENV=development` and `REVIEW_MODE=on`.
 
+## Demo Mode
+- Demo Mode is contractor-demo focused and bypasses login only in local development.
+- Run:
+  ```bash
+  npm run demo
+  ```
+- This sets `DEMO_MODE=on` in `.env.local`, starts the app, and lets you open:
+  - `http://localhost:3000/dashboard`
+  - `http://localhost:3000/dashboard/scanner`
+
 Troubleshooting:
 - Twilio trial can only send to verified destination numbers (verify your phone in Twilio Console).
 - Twilio signature mismatch: `WEBHOOK_BASE_URL` must exactly equal your ngrok HTTPS origin.

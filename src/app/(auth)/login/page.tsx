@@ -1,4 +1,5 @@
 import { signInWithDevQuickLogin, signInWithMagicLink } from "@/actions/auth";
+import { hasDevAuthPassword } from "@/lib/auth/dev-quick-login";
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -8,9 +9,10 @@ import { Button } from "@/components/ui/button";
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ sent?: string; membership?: string }>;
+  searchParams: Promise<{ sent?: string; membership?: string; devQuickLogin?: string }>;
 }) {
   const params = await searchParams;
+  const devQuickLoginConfigured = process.env.NODE_ENV === "development" && hasDevAuthPassword();
 
   return (
     <main className="container py-16">
@@ -37,6 +39,11 @@ export default async function LoginPage({
                 Magic link sent. Check your inbox.
               </p>
             )}
+            {params.devQuickLogin && (
+              <p className="mb-4 rounded-xl border border-warning-500/25 bg-warning-100 px-4 py-3 text-sm text-warning-700">
+                Dev quick login unavailable ({params.devQuickLogin}). Configure DEV_AUTH_PASSWORD to enable it.
+              </p>
+            )}
 
             <form action={signInWithMagicLink} className="space-y-4">
               <div>
@@ -54,26 +61,32 @@ export default async function LoginPage({
           <Card className="mt-5">
             <CardHeader>
               <h2 className="text-lg font-semibold text-semantic-text">Dev Quick Login</h2>
-              <p className="mt-1 text-sm text-semantic-muted">
-                Development only. Uses `DEV_AUTH_PASSWORD` and redirects to dashboard.
-              </p>
+              {devQuickLoginConfigured ? (
+                <p className="mt-1 text-sm text-semantic-muted">
+                  Development only. Uses `DEV_AUTH_PASSWORD` and redirects to dashboard.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-semantic-muted">
+                  Dev quick login not configured. Set DEV_AUTH_PASSWORD in .env.local to enable.
+                </p>
+              )}
             </CardHeader>
             <CardBody className="space-y-3">
               <form action={signInWithDevQuickLogin}>
                 <input type="hidden" name="email" value="owner@servicebutler.local" />
-                <Button type="submit" size="lg" fullWidth>
+                <Button type="submit" size="lg" fullWidth disabled={!devQuickLoginConfigured}>
                   Login as Owner
                 </Button>
               </form>
               <form action={signInWithDevQuickLogin}>
                 <input type="hidden" name="email" value="dispatcher@servicebutler.local" />
-                <Button type="submit" size="lg" variant="secondary" fullWidth>
+                <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
                   Login as Dispatcher
                 </Button>
               </form>
               <form action={signInWithDevQuickLogin}>
                 <input type="hidden" name="email" value="tech@servicebutler.local" />
-                <Button type="submit" size="lg" variant="secondary" fullWidth>
+                <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
                   Login as Tech
                 </Button>
               </form>

@@ -1,10 +1,10 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getReviewEmail, getReviewUserId, isReviewMode, resolveReviewAccountId } from "@/lib/services/review-mode";
+import { getReviewEmail, getReviewUserId, isLocalBypassMode, resolveReviewAccountId } from "@/lib/services/review-mode";
 import type { AccountRole } from "@/types/domain";
 
 export async function getCurrentUserContext() {
-  if (isReviewMode()) {
+  if (isLocalBypassMode()) {
     const accountId = await resolveReviewAccountId();
     return {
       userId: getReviewUserId(),

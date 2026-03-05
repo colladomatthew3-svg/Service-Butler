@@ -7,8 +7,10 @@ import {
   devQuickLoginEnabled,
   ensureDevQuickLoginUser,
   getDevAuthPassword,
+  hasDevAuthPassword,
   isAllowedDevQuickLoginEmail
 } from "@/lib/auth/dev-quick-login";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 export async function signInWithMagicLink(formData: FormData) {
   const email = String(formData.get("email") || "").trim();
@@ -30,23 +32,52 @@ export async function signInWithMagicLink(formData: FormData) {
 }
 
 export async function signInWithDevQuickLogin(formData: FormData) {
-  if (!devQuickLoginEnabled()) throw new Error("Dev quick login is only available in development");
+  const result = await tryDevQuickLogin(formData);
+  if (!result.ok) {
+    redirect(`/login?devQuickLogin=${result.reason}`);
+  }
+  redirect("/dashboard");
+}
+
+async function tryDevQuickLogin(formData: FormData) {
+  if (!devQuickLoginEnabled()) {
+    return { ok: false as const, reason: "DEV_QUICK_LOGIN_DISABLED" as const };
+  }
 
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  if (!email || !isAllowedDevQuickLoginEmail(email)) throw new Error("Invalid dev quick login email");
+  if (!email || !isAllowedDevQuickLoginEmail(email)) {
+    return { ok: false as const, reason: "INVALID_DEV_QUICK_LOGIN_EMAIL" as const };
+  }
+  if (!hasDevAuthPassword()) {
+    if (isDemoMode()) {
+      return { ok: true as const };
+    }
+    return { ok: false as const, reason: "DEV_AUTH_PASSWORD_MISSING" as const };
+  }
 
   const password = getDevAuthPassword();
   const supabase = await getSupabaseServerClient();
 
-  let { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    await ensureDevQuickLoginUser(email);
-    const retry = await supabase.auth.signInWithPassword({ email, password });
-    error = retry.error;
+  try {
+    let { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      await ensureDevQuickLoginUser(email);
+      const retry = await supabase.auth.signInWithPassword({ email, password });
+      error = retry.error;
+    }
+
+    if (error) {
+      return { ok: false as const, reason: "AUTH_FAILED" as const, message: error.message };
+    }
+  } catch (error) {
+    return {
+      ok: false as const,
+      reason: "AUTH_FAILED" as const,
+      message: error instanceof Error ? error.message : "Dev quick login failed"
+    };
   }
 
-  if (error) throw new Error(error.message);
-  redirect("/dashboard");
+  return { ok: true as const };
 }
 
 export async function signOut() {

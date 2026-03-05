@@ -5,6 +5,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { WeatherSettingsForm } from "@/components/dashboard/weather-settings-form";
+import { IntegrationsComingSoon } from "@/components/dashboard/integrations-coming-soon";
 import type { ReactNode } from "react";
 
 export default function DashboardSettingsPage() {
@@ -65,6 +66,8 @@ export default function DashboardSettingsPage() {
           <WeatherSettingsForm />
         </CardBody>
       </Card>
+
+      <IntegrationsComingSoon />
 
       <div className="flex flex-wrap gap-3">
         <Button size="lg">Save Changes</Button>

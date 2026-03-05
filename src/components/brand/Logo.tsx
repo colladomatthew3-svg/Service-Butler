@@ -19,8 +19,9 @@ export function Logo({
   const normalized = variant === "wordmark" || variant === "lockup" ? "full" : variant;
   const isMark = normalized === "mark";
 
-  const source = useMemo(() => (isMark ? "/brand/logo-mark.png" : "/brand/logo.png"), [isMark]);
-  const width = isMark ? size : Math.round(size * 3.9);
+  const source = useMemo(() => (isMark ? "/brand/logo-mark.png" : "/logo-temp.png"), [isMark]);
+  const safeHeight = Math.min(size, 48);
+  const width = isMark ? safeHeight : Math.round(safeHeight * 4.2);
 
   if (broken) {
     return (
@@ -36,14 +37,14 @@ export function Logo({
   }
 
   return (
-    <Image
-      src={source}
-      alt={isMark ? "ServiceButler logo mark" : "ServiceButler logo"}
-      width={width}
-      height={size}
-      className={cn("h-auto w-auto object-contain", className)}
-      onError={() => setBroken(true)}
-      priority={!isMark}
-    />
+      <Image
+        src={source}
+        alt={isMark ? "Service Butler logo mark" : "Service Butler logo"}
+        width={width}
+        height={safeHeight}
+        className={cn("h-auto w-auto max-h-12 max-w-none object-contain p-1", className)}
+        onError={() => setBroken(true)}
+        priority={!isMark}
+      />
   );
 }

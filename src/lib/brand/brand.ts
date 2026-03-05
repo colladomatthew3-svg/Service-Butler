@@ -24,21 +24,35 @@ export const brand = {
     body: "Inter",
     heading: "Manrope",
     sizes: {
-      h1: "text-4xl md:text-5xl",
-      h2: "text-2xl md:text-3xl",
-      body: "text-base",
-      button: "text-sm md:text-base"
+      display: "clamp(3.5rem, 5vw, 5.5rem)",
+      h1: "clamp(2.75rem, 4vw, 4.5rem)",
+      h2: "clamp(2rem, 3vw, 3.25rem)",
+      h3: "clamp(1.4rem, 2vw, 1.85rem)",
+      bodyLg: "1.125rem",
+      body: "1rem",
+      button: "0.95rem",
+      label: "0.82rem"
     }
   },
   radii: {
-    card: "14px",
+    card: "16px",
+    panel: "20px",
     control: "12px"
   },
   shadows: {
     soft: "0 6px 20px rgba(30, 42, 36, 0.08)",
-    card: "0 14px 36px rgba(30, 42, 36, 0.12)"
+    card: "0 14px 36px rgba(30, 42, 36, 0.12)",
+    lift: "0 24px 64px rgba(30, 42, 36, 0.16)"
   },
-  spacing: [8, 12, 16, 24, 32],
+  spacing: {
+    xs: 8,
+    sm: 12,
+    md: 16,
+    lg: 24,
+    xl: 32,
+    "2xl": 48,
+    "3xl": 72
+  },
   layout: {
     containerMax: "1240px"
   }

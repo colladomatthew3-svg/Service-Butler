@@ -21,11 +21,13 @@ const config: Config = {
           bg: "rgb(var(--bg) / <alpha-value>)",
           surface: "rgb(var(--surface) / <alpha-value>)",
           surface2: "rgb(var(--surface2) / <alpha-value>)",
+          surface3: "rgb(var(--surface3) / <alpha-value>)",
           border: "rgb(var(--border) / <alpha-value>)",
           text: "rgb(var(--text) / <alpha-value>)",
           muted: "rgb(var(--muted) / <alpha-value>)",
           brand: "rgb(var(--brand) / <alpha-value>)",
           brandHover: "rgb(var(--brandHover) / <alpha-value>)",
+          accent: "rgb(var(--accent) / <alpha-value>)",
           success: "rgb(var(--success) / <alpha-value>)",
           warning: "rgb(var(--warning) / <alpha-value>)",
           danger: "rgb(var(--danger) / <alpha-value>)"

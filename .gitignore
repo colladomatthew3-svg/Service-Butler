@@ -8,3 +8,18 @@ node_modules
 logs/
 .pids
 tsconfig.tsbuildinfo
+
+# Local runtime artifacts
+logs/
+.pids/
+.next/
+tsconfig.tsbuildinfo
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Accidental files
+brew install gh
+brew install gh.pub

@@ -3,21 +3,30 @@
 @tailwind utilities;
 
 :root {
-  --sb-green: #82b43d;
-  --sb-copper: #d99d72;
-  --sb-bg: #181818;
-  --bg: 246 248 247;
-  --surface: 255 255 255;
-  --surface2: 242 245 243;
-  --surface3: 234 239 236;
-  --border: 216 224 219;
-  --text: 30 42 36;
-  --muted: 91 108 100;
-  --brand: 130 180 61;
-  --brandHover: 111 153 53;
-  --brandSoft: 231 243 209;
-  --accent: 217 157 114;
-  --accentSoft: 245 224 209;
+  --sb-primary: 130 180 61;
+  --sb-primary-hover: 111 153 53;
+  --sb-bg: 246 248 247;
+  --sb-card: 255 255 255;
+  --sb-border: 216 224 219;
+  --sb-text: 30 42 36;
+  --sb-muted: 91 108 100;
+  --sb-primary-soft: 231 243 209;
+  --sb-surface-alt: 242 245 243;
+  --sb-surface-subtle: 234 239 236;
+  --sb-copper: 217 157 114;
+  --sb-copper-soft: 245 224 209;
+  --bg: var(--sb-bg);
+  --surface: var(--sb-card);
+  --surface2: var(--sb-surface-alt);
+  --surface3: var(--sb-surface-subtle);
+  --border: var(--sb-border);
+  --text: var(--sb-text);
+  --muted: var(--sb-muted);
+  --brand: var(--sb-primary);
+  --brandHover: var(--sb-primary-hover);
+  --brandSoft: var(--sb-primary-soft);
+  --accent: var(--sb-copper);
+  --accentSoft: var(--sb-copper-soft);
   --success: 31 157 85;
   --warning: 217 145 0;
   --danger: 214 69 69;
@@ -33,12 +42,13 @@
   --space-5: 2rem;
   --space-6: 3rem;
   --space-7: 4.5rem;
-  --text-display: clamp(3.75rem, 5.4vw, 5.85rem);
-  --text-h1: clamp(3rem, 4.5vw, 4.85rem);
-  --text-h2: clamp(2.25rem, 3.35vw, 3.6rem);
-  --text-h3: clamp(1.4rem, 2vw, 1.85rem);
-  --text-body-lg: 1.1875rem;
-  --text-label: 0.82rem;
+  --text-display: 3rem;
+  --text-h1: clamp(2.5rem, 4vw, 3rem);
+  --text-h2: 1.5rem;
+  --text-h3: 1.25rem;
+  --text-body-lg: 1.125rem;
+  --text-body: 1rem;
+  --text-label: 0.875rem;
 }
 
 * {
@@ -60,7 +70,7 @@
 
   body {
     @apply bg-semantic-bg text-semantic-text font-sans;
-    font-size: 17px;
+    font-size: var(--text-body);
     margin: 0;
     min-height: 100dvh;
   }
@@ -109,15 +119,16 @@ body {
 }
 
 .panel {
-  background: rgb(var(--surface));
-  border: 1px solid rgb(var(--border));
-  border-radius: 1rem;
+  background: rgb(var(--sb-card));
+  border: 1px solid rgb(var(--sb-border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgba(30, 42, 36, 0.08);
   padding: 1rem;
 }
 
 .section-title {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: var(--text-h2);
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 1;
@@ -139,7 +150,7 @@ body {
 
 .display-title {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: var(--text-display);
+  font-size: clamp(2.5rem, 5vw, 3rem);
   font-weight: 800;
   letter-spacing: -0.06em;
   line-height: 0.94;
@@ -147,7 +158,7 @@ body {
 
 .title-hero {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: var(--text-h1);
+  font-size: clamp(2.5rem, 5vw, 3rem);
   font-weight: 700;
   letter-spacing: -0.05em;
   line-height: 0.98;
@@ -166,15 +177,41 @@ body {
   line-height: 1.7;
 }
 
+.dashboard-page-title {
+  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.dashboard-section-title {
+  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.dashboard-body {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.sidebar-label {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
 .page-section {
   padding-block: clamp(4rem, 7vw, 6.5rem);
 }
 
 .section-shell {
   border: 1px solid rgb(var(--border) / 0.92);
-  border-radius: 1.75rem;
-  background: rgb(var(--surface) / 0.92);
-  box-shadow: var(--shadow-soft);
+  border-radius: 0.75rem;
+  background: rgb(var(--sb-card) / 0.92);
+  box-shadow: 0 1px 2px rgba(30, 42, 36, 0.08);
 }
 
 .brand-gradient {

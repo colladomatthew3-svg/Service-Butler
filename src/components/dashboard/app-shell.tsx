@@ -72,7 +72,7 @@ export function DashboardAppShell({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition",
+                    "sidebar-label flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 transition",
                     active ? "bg-brand-50 text-brand-700" : "text-semantic-muted hover:bg-semantic-surface2 hover:text-semantic-text"
                   )}
                   onClick={() => setOpen(false)}
@@ -86,7 +86,7 @@ export function DashboardAppShell({
 
           <div className="mt-8 rounded-xl bg-semantic-surface2 p-4">
             <p className="text-xs uppercase tracking-wide text-semantic-muted">Today</p>
-            <p className="mt-2 text-sm font-medium text-semantic-text">Prioritize new high-urgency leads first.</p>
+            <p className="sidebar-label mt-2 text-semantic-text">Prioritize new high-urgency leads first.</p>
           </div>
 
           <div className="mt-auto pt-8">{onSignOut}</div>

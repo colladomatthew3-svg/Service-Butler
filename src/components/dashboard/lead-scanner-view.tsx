@@ -657,7 +657,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         <section className="grid gap-5 xl:grid-cols-[1.2fr_1fr]">
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Routing Rules</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Routing Rules</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               {rulesLoading && (
@@ -701,7 +701,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">{editing ? "Edit Rule" : "Add Rule"}</h2>
+              <h2 className="dashboard-section-title text-semantic-text">{editing ? "Edit Rule" : "Add Rule"}</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <label>
@@ -796,7 +796,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         <section className="space-y-4">
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Live Test Harness</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Live Test Harness</h2>
             </CardHeader>
             <CardBody className="grid gap-3 md:grid-cols-[1fr_180px_180px_auto]">
               <div>
@@ -829,7 +829,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Captured Opportunities ({captured.length})</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Captured Opportunities ({captured.length})</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               {captured.length === 0 && (

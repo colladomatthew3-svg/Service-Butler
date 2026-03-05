@@ -40,7 +40,7 @@ export default async function SchedulePage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-semantic-text">Upcoming Scheduled Leads</h2>
+          <h2 className="dashboard-section-title text-semantic-text">Upcoming Scheduled Leads</h2>
         </CardHeader>
         <CardBody className="space-y-4">
           {Object.keys(groups).length === 0 && (

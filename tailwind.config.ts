@@ -18,47 +18,48 @@ const config: Config = {
     extend: {
       colors: {
         semantic: {
-          bg: "rgb(var(--bg) / <alpha-value>)",
-          surface: "rgb(var(--surface) / <alpha-value>)",
-          surface2: "rgb(var(--surface2) / <alpha-value>)",
+          bg: "rgb(var(--sb-bg) / <alpha-value>)",
+          surface: "rgb(var(--sb-card) / <alpha-value>)",
+          surface2: "rgb(var(--sb-surface-alt) / <alpha-value>)",
           surface3: "rgb(var(--surface3) / <alpha-value>)",
-          border: "rgb(var(--border) / <alpha-value>)",
-          text: "rgb(var(--text) / <alpha-value>)",
-          muted: "rgb(var(--muted) / <alpha-value>)",
-          brand: "rgb(var(--brand) / <alpha-value>)",
-          brandHover: "rgb(var(--brandHover) / <alpha-value>)",
-          accent: "rgb(var(--accent) / <alpha-value>)",
+          border: "rgb(var(--sb-border) / <alpha-value>)",
+          text: "rgb(var(--sb-text) / <alpha-value>)",
+          muted: "rgb(var(--sb-muted) / <alpha-value>)",
+          brand: "rgb(var(--sb-primary) / <alpha-value>)",
+          brandHover: "rgb(var(--sb-primary-hover) / <alpha-value>)",
+          accent: "rgb(var(--sb-copper) / <alpha-value>)",
           success: "rgb(var(--success) / <alpha-value>)",
           warning: "rgb(var(--warning) / <alpha-value>)",
           danger: "rgb(var(--danger) / <alpha-value>)"
         },
+        card: "rgb(var(--sb-card) / <alpha-value>)",
         brand: {
-          50: "#f4fae9",
-          100: "#e7f3d1",
-          200: "#cfe7a6",
-          300: "#b4d774",
-          400: "#9acb57",
-          500: "#88BC42",
-          600: "#6f9935",
-          700: "#557429",
-          800: "#3c511c",
-          900: "#243211"
+          50: "rgb(var(--sb-primary-soft) / <alpha-value>)",
+          100: "rgb(var(--sb-primary-soft) / <alpha-value>)",
+          200: "rgb(var(--sb-primary-soft) / 0.75)",
+          300: "rgb(var(--sb-primary) / 0.72)",
+          400: "rgb(var(--sb-primary) / 0.86)",
+          500: "rgb(var(--sb-primary) / <alpha-value>)",
+          600: "rgb(var(--sb-primary-hover) / <alpha-value>)",
+          700: "rgb(var(--sb-primary-hover) / <alpha-value>)",
+          800: "rgb(var(--sb-text) / <alpha-value>)",
+          900: "rgb(var(--sb-text) / <alpha-value>)"
         },
         neutral: {
-          50: "#f6f8f7",
-          100: "#eef2f0",
-          200: "#d8e0db",
-          300: "#bcc8c1",
-          400: "#93a399",
-          500: "#72847a",
-          600: "#5b6c64",
-          700: "#45524c",
-          800: "#2e3833",
-          900: "#1e2a24"
+          50: "rgb(var(--sb-bg) / <alpha-value>)",
+          100: "rgb(var(--sb-surface-alt) / <alpha-value>)",
+          200: "rgb(var(--sb-border) / <alpha-value>)",
+          300: "rgb(var(--sb-border) / 0.85)",
+          400: "rgb(var(--sb-muted) / 0.65)",
+          500: "rgb(var(--sb-muted) / 0.8)",
+          600: "rgb(var(--sb-muted) / <alpha-value>)",
+          700: "rgb(var(--sb-text) / 0.82)",
+          800: "rgb(var(--sb-text) / 0.92)",
+          900: "rgb(var(--sb-text) / <alpha-value>)"
         },
         accent: {
-          500: "#DD9F74",
-          600: "#c3875e"
+          500: "rgb(var(--sb-copper) / <alpha-value>)",
+          600: "rgb(var(--sb-copper) / 0.88)"
         },
         success: {
           100: "#e8f7eb",
@@ -86,7 +87,7 @@ const config: Config = {
         "3xl": "20px"
       },
       boxShadow: {
-        soft: "0 6px 20px rgba(30, 42, 36, 0.08)",
+        soft: "0 1px 2px rgba(30, 42, 36, 0.08)",
         card: "0 14px 36px rgba(30, 42, 36, 0.12)"
       }
     }

@@ -16,7 +16,7 @@ export default function DashboardSettingsPage() {
       <section className="grid gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Business Profile</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Business Profile</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <Field label="Business name">
@@ -33,7 +33,7 @@ export default function DashboardSettingsPage() {
 
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Dispatch Rules</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Dispatch Rules</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -59,7 +59,7 @@ export default function DashboardSettingsPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-semantic-text">Weather Preferences</h2>
+          <h2 className="dashboard-section-title text-semantic-text">Weather Preferences</h2>
           <p className="mt-1 text-sm text-semantic-muted">Forecast data drives urgency and demand signals on lead records.</p>
         </CardHeader>
         <CardBody>

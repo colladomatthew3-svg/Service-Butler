@@ -20,7 +20,7 @@ export default function InboxPage() {
       <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Threads</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Threads</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             {conversations.map((thread) => (
@@ -40,7 +40,7 @@ export default function InboxPage() {
 
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Conversation</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Conversation</h2>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="space-y-3">

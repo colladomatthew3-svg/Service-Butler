@@ -136,7 +136,7 @@ export function OutboundView() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-semantic-text">Status</h2>
+          <h2 className="dashboard-section-title text-semantic-text">Status</h2>
         </CardHeader>
         <CardBody className="flex flex-wrap gap-2">
           {[
@@ -156,7 +156,7 @@ export function OutboundView() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-semantic-text">Imported Contacts</h2>
+          <h2 className="dashboard-section-title text-semantic-text">Imported Contacts</h2>
         </CardHeader>
         <CardBody>
           {rows.length === 0 ? (

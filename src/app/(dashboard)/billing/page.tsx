@@ -10,22 +10,22 @@ export default async function BillingPage({
 
   return (
     <div>
-      <h1>Billing</h1>
+      <h1 className="dashboard-page-title text-semantic-text">Billing</h1>
 
       {disabled && (
-        <div className="panel" style={{ borderColor: "#3f6a9a", background: "#eef6ff" }}>
+        <div className="panel mt-4 border border-semantic-border bg-semantic-surface2 text-semantic-text">
           Billing disabled in MVP.
         </div>
       )}
 
       {!disabled && params.success === "1" && (
-        <div className="panel" style={{ borderColor: "#0a7f5a", background: "#f2fff7" }}>
+        <div className="panel mt-4 border border-semantic-border bg-semantic-surface2 text-semantic-text">
           Subscription checkout completed. Stripe webhook will sync subscription status shortly.
         </div>
       )}
 
       {!disabled && params.canceled === "1" && (
-        <div className="panel" style={{ borderColor: "#b36b00", background: "#fff8eb" }}>
+        <div className="panel mt-4 border border-semantic-border bg-semantic-surface2 text-semantic-text">
           Checkout canceled. You can start again anytime.
         </div>
       )}

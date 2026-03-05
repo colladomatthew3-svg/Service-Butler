@@ -3,10 +3,10 @@ export const manrope = { variable: "" } as const;
 
 export const brand = {
   colors: {
-    brandGreen: "#88BC42",
+    brandGreen: "#82B43D",
     brandGreenDark: "#6F9935",
     brandGreenSoft: "#E7F3D1",
-    brandOrange: "#DD9F74",
+    brandOrange: "#D99D72",
     brandOrangeSoft: "#F5E0D1",
     neutral: {
       bg: "#F6F8F7",

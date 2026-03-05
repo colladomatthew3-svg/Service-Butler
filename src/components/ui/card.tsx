@@ -4,7 +4,7 @@ import type { HTMLAttributes } from "react";
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <section
-      className={cn("rounded-[var(--radius-card)] border border-semantic-border bg-semantic-surface shadow-soft", className)}
+      className={cn("rounded-xl border border-semantic-border bg-card shadow-sm", className)}
       {...props}
     />
   );

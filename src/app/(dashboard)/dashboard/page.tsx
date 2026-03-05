@@ -146,7 +146,7 @@ export default async function DashboardOverviewPage() {
         <CardBody className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Opportunities Near You</p>
-            <h1 className="mt-1 text-3xl font-semibold text-semantic-text">Find and claim jobs before your competitors.</h1>
+            <h1 className="dashboard-page-title mt-1 text-semantic-text">Find and claim jobs before your competitors.</h1>
             <p className="mt-2 text-sm text-semantic-muted">
               Scanner intelligence across Long Island and NYC. Focus zip seeds: 11705, 11788, 10019.
             </p>
@@ -182,7 +182,7 @@ export default async function DashboardOverviewPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-semantic-text">Quick Actions</h2>
+          <h2 className="dashboard-section-title text-semantic-text">Quick Actions</h2>
         </CardHeader>
         <CardBody className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/dashboard/scanner">
@@ -203,7 +203,7 @@ export default async function DashboardOverviewPage() {
       <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Pipeline Snapshot</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Pipeline Snapshot</h2>
           </CardHeader>
           <CardBody>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -224,7 +224,7 @@ export default async function DashboardOverviewPage() {
 
         <Card className={weatherHighRisk ? "border-warning-500/30" : ""}>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Weather Impact</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Weather Impact</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-semantic-text">
@@ -248,7 +248,7 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-semantic-text">Opportunity Feed</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Opportunity Feed</h2>
               <Link href="/dashboard/scanner">
                 <Button size="sm" variant="secondary">Open Scanner</Button>
               </Link>
@@ -276,7 +276,7 @@ export default async function DashboardOverviewPage() {
 
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Demand Heat Map</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Demand Heat Map</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             {heatRows.map((row) => (
@@ -304,7 +304,7 @@ export default async function DashboardOverviewPage() {
       <section className="grid gap-5 lg:grid-cols-[1.05fr_1fr]">
         <Card>
           <CardHeader>
-            <h2 className="text-lg font-semibold text-semantic-text">Next Actions</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Next Actions</h2>
           </CardHeader>
           <CardBody className="grid gap-3 sm:grid-cols-2">
             <Button size="lg" className="justify-start">
@@ -331,7 +331,7 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-semantic-text">Next Up</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Next Up</h2>
               <Link href="/dashboard/schedule" className="text-sm font-semibold text-brand-700">
                 Open schedule
               </Link>

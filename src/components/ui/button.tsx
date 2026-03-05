@@ -12,9 +12,9 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variantClass: Record<ButtonVariant, string> = {
   primary:
-    "bg-semantic-brand text-white shadow-[0_14px_28px_rgba(136,188,66,0.28)] hover:bg-semantic-brandHover hover:shadow-[0_18px_34px_rgba(111,153,53,0.32)] active:translate-y-px",
+    "bg-semantic-brand text-white shadow-sm hover:bg-semantic-brandHover active:translate-y-px",
   secondary:
-    "bg-semantic-surface text-semantic-text ring-1 ring-inset ring-semantic-border hover:bg-semantic-surface2 hover:ring-semantic-brand/20",
+    "border border-semantic-border bg-semantic-surface text-semantic-text shadow-sm hover:bg-semantic-surface2",
   ghost: "bg-transparent text-semantic-muted hover:bg-semantic-surface2 hover:text-semantic-text",
   danger: "bg-semantic-danger text-white hover:bg-danger-700 active:translate-y-px"
 };

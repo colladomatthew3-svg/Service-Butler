@@ -145,7 +145,7 @@ export default function HomePage() {
                   <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
                     <div
                       className="rounded-[1.6rem] border border-semantic-border p-5 text-white shadow-[var(--shadow-lift)]"
-                      style={{ backgroundColor: "var(--sb-bg)" }}
+                      style={{ backgroundColor: "rgb(var(--sb-bg))" }}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -329,7 +329,7 @@ export default function HomePage() {
           <div className="container">
             <div
               className="rounded-[2rem] px-6 py-10 text-white shadow-[var(--shadow-lift)] sm:px-10 sm:py-14"
-              style={{ backgroundColor: "var(--sb-bg)" }}
+              style={{ backgroundColor: "rgb(var(--sb-bg))" }}
             >
               <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
                 <div>
@@ -411,7 +411,7 @@ export default function HomePage() {
           <div className="container">
             <div
               className="rounded-[2rem] px-6 py-12 text-white shadow-[var(--shadow-lift)] sm:px-10 sm:py-16"
-              style={{ background: "linear-gradient(135deg, var(--sb-green), var(--sb-bg))" }}
+              style={{ background: "linear-gradient(135deg, rgb(var(--sb-primary)), rgb(var(--sb-bg)))" }}
             >
               <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
                 <div className="max-w-2xl">

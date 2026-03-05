@@ -43,7 +43,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ lea
       <div className="panel">
         <h3>Conversation Thread</h3>
         {(lead.messages || []).map((m) => (
-          <div key={m.id} style={{ borderTop: "1px solid #eee", padding: "8px 0" }}>
+          <div key={m.id} className="border-t border-semantic-border py-2">
             <strong>{m.direction} {m.channel}</strong>
             <div>{m.body}</div>
           </div>

@@ -186,7 +186,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
         <div className="space-y-5">
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Job Details</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Job Details</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <Detail label="Service" value={job.service_type} icon={<Wrench className="h-4 w-4" />} />
@@ -230,7 +230,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Notes</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Notes</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <Textarea rows={6} value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -243,7 +243,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Insurance</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Insurance</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -297,7 +297,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
         <div className="space-y-5">
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Revenue Snapshot</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Revenue Snapshot</h2>
             </CardHeader>
             <CardBody className="space-y-2">
               <p className="inline-flex items-center gap-2 text-2xl font-semibold text-semantic-text">
@@ -310,7 +310,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Lead Origin & Intent</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Lead Origin & Intent</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               {signals.length === 0 && <p className="text-sm text-semantic-muted">No signals found for origin lead.</p>}

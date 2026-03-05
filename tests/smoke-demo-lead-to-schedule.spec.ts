@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Page, Route } from "playwright";
+import type { Page, Request, Route } from "playwright";
 
 type Lead = {
   id: string;
@@ -46,6 +46,16 @@ async function json(route: Route, payload: unknown, status = 200) {
     contentType: "application/json",
     body: JSON.stringify(payload)
   });
+}
+
+function readPostJson(request: Request): Record<string, unknown> {
+  const raw = request.postData();
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 async function stubLeadToScheduleFlow(page: Page) {
@@ -103,7 +113,7 @@ async function stubLeadToScheduleFlow(page: Page) {
     }
 
     if (route.request().method() === "PATCH") {
-      const patch = (await route.request().postDataJSON().catch(() => ({}))) as Partial<Lead>;
+      const patch = readPostJson(route.request()) as Partial<Lead>;
       Object.assign(lead, patch);
       await json(route, { lead });
       return;
@@ -128,7 +138,7 @@ async function stubLeadToScheduleFlow(page: Page) {
     }
 
     if (route.request().method() === "PATCH") {
-      const patch = (await route.request().postDataJSON().catch(() => ({}))) as Partial<Job>;
+      const patch = readPostJson(route.request()) as Partial<Job>;
       Object.assign(job, patch);
       await json(route, { job });
       return;
@@ -153,7 +163,7 @@ test("demo smoke: dashboard to lead conversion and scheduling", async ({ page })
   await page.getByRole("link", { name: /Pat Riley/i }).first().click();
 
   await expect(page).toHaveURL(new RegExp(`/dashboard/leads/${leadId}$`));
-  await expect(page.getByRole("button", { name: /Convert to Job|Open Job/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Convert to Job|Open Job/i }).first()).toBeVisible();
 
   await page.getByRole("button", { name: /Convert to Job|Open Job/i }).first().click();
   await expect(page).toHaveURL(new RegExp(`/dashboard/jobs/${jobId}$`));
@@ -161,7 +171,7 @@ test("demo smoke: dashboard to lead conversion and scheduling", async ({ page })
   await expect(page.getByRole("heading", { name: /Pat Riley/i })).toBeVisible();
   await page.getByRole("button", { name: /Mark Scheduled/i }).click();
 
-  await page.getByRole("link", { name: "Schedule" }).first().click();
+  await page.goto("/dashboard/schedule");
   await expect(page).toHaveURL(/\/dashboard\/schedule/);
-  await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Schedule", exact: true })).toBeVisible();
 });

@@ -72,6 +72,22 @@ const pricingTiers = [
 ] as const;
 
 export default function HomePage() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Service Butler",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description:
+      "AI-powered lead intake, scheduling, dispatch, and follow-up software for home service businesses.",
+    offers: pricingTiers.map((tier) => ({
+      "@type": "Offer",
+      name: tier.name,
+      price: tier.price === "Custom" ? undefined : tier.price.replace("$", ""),
+      priceCurrency: "USD"
+    }))
+  };
+
   return (
     <>
       <TopNav />
@@ -158,6 +174,8 @@ export default function HomePage() {
                           alt="Dispatch team using Service Butler"
                           width={1200}
                           height={900}
+                          sizes="(max-width: 1279px) 100vw, 30vw"
+                          priority
                           className="h-48 w-full rounded-xl object-cover"
                         />
                         <p className="mt-4 text-sm font-semibold text-semantic-text">Dispatch workspace</p>
@@ -276,6 +294,7 @@ export default function HomePage() {
                       alt="Field team and branded service truck"
                       width={1200}
                       height={900}
+                      sizes="(max-width: 1279px) 100vw, 24vw"
                       className="h-52 w-full rounded-xl object-cover"
                     />
                     <p className="mt-4 text-sm font-semibold text-semantic-text">Field-ready scheduling</p>
@@ -289,6 +308,7 @@ export default function HomePage() {
                       alt="Technician tools prepared for service call"
                       width={1200}
                       height={900}
+                      sizes="(max-width: 1279px) 100vw, 24vw"
                       className="h-40 w-full rounded-xl object-cover"
                     />
                     <p className="mt-4 text-sm font-semibold text-semantic-text">Prepared technicians</p>
@@ -411,6 +431,7 @@ export default function HomePage() {
           </div>
         </section>
       </main>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       <Footer />
     </>
   );

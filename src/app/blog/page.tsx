@@ -1,8 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer } from "@/components/brand/Footer";
 import { TopNav } from "@/components/brand/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { getAllPosts } from "@/lib/blog";
+
+export const metadata: Metadata = {
+  title: "Blog",
+  description: "Service Butler articles on AI, lead response, scheduling, and operations for home service businesses.",
+  alternates: {
+    canonical: "/blog"
+  }
+};
 
 export default async function BlogPage() {
   const posts = await getAllPosts();

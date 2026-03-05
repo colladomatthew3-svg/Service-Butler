@@ -18,8 +18,33 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   try {
     const post = await getPostBySlug(slug);
     return {
-      title: `${post.title} | Service Butler Blog`,
-      description: post.excerpt
+      title: post.title,
+      description: post.excerpt,
+      alternates: {
+        canonical: `/blog/${post.slug}`
+      },
+      openGraph: {
+        title: post.title,
+        description: post.excerpt,
+        type: "article",
+        url: `/blog/${post.slug}`,
+        publishedTime: post.publishedAt,
+        authors: [post.author],
+        images: [
+          {
+            url: "/brand/logo.png",
+            width: 1200,
+            height: 630,
+            alt: post.title
+          }
+        ]
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: post.title,
+        description: post.excerpt,
+        images: ["/brand/logo.png"]
+      }
     };
   } catch {
     return {};

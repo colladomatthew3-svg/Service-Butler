@@ -672,6 +672,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
           {sortedEvents.map((event) => {
             const nextAction = String(event.raw?.next_action || event.raw?.recommended_action || "Dispatch within SLA and send first contact.");
             const reasonSummary = String(event.raw?.reason_summary || "Signal pattern indicates near-term service demand.");
+            const reasonDetails = getOpportunityReasonDetails(event);
 
             return (
               <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
@@ -688,8 +689,13 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-lg font-semibold text-semantic-text">{event.title}</p>
-                    <p className="text-sm text-semantic-muted">{event.description}</p>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-semibold text-semantic-text">{event.title}</p>
+                        <p className="mt-1 text-sm text-semantic-muted">{event.description}</p>
+                      </div>
+                      <Badge>{reasonDetails.serviceType}</Badge>
+                    </div>
                     <p className="inline-flex items-center gap-1 text-sm text-semantic-muted">
                       <MapPin className="h-4 w-4" />
                       {event.location_text || "Service area"}
@@ -697,8 +703,20 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     <p className="text-xs font-semibold uppercase tracking-wide text-semantic-muted">
                       {sourceLabel(event.source)} · {relativeAge(event.created_at)}
                     </p>
-                    <p className="text-sm font-medium text-semantic-text">{reasonSummary}</p>
-                    <p className="text-sm text-semantic-muted">Next action: {nextAction}</p>
+                    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this opportunity exists</p>
+                      <p className="mt-2 text-sm font-medium text-semantic-text">{reasonSummary}</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        <ReasonStat label="Weather event" value={reasonDetails.weatherEvent} />
+                        <ReasonStat label="Service type" value={reasonDetails.serviceType} />
+                        <ReasonStat label="Distance" value={reasonDetails.distance} />
+                        <ReasonStat label="Demand signal" value={reasonDetails.demandSignal} />
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next action</p>
+                      <p className="mt-2 text-sm text-semantic-text">{nextAction}</p>
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Tags className="h-3.5 w-3.5 text-semantic-muted" />
                       {(event.tags || []).map((tag) => (
@@ -999,6 +1017,30 @@ function sourceLabel(source: string) {
   if (source === "weather") return "Contractor Board";
   if (source === "public_feed") return "Neighborhood Forum";
   return "FB Group";
+}
+
+function getOpportunityReasonDetails(event: ScannerEvent) {
+  const weatherEvent = String(event.raw?.weather_signal || "Local weather pressure");
+  const serviceType = String(event.raw?.service_type || categoryLabel[event.category]);
+  const distanceMiles = Number(event.raw?.distance_miles);
+  const forecastWindow = String(event.raw?.forecast_window || "today");
+  const demandSignal = String(event.raw?.demand_signal || event.tags.slice(0, 2).join(", ") || "Demand detected");
+
+  return {
+    weatherEvent: `${weatherEvent} · ${forecastWindow}`,
+    serviceType,
+    distance: Number.isFinite(distanceMiles) ? `${distanceMiles} mi` : "Service area",
+    demandSignal
+  };
+}
+
+function ReasonStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-semantic-border bg-semantic-surface px-3 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-2 text-sm font-medium text-semantic-text">{value}</p>
+    </div>
+  );
 }
 
 function relativeAge(iso: string) {

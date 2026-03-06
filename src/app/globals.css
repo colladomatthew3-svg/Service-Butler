@@ -227,3 +227,51 @@ body {
   background-position: center;
   background-size: 28px 28px;
 }
+
+
+.weather-ticker-strip {
+  overflow: hidden;
+  border: 1px solid rgb(var(--border));
+  border-radius: 0.75rem;
+  background: rgb(var(--surface2));
+  padding: 0.5rem 0;
+}
+
+.weather-ticker-track {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.5rem;
+  animation: weather-ticker-scroll 24s linear infinite;
+}
+
+.weather-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--border));
+  color: rgb(var(--text));
+  padding: 0.2rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+@keyframes weather-ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-ticker-track {
+    animation: none;
+  }
+}

@@ -502,6 +502,17 @@ type UsgsResponse = {
   }>;
 };
 
+type EonetResponse = {
+  events?: Array<{
+    id?: string;
+    title?: string;
+    description?: string;
+    categories?: Array<{ id?: string; title?: string }>;
+    geometry?: Array<{ date?: string; coordinates?: [number, number] }>;
+    sources?: Array<{ id?: string; url?: string }>;
+  }>;
+};
+
 function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const R = 3958.8;
@@ -601,6 +612,109 @@ async function fetchUsgsOpportunities({
   return out;
 }
 
+function categoryFromEonet(categoryTitle: string): ScannerCategory {
+  const value = categoryTitle.toLowerCase();
+  if (value.includes("wildfire") || value.includes("storm") || value.includes("flood")) return "restoration";
+  if (value.includes("landslide") || value.includes("severe storm")) return "demolition";
+  if (value.includes("volcano") || value.includes("dust") || value.includes("smoke")) return "asbestos";
+  return "general";
+}
+
+async function fetchEonetOpportunities({
+  lat,
+  lon,
+  radiusMiles,
+  categories,
+  forecast,
+  limit
+}: {
+  lat: number;
+  lon: number;
+  radiusMiles: number;
+  categories: ScannerCategory[];
+  forecast?: ForecastSummary | null;
+  limit: number;
+}): Promise<ScannerOpportunity[]> {
+  const payload = await fetchJsonWithTimeout<EonetResponse>("https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=50", 9000);
+  if (!payload?.events?.length) return [];
+
+  const radiusLimit = Math.max(120, radiusMiles * 10);
+  const out: ScannerOpportunity[] = [];
+
+  for (const event of payload.events) {
+    const geo = event.geometry?.[event.geometry.length - 1];
+    const coords = geo?.coordinates;
+    if (!coords || coords.length < 2) continue;
+
+    const eLon = Number(coords[0]);
+    const eLat = Number(coords[1]);
+    if (!Number.isFinite(eLat) || !Number.isFinite(eLon)) continue;
+
+    const dist = haversineMiles(lat, lon, eLat, eLon);
+    if (dist > radiusLimit) continue;
+
+    const dominantCategory = categoryFromEonet(event.categories?.[0]?.title || "");
+    if (!categories.includes(dominantCategory)) continue;
+
+    const tags = [
+      "public_feed",
+      "nasa-eonet",
+      String(event.categories?.[0]?.title || "environmental-event").toLowerCase()
+    ];
+    const scored = scoreOpportunity(dominantCategory, tags, forecast, 60);
+    const recencyBoost = geo?.date && Date.now() - new Date(geo.date).getTime() <= 24 * 60 * 60 * 1000 ? 8 : 3;
+    const proximityBoost = dist <= 30 ? 10 : dist <= 75 ? 6 : 3;
+    const intent = clamp(scored.intentScore + recencyBoost + proximityBoost);
+
+    out.push({
+      id: mkId(["eonet", event.id || event.title || String(geo?.date || Date.now())]),
+      source: "public_feed",
+      category: dominantCategory,
+      title: event.title || "Environmental incident",
+      description:
+        event.description || `NASA EONET reported an active environmental event about ${Math.round(dist)} mi from your service area.`,
+      locationText: `${eLat.toFixed(3)}, ${eLon.toFixed(3)}`,
+      lat: eLat,
+      lon: eLon,
+      intentScore: intent,
+      priorityLabel: priorityLabelForOpportunity({
+        intentScore: intent,
+        tags,
+        title: event.title || "Environmental incident",
+        description: event.description || "NASA EONET environmental event.",
+        reasonSummary: "NASA EONET shows an active incident near your market that can increase emergency inbound demand.",
+        raw: {
+          provider: "NASA_EONET",
+          id: event.id,
+          categories: event.categories,
+          geometry_date: geo?.date,
+          distance_miles: Math.round(dist),
+          source_url: event.sources?.[0]?.url
+        }
+      }),
+      confidence: scored.confidence,
+      tags,
+      nextAction: suggestedNextAction(dominantCategory, intent, `${Math.round(dist)} mi radius`),
+      reasonSummary: "NASA EONET shows an active incident near your market that can increase emergency inbound demand.",
+      recommendedCreateMode: intent >= 77 ? "job" : "lead",
+      recommendedScheduleIso: intent >= 70 ? suggestedSchedule(intent, 60) : null,
+      raw: {
+        provider: "NASA_EONET",
+        id: event.id,
+        categories: event.categories,
+        geometry_date: geo?.date,
+        distance_miles: Math.round(dist),
+        source_url: event.sources?.[0]?.url
+      },
+      createdAtIso: new Date().toISOString()
+    });
+
+    if (out.length >= limit) break;
+  }
+
+  return out;
+}
+
 export async function runScanner({
   mode,
   location,
@@ -640,7 +754,7 @@ export async function runScanner({
   }
 
   if (mode === "live" && resolved) {
-    const [nws, usgs] = await Promise.all([
+    const [nws, usgs, eonet] = await Promise.all([
       fetchNwsOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
@@ -655,10 +769,18 @@ export async function runScanner({
         categories: pickedCategories,
         forecast,
         limit: safeLimit
+      }),
+      fetchEonetOpportunities({
+        lat: resolved.lat,
+        lon: resolved.lon,
+        radiusMiles,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
       })
     ]);
 
-    const merged = [...nws, ...usgs]
+    const merged = [...nws, ...usgs, ...eonet]
       .sort((a, b) => b.intentScore - a.intentScore)
       .slice(0, safeLimit);
 

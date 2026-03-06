@@ -1,25 +1,13 @@
-.next
-node_modules
-.env
-.env.local
-.DS_Store
-
-# local runtime artifacts
-logs/
-.pids
-tsconfig.tsbuildinfo
-
-# Local runtime artifacts
-logs/
-.pids/
 .next/
+node_modules/
+node_modules
+.DS_Store
+.pids/
+logs/
+playwright-report/
+test-results/
 tsconfig.tsbuildinfo
 
-# Local env
-.env
-.env.local
-.env.*.local
-
-# Accidental files
-brew install gh
-brew install gh.pub
+# local env
+.env*
+!.env.example

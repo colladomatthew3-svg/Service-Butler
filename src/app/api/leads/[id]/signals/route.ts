@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { getDemoLead, getDemoLeadSignals } from "@/lib/demo/store";
 import { generateSignals } from "@/lib/services/intent-engine";
+import { isDemoMode } from "@/lib/services/review-mode";
 import { getForecastByLatLng } from "@/lib/services/weather";
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  if (isDemoMode()) {
+    const lead = getDemoLead(id);
+    if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    const signals = getDemoLeadSignals(id);
+    return NextResponse.json({ regenerated: true, count: signals.length });
+  }
+
   const { accountId, role, supabase } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 

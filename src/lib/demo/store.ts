@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { generateSignals } from "@/lib/services/intent-engine";
 import { opportunityToLeadPayload, type ScannerOpportunity } from "@/lib/services/scanner";
 
 const DEMO_ACCOUNT_ID = "11111111-1111-1111-1111-111111111111";
@@ -397,8 +398,91 @@ export function getDemoLead(id: string) {
   return getStore().leads.find((lead) => lead.id === id) || null;
 }
 
+export function getFirstDemoLeadId() {
+  return getStore().leads[0]?.id || null;
+}
+
 export function getDemoJob(id: string) {
   return getStore().jobs.find((job) => job.id === id) || null;
+}
+
+export function getDemoLeadSignals(id: string) {
+  const lead = getDemoLead(id);
+  if (!lead) return [];
+
+  return generateSignals({
+    lead: {
+      id: lead.id,
+      service_type: lead.service_type,
+      requested_timeframe: lead.requested_timeframe,
+      city: lead.city,
+      state: lead.state
+    }
+  }).map((signal, index) => ({
+    id: `${lead.id}-signal-${index + 1}`,
+    created_at: nowIso(),
+    ...signal
+  }));
+}
+
+export function updateDemoLead(
+  id: string,
+  patch: Partial<Pick<DemoLead, "status" | "notes" | "scheduled_for" | "converted_job_id" | "stage">>
+) {
+  const lead = getStore().leads.find((item) => item.id === id);
+  if (!lead) return null;
+  Object.assign(lead, patch);
+  return lead;
+}
+
+export function convertDemoLeadToJob(id: string) {
+  const store = getStore();
+  const lead = store.leads.find((item) => item.id === id);
+  if (!lead) return null;
+
+  if (lead.converted_job_id) {
+    return { jobId: lead.converted_job_id, created: false };
+  }
+
+  const existing = store.jobs.find((job) => job.lead_id === id);
+  if (existing) {
+    lead.converted_job_id = existing.id;
+    lead.status = "scheduled";
+    lead.stage = "BOOKED";
+    lead.scheduled_for = existing.scheduled_for;
+    return { jobId: existing.id, created: false };
+  }
+
+  const scheduledFor =
+    lead.requested_timeframe?.toLowerCase().includes("today")
+      ? new Date(new Date().setHours(14, 0, 0, 0)).toISOString()
+      : lead.requested_timeframe?.toLowerCase().includes("tomorrow")
+        ? new Date(new Date().setDate(new Date().getDate() + 1)).toISOString()
+        : new Date(Date.now() + 90 * 60_000).toISOString();
+
+  const scores = getDemoLeadSignals(id).map((signal) => Number(signal.score) || 0);
+  const intent = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : lead.intentScore;
+  const jobId = generateId("job", `${id}:converted`);
+
+  store.jobs.unshift({
+    id: jobId,
+    customer_name: lead.name,
+    service_type: lead.service_type,
+    pipeline_status: "NEW",
+    scheduled_for: scheduledFor,
+    estimated_value: 0,
+    city: lead.city,
+    state: lead.state,
+    intent_score: intent,
+    lead_id: lead.id
+  });
+
+  lead.converted_job_id = jobId;
+  lead.status = "scheduled";
+  lead.stage = "BOOKED";
+  lead.scheduled_for = scheduledFor;
+
+  return { jobId, created: true };
 }
 
 export function dispatchDemoScannerEvent(id: string, createMode?: "lead" | "job") {
@@ -486,7 +570,7 @@ export function dispatchDemoScannerEvent(id: string, createMode?: "lead" | "job"
     jobId,
     message:
       mode === "job"
-        ? "Opportunity added to the demo schedule."
-        : "Opportunity added to the demo lead inbox."
+        ? "Signal detected, opportunity converted, and inspection scheduled in the demo flow."
+        : "Signal detected, opportunity surfaced, and lead created in the demo inbox."
   };
 }

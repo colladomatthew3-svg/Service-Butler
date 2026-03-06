@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { getDemoLead, getDemoLeadSignals, updateDemoLead } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 function statusToStage(status?: string | null) {
   switch (status) {
@@ -20,6 +22,13 @@ function statusToStage(status?: string | null) {
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  if (isDemoMode()) {
+    const lead = getDemoLead(id);
+    if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    return NextResponse.json({ lead, signals: getDemoLeadSignals(id) });
+  }
+
   const { accountId, supabase } = await getCurrentUserContext();
 
   const { data: lead, error } = await supabase
@@ -44,14 +53,38 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { accountId, role, supabase } = await getCurrentUserContext();
-  assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
-
   const body = (await req.json()) as {
     status?: string;
     notes?: string | null;
     scheduled_for?: string | null;
   };
+
+  if (isDemoMode()) {
+    const patch: Record<string, unknown> = {};
+    if (body.status) {
+      patch.status = body.status;
+      const stage = statusToStage(body.status);
+      if (stage) patch.stage = stage;
+    }
+    if (body.notes !== undefined) patch.notes = body.notes;
+    if (body.scheduled_for !== undefined) {
+      patch.scheduled_for = body.scheduled_for ? new Date(body.scheduled_for).toISOString() : null;
+    }
+
+    const lead = updateDemoLead(id, patch);
+    if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    return NextResponse.json({
+      lead: {
+        id: lead.id,
+        status: lead.status,
+        notes: lead.notes,
+        scheduled_for: lead.scheduled_for
+      }
+    });
+  }
+
+  const { accountId, role, supabase } = await getCurrentUserContext();
+  assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 
   const patch: Record<string, unknown> = {};
   if (body.status) {

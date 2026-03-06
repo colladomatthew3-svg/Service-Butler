@@ -13,7 +13,9 @@ test("scanner demo flow shows deterministic opportunities", async ({ page }) => 
 
   const cards = page.getByTestId("scanner-result-card");
   await expect(cards.first()).toBeVisible();
-  await expect(cards.first()).toContainText("Why this opportunity:");
+  await expect(cards.first()).toContainText("Incident type");
+  await expect(cards.first()).toContainText("Urgency window");
   await expect(cards.first()).toContainText("Next action");
-  await expect(cards.first()).toContainText(/service match/i);
+  await expect(cards.first()).toContainText("Demand signal explanation");
+  await expect(cards.first()).toContainText(/service match|abatement|inspection|mitigation/i);
 });

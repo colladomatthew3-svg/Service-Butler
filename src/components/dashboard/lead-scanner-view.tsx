@@ -368,12 +368,15 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     }
   }
 
-  async function dispatchEvent(event: ScannerEvent, createMode?: "lead" | "job") {
+  async function dispatchEvent(event: ScannerEvent, createMode?: "lead" | "job", assignee?: string) {
     setDispatchingId(event.id);
     const res = await fetch(`/api/scanner/events/${event.id}/dispatch`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(createMode ? { createMode } : {})
+      body: JSON.stringify({
+        ...(createMode ? { createMode } : {}),
+        ...(assignee ? { assignee } : {})
+      })
     });
     const data = (await res.json().catch(() => ({}))) as {
       error?: string;
@@ -804,24 +807,32 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       </div>
                       <Badge>{reasonDetails.serviceType}</Badge>
                     </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      <ReasonStat label="Incident type" value={reasonDetails.incidentType} />
+                      <ReasonStat label="Location" value={event.location_text || "Service area"} />
+                      <ReasonStat label="Distance" value={reasonDetails.distance} />
+                    </div>
                     <p className="inline-flex items-center gap-1 text-sm text-semantic-muted">
                       <MapPin className="h-4 w-4" />
                       {event.location_text || "Service area"}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="default">Source: {sourceLabel(event.source)}</Badge>
+                      <Badge variant="default">Source: {reasonDetails.signalSource}</Badge>
                       <Badge variant="default">Priority: {priorityFromScore(event.intent_score)}</Badge>
                       <Badge variant="default">Detected: {relativeAge(event.created_at)}</Badge>
                     </div>
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this opportunity exists</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Demand signal explanation</p>
                       <p className="mt-2 text-sm font-medium text-semantic-text">{reasonSummary}</p>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        <ReasonStat label="Weather event" value={reasonDetails.weatherEvent} />
-                        <ReasonStat label="Service type" value={reasonDetails.serviceType} />
-                        <ReasonStat label="Distance" value={reasonDetails.distance} />
+                        <ReasonStat label="Weather / signal" value={reasonDetails.weatherEvent} />
+                        <ReasonStat label="Recommended service" value={reasonDetails.serviceType} />
+                        <ReasonStat label="Urgency window" value={reasonDetails.urgencyWindow} />
                         <ReasonStat label="Demand signal" value={reasonDetails.demandSignal} />
                       </div>
+                      {reasonDetails.demandExplanation && (
+                        <p className="mt-3 text-sm text-semantic-muted">{reasonDetails.demandExplanation}</p>
+                      )}
                     </div>
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next action</p>
@@ -849,6 +860,15 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
                       Schedule Inspection
+                    </Button>
+                    <Button
+                      size="lg"
+                      variant="secondary"
+                      disabled={dispatchingId === event.id}
+                      onClick={() => dispatchEvent(event, "job", suggestedAssigneeForEvent(event, rules))}
+                    >
+                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                      Assign Technician
                     </Button>
                     <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
@@ -1132,17 +1152,24 @@ function sourceLabel(source: string) {
 }
 
 function getOpportunityReasonDetails(event: ScannerEvent) {
+  const incidentType = String(event.raw?.incident_type || event.raw?.event || "Incident signal");
   const weatherEvent = String(event.raw?.weather_signal || "Local weather pressure");
   const serviceType = String(event.raw?.service_type || categoryLabel[event.category]);
   const distanceMiles = Number(event.raw?.distance_miles);
-  const forecastWindow = String(event.raw?.forecast_window || "today");
+  const forecastWindow = String(event.raw?.urgency_window || event.raw?.forecast_window || "Today");
   const demandSignal = String(event.raw?.demand_signal || event.tags.slice(0, 2).join(", ") || "Demand detected");
+  const demandExplanation = String(event.raw?.demand_explanation || "").trim();
+  const signalSource = String(event.raw?.signal_source || sourceLabel(event.source));
 
   return {
+    incidentType,
     weatherEvent: `${weatherEvent} · ${forecastWindow}`,
     serviceType,
     distance: Number.isFinite(distanceMiles) ? `${distanceMiles} mi` : "Service area",
-    demandSignal
+    urgencyWindow: forecastWindow,
+    demandSignal,
+    demandExplanation,
+    signalSource
   };
 }
 
@@ -1183,6 +1210,11 @@ function recommendedActionLabel(intentScore: number) {
   if (intentScore >= 82) return "Convert to Job";
   if (intentScore >= 68) return "Assign Follow-up";
   return "Add to Pipeline";
+}
+
+function suggestedAssigneeForEvent(event: ScannerEvent, rules: RoutingRule[]) {
+  const rule = rules.find((item) => item.category === event.category && item.enabled);
+  return rule?.default_assignee || (event.category === "demolition" ? "Mitigation Crew" : event.category === "restoration" ? "Storm Desk" : "Dispatch Queue");
 }
 
 function relativeAge(iso: string) {

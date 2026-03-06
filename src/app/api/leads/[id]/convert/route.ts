@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { convertDemoLeadToJob } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  if (isDemoMode()) {
+    const result = convertDemoLeadToJob(id);
+    if (!result) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+    return NextResponse.json(result);
+  }
+
   const { accountId, role, supabase } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 

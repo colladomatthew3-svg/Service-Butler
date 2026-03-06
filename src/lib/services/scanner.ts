@@ -26,6 +26,20 @@ export type ScannerOpportunity = {
   createdAtIso: string;
 };
 
+type DemoIncidentTemplate = {
+  incidentType: string;
+  title: string;
+  description: string;
+  category: ScannerCategory;
+  sourceName: string;
+  serviceCategory: string;
+  urgencyWindow: string;
+  demandExplanation: string;
+  demandSignal: string;
+  weatherSignal?: string;
+  tags: string[];
+};
+
 export type ScannerLead = {
   id: string;
   name: string;
@@ -210,6 +224,156 @@ function distanceSummary(index: number, locationText: string) {
   return `${miles} mi from ${locationText}`;
 }
 
+function incidentCatalog(campaignMode?: CampaignMode): DemoIncidentTemplate[] {
+  const shared: DemoIncidentTemplate[] = [
+    {
+      incidentType: "NOAA flood warning",
+      title: "NOAA flood warning impacting low-lying homes",
+      description: "NOAA alert plus runoff pressure indicates likely water extraction and mitigation demand.",
+      category: "restoration",
+      sourceName: "NOAA + Flood Zone Cluster",
+      serviceCategory: "Water Mitigation",
+      urgencyWindow: "Next 2 hours",
+      demandExplanation: "Heavy rainfall overlapping mapped flood-prone parcels usually drives emergency drying and extraction calls.",
+      demandSignal: "Rainfall + flood-zone overlap",
+      weatherSignal: "Flood warning and heavy rain band",
+      tags: ["flood warning", "water damage", "insurance claim", "restoration"]
+    },
+    {
+      incidentType: "Wind damage alert",
+      title: "High-wind damage corridor near service area",
+      description: "Wind gusts and debris reports point to roof tarping, siding, and emergency board-up demand.",
+      category: "restoration",
+      sourceName: "NOAA severe weather alert",
+      serviceCategory: "Storm Restoration",
+      urgencyWindow: "Today",
+      demandExplanation: "Wind-driven property damage often converts into immediate inspection and temporary repair work.",
+      demandSignal: "High wind + debris chatter",
+      weatherSignal: "Severe wind alert",
+      tags: ["wind damage", "storm-response", "roof leak", "board-up"]
+    },
+    {
+      incidentType: "Structure fire report",
+      title: "Municipal structure fire report with board-up need",
+      description: "Active fire-log incident suggests smoke cleanup, emergency board-up, and strip-out opportunities.",
+      category: "demolition",
+      sourceName: "Municipal fire log",
+      serviceCategory: "Emergency Board-Up",
+      urgencyWindow: "Immediate",
+      demandExplanation: "Structure fire calls frequently require first-response securing, demolition, and mitigation crews.",
+      demandSignal: "Fire incident + emergency response",
+      tags: ["structure fire", "board-up", "demo needed", "urgent"]
+    },
+    {
+      incidentType: "Unsafe structure notice",
+      title: "Unsafe structure notice posted after damage inspection",
+      description: "Code notice indicates a likely demolition, shoring, or structural stabilization opportunity.",
+      category: "demolition",
+      sourceName: "Building violations feed",
+      serviceCategory: "Structural Stabilization",
+      urgencyWindow: "This week",
+      demandExplanation: "Unsafe-structure notices create inspection, stabilization, and demo bids with strong close rates.",
+      demandSignal: "Violation notice + structural risk",
+      tags: ["unsafe structure", "demolition order", "inspection", "stabilization"]
+    },
+    {
+      incidentType: "Asbestos abatement permit",
+      title: "Asbestos abatement permit filed before interior demo",
+      description: "Permit activity signals regulated abatement work and adjacent demolition scope.",
+      category: "asbestos",
+      sourceName: "Permit filings",
+      serviceCategory: "Asbestos Abatement",
+      urgencyWindow: "This week",
+      demandExplanation: "Abatement permits are strong commercial and residential intent signals before larger reconstruction work begins.",
+      demandSignal: "Permit filing + hazardous material scope",
+      tags: ["asbestos violation", "abatement permit", "regulated work", "inspection"]
+    },
+    {
+      incidentType: "Structural repair permit",
+      title: "Structural repair permit filed after damage event",
+      description: "Repair permit suggests a property owner is actively moving from incident to contractor selection.",
+      category: "restoration",
+      sourceName: "Permit filings",
+      serviceCategory: "Structural Repair",
+      urgencyWindow: "This week",
+      demandExplanation: "Repair permits often follow insured losses and create immediate inspection and scoping opportunities.",
+      demandSignal: "Permit filing + insured loss follow-up",
+      tags: ["repair permit", "insured loss", "inspection", "quote"]
+    },
+    {
+      incidentType: "Demolition permit",
+      title: "Demolition permit filed for damaged property",
+      description: "Permit filing points to active teardown scope and debris-haul demand.",
+      category: "demolition",
+      sourceName: "Permit filings",
+      serviceCategory: "Selective Demolition",
+      urgencyWindow: "Today",
+      demandExplanation: "Demo permits indicate funded work and near-term mobilization for teardown crews.",
+      demandSignal: "Permit filing + mobilization window",
+      tags: ["demolition permit", "debris haul", "demo needed", "urgent"]
+    }
+  ];
+
+  if (campaignMode === "Roofing") {
+    return [
+      {
+        incidentType: "Roof leak cluster",
+        title: "Roof leak calls rising after overnight wind and rain",
+        description: "Combined weather pressure and homeowner reports suggest emergency tarping and inspection demand.",
+        category: "restoration",
+        sourceName: "NOAA + neighborhood reports",
+        serviceCategory: "Roof Leak Response",
+        urgencyWindow: "Next 2 hours",
+        demandExplanation: "Roof leak clusters convert quickly when contractors respond before interior water damage spreads.",
+        demandSignal: "Wind-driven leaks + homeowner reports",
+        weatherSignal: "High wind and heavy rain",
+        tags: ["roof leak", "storm-response", "inspection", "urgent"]
+      },
+      ...shared
+    ];
+  }
+
+  if (campaignMode === "HVAC Emergency") {
+    return [
+      {
+        incidentType: "HVAC outage cluster",
+        title: "After-hours HVAC failures following grid disruption",
+        description: "Outage chatter and temperature swing indicate emergency no-cool and no-heat demand.",
+        category: "general",
+        sourceName: "Weather + outage chatter",
+        serviceCategory: "HVAC Emergency",
+        urgencyWindow: "Immediate",
+        demandExplanation: "Comfort outages convert fastest when dispatch offers same-day diagnosis and restoration crews can coordinate follow-up.",
+        demandSignal: "Outage reports + temperature stress",
+        weatherSignal: "Freeze alert or heat spike",
+        tags: ["hvac failure", "emergency", "same-day", "dispatch"]
+      },
+      ...shared
+    ];
+  }
+
+  if (campaignMode === "Water Damage") {
+    return [
+      {
+        incidentType: "Flood risk cluster",
+        title: "Rainfall cluster overlapping mapped FEMA flood zone",
+        description: "Runoff intensity and flood-zone overlap suggest crawlspace flooding and basement water loss calls.",
+        category: "restoration",
+        sourceName: "Rainfall + FEMA flood zone cluster",
+        serviceCategory: "Water Mitigation",
+        urgencyWindow: "Immediate",
+        demandExplanation: "Flood-risk clustering produces realistic mitigation demand where rainfall accumulates over vulnerable parcels.",
+        demandSignal: "Flood-zone overlap + rain accumulation",
+        weatherSignal: "Heavy rainfall and flood risk",
+        tags: ["fema flood zone", "water damage", "mitigation", "urgent"]
+      },
+      ...shared
+    ];
+  }
+
+  return shared;
+}
+
 function suggestedSchedule(intentScore: number, slaMinutes = 90) {
   const now = Date.now();
   const target = new Date(now + Math.max(30, slaMinutes) * 60_000);
@@ -301,62 +465,38 @@ function createDemoOpportunities({
 }): ScannerOpportunity[] {
   const seed = hash(`${location}|${categories.join(",")}|${campaignMode || "none"}|${(triggers || []).join(",")}`);
   const rand = pseudo(seed);
-
-  const phrases: Record<ScannerCategory, string[]> = {
-    plumbing: ["Burst pipe reports", "Water in basement alerts", "Emergency drain overflow chatter"],
-    demolition: ["Collapsed ceiling reports", "Demo needed calls", "Post-fire strip-out demand"],
-    asbestos: ["Mold and asbestos concern inquiries", "Abatement keyword spike", "Inspection request wave"],
-    restoration: ["Fire damage reports", "Smoke smell complaints", "Water damage response demand"],
-    general: ["Emergency homeowner requests", "Insurance claim mentions", "Local service demand lift"]
-  };
-
-  const tagsByCategory: Record<ScannerCategory, string[]> = {
-    plumbing: ["emergency", "burst pipe", "water in basement", "insurance claim"],
-    demolition: ["collapsed ceiling", "demo needed", "fire damage", "urgent"],
-    asbestos: ["asbestos", "mold", "inspection", "safety"],
-    restoration: ["fire damage", "smoke smell", "water damage", "insurance claim"],
-    general: ["emergency", "local-demand", "review-spike", "quote"]
-  };
+  const templates = incidentCatalog(campaignMode).filter((template) => categories.includes(template.category));
+  const catalog = templates.length > 0 ? templates : incidentCatalog(campaignMode);
 
   const count = Math.max(8, Math.min(20, limit));
   const out: ScannerOpportunity[] = [];
 
   for (let i = 0; i < count; i += 1) {
-    const category = categories[Math.floor(rand() * categories.length)] || "general";
-    const phrasePool =
-      campaignMode === "Roofing"
-        ? ["Roof leak calls rising", "Missing shingle reports", "Storm damage inspection requests"]
-        : campaignMode === "HVAC Emergency"
-          ? ["No-cool emergency calls", "After-hours HVAC failures", "Comfort outage requests"]
-          : campaignMode === "Water Damage"
-            ? ["Freeze risk service calls", "Pipe burst alerts", "Water intrusion demand"]
-            : phrases[category];
-    const phrase = phrasePool[Math.floor(rand() * phrasePool.length)];
-    const tags = [
-      tagsByCategory[category][Math.floor(rand() * tagsByCategory[category].length)],
-      tagsByCategory[category][Math.floor(rand() * tagsByCategory[category].length)],
-      campaignMode === "Storm Response" ? "storm-response" : "dispatch"
-    ].filter((v, idx, arr) => arr.indexOf(v) === idx);
+    const template = catalog[Math.floor(rand() * catalog.length)] || catalog[0];
+    const category = template.category;
+    const tags = [...template.tags, campaignMode === "Storm Response" ? "storm-response" : "dispatch"].filter(
+      (v, idx, arr) => arr.indexOf(v) === idx
+    );
 
     const { intentScore, confidence } = scoreOpportunity(category, tags, forecast, 58 + Math.floor(rand() * 14));
     const locationText = location.includes(",") ? location : `${location}, NY`;
-    const id = mkId(["demo", category, phrase, locationText, String(i)]);
-    const weatherSignal = forecast?.current.precipitationChance
-      ? `${forecast.current.precipitationChance}% rain chance`
-      : "stable weather window";
-    const timeWindow = intentScore >= 80 ? "next 2 hours" : intentScore >= 68 ? "today" : "this week";
+    const id = mkId(["demo", category, template.incidentType, template.title, locationText, String(i)]);
+    const weatherSignal =
+      template.weatherSignal || (forecast?.current.precipitationChance ? `${forecast.current.precipitationChance}% rain chance` : "stable weather window");
+    const timeWindow =
+      intentScore >= 85 ? "Immediate" : intentScore >= 74 ? "Next 2 hours" : intentScore >= 64 ? "Today" : template.urgencyWindow;
     const distance = distanceSummary(i, locationText);
     const distanceMiles = 4 + (i % 5) * 6;
-    const serviceType = displayCampaignService(category, campaignMode);
-    const demandSignal = tags.join(", ");
-    const reasonSummary = `Why this opportunity: ${weatherSignal}, ${timeWindow} demand window, ${distance}, ${serviceType} service match.`;
+    const serviceType = template.serviceCategory || displayCampaignService(category, campaignMode);
+    const demandSignal = template.demandSignal;
+    const reasonSummary = `Why this opportunity: ${template.incidentType}, ${weatherSignal}, ${timeWindow} demand window, ${distance}, ${serviceType} service match. ${template.demandExplanation}`;
 
     out.push({
       id,
       source: "demo",
       category,
-      title: `${phrase} near ${locationText}`,
-      description: `Signals indicate ${serviceType.toLowerCase()} demand lift in this zone.`,
+      title: `${template.title} near ${locationText}`,
+      description: template.description,
       locationText,
       lat: null,
       lon: null,
@@ -364,18 +504,22 @@ function createDemoOpportunities({
       priorityLabel: priorityLabelForOpportunity({
         intentScore,
         tags,
-        title: `${phrase} near ${locationText}`,
-        description: `Signals indicate ${serviceType.toLowerCase()} demand lift in this zone.`,
+        title: `${template.title} near ${locationText}`,
+        description: template.description,
         reasonSummary,
         raw: {
           mode: "demo",
           category,
           triggers: triggers || [],
+          incident_type: template.incidentType,
+          signal_source: template.sourceName,
           weather_signal: weatherSignal,
           forecast_window: timeWindow,
           distance_miles: distanceMiles,
           service_type: serviceType,
-          demand_signal: demandSignal
+          urgency_window: timeWindow,
+          demand_signal: demandSignal,
+          demand_explanation: template.demandExplanation
         }
       }),
       confidence,
@@ -388,11 +532,15 @@ function createDemoOpportunities({
         mode: "demo",
         category,
         triggers: triggers || [],
+        incident_type: template.incidentType,
+        signal_source: template.sourceName,
         weather_signal: weatherSignal,
         forecast_window: timeWindow,
         distance_miles: distanceMiles,
         service_type: serviceType,
-        demand_signal: demandSignal
+        urgency_window: timeWindow,
+        demand_signal: demandSignal,
+        demand_explanation: template.demandExplanation
       },
       createdAtIso: new Date().toISOString()
     });
@@ -474,10 +622,17 @@ async function fetchNwsOpportunities({
         raw: {
           provider: "NWS",
           id: feature.id,
+          incident_type: props.event || "NOAA alert",
+          signal_source: "NOAA alerts",
           event: props.event,
           severity: props.severity,
           urgency: props.urgency,
-          sent: props.sent
+          sent: props.sent,
+          service_type: displayCampaignService(category),
+          urgency_window: String(props.urgency || "today"),
+          weather_signal: props.event || "Weather alert",
+          demand_signal: "Active NOAA alert",
+          demand_explanation: "NOAA alerts indicate property-impacting weather conditions that frequently convert into emergency service calls."
         }
       }),
       confidence: scored.confidence,
@@ -489,10 +644,17 @@ async function fetchNwsOpportunities({
       raw: {
         provider: "NWS",
         id: feature.id,
+        incident_type: props.event || "NOAA alert",
+        signal_source: "NOAA alerts",
         event: props.event,
         severity: props.severity,
         urgency: props.urgency,
-        sent: props.sent
+        sent: props.sent,
+        service_type: displayCampaignService(category),
+        urgency_window: String(props.urgency || "today"),
+        weather_signal: props.event || "Weather alert",
+        demand_signal: "Active NOAA alert",
+        demand_explanation: "NOAA alerts indicate property-impacting weather conditions that frequently convert into emergency service calls."
       },
       createdAtIso: new Date().toISOString()
     });
@@ -599,10 +761,17 @@ async function fetchUsgsOpportunities({
         raw: {
           provider: "USGS",
           id: feature.id,
+          incident_type: "structure impact event",
+          signal_source: "Municipal incident mirror",
           magnitude: props.mag,
           tsunami: props.tsunami,
           alert: props.alert,
-          time: props.time
+          time: props.time,
+          service_type: "Structural Inspection",
+          urgency_window: dist <= 20 ? "Immediate" : "Today",
+          distance_miles: Math.round(dist),
+          demand_signal: "Impact event near properties",
+          demand_explanation: "Incident proximity suggests inspection and stabilization demand for affected structures."
         }
       }),
       confidence: scored.confidence,
@@ -614,10 +783,17 @@ async function fetchUsgsOpportunities({
       raw: {
         provider: "USGS",
         id: feature.id,
+        incident_type: "structure impact event",
+        signal_source: "Municipal incident mirror",
         magnitude: props.mag,
         tsunami: props.tsunami,
         alert: props.alert,
-        time: props.time
+        time: props.time,
+        service_type: "Structural Inspection",
+        urgency_window: dist <= 20 ? "Immediate" : "Today",
+        distance_miles: Math.round(dist),
+        demand_signal: "Impact event near properties",
+        demand_explanation: "Incident proximity suggests inspection and stabilization demand for affected structures."
       },
       createdAtIso: new Date().toISOString()
     });
@@ -702,10 +878,16 @@ async function fetchEonetOpportunities({
         raw: {
           provider: "NASA_EONET",
           id: event.id,
+          incident_type: String(event.categories?.[0]?.title || "environmental incident"),
+          signal_source: "Environmental incident feed",
           categories: event.categories,
           geometry_date: geo?.date,
           distance_miles: Math.round(dist),
-          source_url: event.sources?.[0]?.url
+          source_url: event.sources?.[0]?.url,
+          service_type: displayCampaignService(dominantCategory),
+          urgency_window: recencyBoost >= 8 ? "Today" : "This week",
+          demand_signal: "Active incident near service area",
+          demand_explanation: "Recent environmental incidents often trigger urgent cleanup, inspection, or demolition demand."
         }
       }),
       confidence: scored.confidence,
@@ -717,10 +899,16 @@ async function fetchEonetOpportunities({
       raw: {
         provider: "NASA_EONET",
         id: event.id,
+        incident_type: String(event.categories?.[0]?.title || "environmental incident"),
+        signal_source: "Environmental incident feed",
         categories: event.categories,
         geometry_date: geo?.date,
         distance_miles: Math.round(dist),
-        source_url: event.sources?.[0]?.url
+        source_url: event.sources?.[0]?.url,
+        service_type: displayCampaignService(dominantCategory),
+        urgency_window: recencyBoost >= 8 ? "Today" : "This week",
+        demand_signal: "Active incident near service area",
+        demand_explanation: "Recent environmental incidents often trigger urgent cleanup, inspection, or demolition demand."
       },
       createdAtIso: new Date().toISOString()
     });

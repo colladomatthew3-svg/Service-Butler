@@ -20,7 +20,19 @@ export async function GET() {
     .eq("account_id", accountId)
     .order("category", { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    const message = String(error.message || "");
+    const missingRulesTable =
+      message.includes("routing_rules") &&
+      (message.includes("schema cache") || message.includes("does not exist") || message.includes("not found"));
+    if (missingRulesTable) {
+      return NextResponse.json({
+        rules: [],
+        warning: "Routing rules table is unavailable locally. Run migrations to enable saved routing."
+      });
+    }
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
   return NextResponse.json({ rules: data || [] });
 }
 

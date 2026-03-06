@@ -51,7 +51,7 @@ export function DashboardAppShell({
         >
           <div className="mb-8 flex items-center justify-between">
             <div className="space-y-3">
-              <Logo variant="full" size={42} className="h-10 w-auto" />
+              <Logo variant="mark" size={32} className="h-8 w-auto" />
               <p className="text-xs uppercase tracking-[0.14em] text-semantic-muted">Ops Console</p>
             </div>
             <button

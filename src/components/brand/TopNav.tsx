@@ -13,9 +13,9 @@ const navLinks = [
 export function TopNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-semantic-border/80 bg-semantic-surface/90 backdrop-blur-xl">
-      <div className="container flex min-h-24 items-center gap-4 py-4">
+      <div className="container flex min-h-20 items-center gap-4 py-4">
         <Link href="/" className="min-w-0 flex-1 md:flex-none">
-          <Logo variant="full" size={52} className="h-10 w-auto max-w-[230px] md:h-[52px] md:max-w-none" />
+          <Logo variant="full" size={40} className="h-10 w-auto max-w-[240px]" />
         </Link>
         <nav className="ml-auto hidden items-center gap-7 text-base font-semibold text-semantic-muted lg:flex">
           {navLinks.map((link) => (

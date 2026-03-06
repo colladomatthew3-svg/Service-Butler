@@ -330,6 +330,9 @@ function createDemoOpportunities({
       : "stable weather window";
     const timeWindow = intentScore >= 80 ? "next 2 hours" : intentScore >= 68 ? "today" : "this week";
     const distance = distanceSummary(i, locationText);
+    const distanceMiles = 4 + (i % 5) * 6;
+    const serviceType = displayService(category);
+    const demandSignal = tags.join(", ");
     const reasonSummary = `Why this opportunity: ${weatherSignal}, ${timeWindow} demand window, ${distance}, ${displayService(category)} service match.`;
 
     out.push({
@@ -337,7 +340,7 @@ function createDemoOpportunities({
       source: "demo",
       category,
       title: `${phrase} near ${locationText}`,
-      description: `Signals indicate ${displayService(category).toLowerCase()} demand lift in this zone.`,
+      description: `Signals indicate ${serviceType.toLowerCase()} demand lift in this zone.`,
       locationText,
       lat: null,
       lon: null,
@@ -348,7 +351,16 @@ function createDemoOpportunities({
         title: `${phrase} near ${locationText}`,
         description: `Signals indicate ${displayService(category).toLowerCase()} demand lift in this zone.`,
         reasonSummary,
-        raw: { mode: "demo", category, triggers: triggers || [] }
+        raw: {
+          mode: "demo",
+          category,
+          triggers: triggers || [],
+          weather_signal: weatherSignal,
+          forecast_window: timeWindow,
+          distance_miles: distanceMiles,
+          service_type: serviceType,
+          demand_signal: demandSignal
+        }
       }),
       confidence,
       tags,
@@ -356,7 +368,16 @@ function createDemoOpportunities({
       reasonSummary,
       recommendedCreateMode: intentScore >= 76 ? "job" : "lead",
       recommendedScheduleIso: intentScore >= 70 ? suggestedSchedule(intentScore, 75) : null,
-      raw: { mode: "demo", category, triggers: triggers || [] },
+      raw: {
+        mode: "demo",
+        category,
+        triggers: triggers || [],
+        weather_signal: weatherSignal,
+        forecast_window: timeWindow,
+        distance_miles: distanceMiles,
+        service_type: serviceType,
+        demand_signal: demandSignal
+      },
       createdAtIso: new Date().toISOString()
     });
   }

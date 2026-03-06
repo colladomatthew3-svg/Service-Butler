@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CloudSun, Droplets, TriangleAlert, ChevronRight } from "lucide-react";
+import { CloudRain, CloudSun, ChevronRight, Droplets, Snowflake, SunMedium, TriangleAlert } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -126,6 +126,19 @@ export function WeatherTicker({
           )}
         </div>
 
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {buildWeatherSignals(forecast).map((signal) => (
+            <div key={signal.title} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+              <div className="flex items-center gap-2 text-brand-700">
+                <signal.icon className="h-4 w-4" />
+                <p className="text-xs font-semibold uppercase tracking-[0.14em]">{signal.title}</p>
+              </div>
+              <p className="mt-2 text-sm font-semibold text-semantic-text">{signal.window}</p>
+              <p className="mt-1 text-sm text-semantic-muted">{signal.detail}</p>
+            </div>
+          ))}
+        </div>
+
         <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next 6 Hours</p>
           <div className="mt-2 grid grid-cols-3 gap-2">
@@ -204,4 +217,39 @@ export function weatherImpact(forecast: Forecast) {
     title: "Stable conditions",
     detail: "Good window for scheduled maintenance and lower-priority follow-up jobs."
   };
+}
+
+function buildWeatherSignals(forecast: Forecast) {
+  const precip = forecast.current.precipitationChance ?? 0;
+  const wind = forecast.current.windKph ?? 0;
+  const tempHigh = Math.max(...forecast.next5Days.map((day) => day.max));
+  const tempLow = Math.min(...forecast.next5Days.map((day) => day.min));
+  const nextWet = forecast.next6Hours.some((hour) => hour.precipChance >= 55);
+
+  return [
+    {
+      title: "Storm risk",
+      window: nextWet || wind >= 28 ? "Next 6 hours" : "Monitoring",
+      detail: nextWet || wind >= 28 ? "Expect urgent leak and roof-response demand." : "No severe storm surge detected right now.",
+      icon: CloudRain
+    },
+    {
+      title: "Heavy rain",
+      window: precip >= 45 ? "Today" : "Low pressure",
+      detail: precip >= 45 ? "Water intrusion and plumbing calls should trend upward." : "Rain risk is present but not yet driving a volume spike.",
+      icon: Droplets
+    },
+    {
+      title: "Freeze alert",
+      window: tempLow <= 34 ? "Overnight" : "Inactive",
+      detail: tempLow <= 34 ? "Frozen pipe and no-heat urgency should increase." : "No freeze-driven service pressure in the current forecast.",
+      icon: Snowflake
+    },
+    {
+      title: "Heat wave",
+      window: tempHigh >= 90 ? "Next 5 days" : "Normal load",
+      detail: tempHigh >= 90 ? "Expect higher HVAC volume and tighter scheduling windows." : "Heat-driven HVAC demand is in a normal operating range.",
+      icon: SunMedium
+    }
+  ];
 }

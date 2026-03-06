@@ -1,10 +1,9 @@
 import { CalendarClock, Truck } from "lucide-react";
-import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 
 export default async function SchedulePage() {
@@ -44,13 +43,13 @@ export default async function SchedulePage() {
         </CardHeader>
         <CardBody className="space-y-4">
           {Object.keys(groups).length === 0 && (
-            <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-5">
-              <p className="text-base font-semibold text-semantic-text">No scheduled jobs yet</p>
-              <p className="mt-1 text-sm text-semantic-muted">Open a lead and set a visit time to build this calendar.</p>
-              <Link href="/dashboard/leads" className="mt-4 inline-block">
-                <Button size="sm">Open Lead Inbox</Button>
-              </Link>
-            </div>
+            <EmptyState
+              icon={<CalendarClock className="h-5 w-5" />}
+              title="No scheduled jobs yet"
+              description="Convert a lead into a job to populate your calendar and give dispatch a real schedule to work from."
+              ctaLabel="Open Lead Inbox"
+              ctaHref="/dashboard/leads"
+            />
           )}
           {Object.entries(groups).map(([day, items]) => (
             <div key={day} className="space-y-3">

@@ -4,6 +4,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { BriefcaseBusiness } from "lucide-react";
 
 export default async function JobsPage() {
   const { accountId, supabase } = await getCurrentUserContext();
@@ -23,7 +25,15 @@ export default async function JobsPage() {
           <h2 className="dashboard-section-title text-semantic-text">Jobs Board</h2>
         </CardHeader>
         <CardBody className="space-y-3">
-          {(jobs || []).length === 0 && <p className="text-sm text-semantic-muted">No jobs yet. Convert a lead or dispatch from Scanner.</p>}
+          {(jobs || []).length === 0 && (
+            <EmptyState
+              icon={<BriefcaseBusiness className="h-5 w-5" />}
+              title="No jobs yet"
+              description="Claim a Scanner opportunity or convert a lead into a job to start filling the jobs board."
+              ctaLabel="Open Scanner"
+              ctaHref="/dashboard/scanner"
+            />
+          )}
 
           {(jobs || []).map((job) => (
             <article key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-4">

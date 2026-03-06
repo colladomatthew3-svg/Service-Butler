@@ -362,9 +362,14 @@ export function LeadInboxView() {
         <Card>
           <CardBody className="py-12 text-center">
             <p className="text-lg font-semibold text-semantic-text">No leads found</p>
-            <p className="mt-1 text-sm text-semantic-muted">Try clearing filters or add a new lead to start your queue.</p>
-            <p className="mt-2 text-sm text-semantic-muted">Tip: add one HVAC or plumbing lead to see intent scoring in action.</p>
-            <div className="mt-5">
+            <p className="mt-1 text-sm text-semantic-muted">Run the Lead Scanner or add a new lead to start the inbox workflow.</p>
+            <p className="mt-2 text-sm text-semantic-muted">The inbox gets stronger once weather-driven opportunities begin converting into leads.</p>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <Link href="/dashboard/scanner">
+                <Button size="lg" variant="secondary">
+                  Open Scanner
+                </Button>
+              </Link>
               <Button size="lg" onClick={() => setShowAdd(true)}>
                 <Plus className="h-4 w-4" />
                 Add Lead

@@ -185,7 +185,12 @@ function PipelineColumn({
         </div>
       </CardHeader>
       <CardBody className="space-y-3">
-        {items.length === 0 && <p className="text-sm text-semantic-muted">No jobs here.</p>}
+        {items.length === 0 && (
+          <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2 p-4">
+            <p className="text-sm font-semibold text-semantic-text">{emptyStateTitle(title)}</p>
+            <p className="mt-1 text-sm text-semantic-muted">{emptyStateDescription(title)}</p>
+          </div>
+        )}
         {items.map((job) => (
           <article key={job.id} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
             <div className="flex items-start justify-between gap-2">
@@ -230,6 +235,18 @@ function PipelineColumn({
       </CardBody>
     </Card>
   );
+}
+
+function emptyStateTitle(title: Pipeline) {
+  if (title === "NEW") return "Run the Lead Scanner to generate opportunities.";
+  if (title === "SCHEDULED") return "Convert a lead into a job to populate your calendar.";
+  return `No jobs in ${label(title)} yet.`;
+}
+
+function emptyStateDescription(title: Pipeline) {
+  if (title === "NEW") return "Weather-driven opportunities and newly converted jobs will land here first.";
+  if (title === "SCHEDULED") return "Booked work appears here once dispatch confirms timing and crew assignment.";
+  return "Move work forward from the previous stage to build this column.";
 }
 
 function SummaryCard({ label, value }: { label: string; value: string }) {

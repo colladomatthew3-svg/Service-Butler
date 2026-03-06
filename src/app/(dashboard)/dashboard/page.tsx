@@ -346,7 +346,10 @@ export default async function DashboardOverviewPage() {
               </Link>
             ))}
             {(opportunities || []).length === 0 && (
-              <p className="text-sm text-semantic-muted">No opportunities yet. Run a scanner sweep to detect jobs.</p>
+              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2 p-4">
+                <p className="text-sm font-semibold text-semantic-text">Run the Lead Scanner to generate opportunities.</p>
+                <p className="mt-1 text-sm text-semantic-muted">Weather and service-demand signals will appear here once the first scan is complete.</p>
+              </div>
             )}
           </CardBody>
         </Card>
@@ -415,7 +418,12 @@ export default async function DashboardOverviewPage() {
             </div>
           </CardHeader>
           <CardBody className="space-y-3">
-            {nextUp.length === 0 && <p className="text-sm text-semantic-muted">No jobs scheduled. Convert a lead and set a slot.</p>}
+            {nextUp.length === 0 && (
+              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2 p-4">
+                <p className="text-sm font-semibold text-semantic-text">Convert a lead into a job to populate your calendar.</p>
+                <p className="mt-1 text-sm text-semantic-muted">Once work is booked, the next scheduled visits will show up here for dispatch.</p>
+              </div>
+            )}
             {nextUp.map((job) => (
               <Link
                 key={job.id}

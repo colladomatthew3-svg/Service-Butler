@@ -528,7 +528,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Radius (mi)</p>
-              <Select value={radius} onChange={(e) => setRadius(e.target.value)}>
+              <Select data-testid="scanner-radius" value={radius} onChange={(e) => setRadius(e.target.value)}>
                 {["5", "10", "25", "50", "100"].map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}

@@ -99,6 +99,14 @@ export function WeatherTicker({
   }
 
   const impact = weatherImpact(forecast);
+  const tickerItems = buildTickerItems({
+    locationLabel,
+    currentCondition: forecast.current.condition,
+    currentTemp: forecast.current.temp,
+    precipitationChance: forecast.current.precipitationChance,
+    windKph: forecast.current.windKph,
+    impact: impact.title
+  });
 
   return (
     <Card className="overflow-hidden">
@@ -125,6 +133,18 @@ export function WeatherTicker({
             <BadgeStat icon={<Droplets className="h-3 w-3" />} label={`Rain ${forecast.current.precipitationChance}%`} />
           )}
         </div>
+
+        {compact && tickerItems.length > 0 && (
+          <div className="weather-ticker-strip" aria-label="Weather ticker updates">
+            <div className="weather-ticker-track">
+              {[...tickerItems, ...tickerItems].map((item, index) => (
+                <span key={`${item}-${index}`} className="weather-ticker-item">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next 6 Hours</p>
@@ -170,6 +190,32 @@ export function WeatherTicker({
       </CardBody>
     </Card>
   );
+}
+
+function buildTickerItems({
+  locationLabel,
+  currentCondition,
+  currentTemp,
+  precipitationChance,
+  windKph,
+  impact
+}: {
+  locationLabel?: string | null;
+  currentCondition: string;
+  currentTemp: number;
+  precipitationChance?: number;
+  windKph?: number;
+  impact: string;
+}) {
+  const items = [
+    locationLabel ? `Location: ${locationLabel}` : "Location: Service area",
+    `Now: ${currentTemp}° and ${currentCondition}`,
+    precipitationChance != null ? `Rain chance: ${precipitationChance}%` : null,
+    windKph != null ? `Wind: ${windKph} kph` : null,
+    `Demand signal: ${impact}`
+  ].filter(Boolean);
+
+  return items as string[];
 }
 
 function BadgeStat({ icon, label }: { icon: ReactNode; label: string }) {

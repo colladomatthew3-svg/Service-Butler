@@ -74,7 +74,7 @@ export function WeatherTicker({
           <p className="text-sm text-semantic-muted">Add your service area to unlock weather-based demand and urgency signals.</p>
           <Link href="/dashboard/settings">
             <Button size="sm" variant="secondary">
-              Set weather location
+              Set service area
               <ChevronRight className="h-4 w-4" />
             </Button>
           </Link>
@@ -195,7 +195,7 @@ export function WeatherTicker({
           )}
           <Link href={`/dashboard/scanner${locationLabel ? `?location=${encodeURIComponent(locationLabel)}` : ""}`}>
             <Button size="sm">
-              Generate Weather Leads
+              Scan for Weather Opportunities
               <ChevronRight className="h-4 w-4" />
             </Button>
           </Link>

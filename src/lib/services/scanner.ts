@@ -237,6 +237,14 @@ function displayService(category: ScannerCategory) {
   return "General";
 }
 
+function displayCampaignService(category: ScannerCategory, campaignMode?: CampaignMode) {
+  if (campaignMode === "Roofing") return "Roofing";
+  if (campaignMode === "HVAC Emergency") return "HVAC";
+  if (campaignMode === "Water Damage" && category === "plumbing") return "Pipe Burst";
+  if (campaignMode === "Storm Response") return category === "restoration" ? "Storm Restoration" : displayService(category);
+  return displayService(category);
+}
+
 function mkId(parts: string[]) {
   return `scan-${hash(parts.join("|"))}`;
 }
@@ -315,7 +323,15 @@ function createDemoOpportunities({
 
   for (let i = 0; i < count; i += 1) {
     const category = categories[Math.floor(rand() * categories.length)] || "general";
-    const phrase = phrases[category][Math.floor(rand() * phrases[category].length)];
+    const phrasePool =
+      campaignMode === "Roofing"
+        ? ["Roof leak calls rising", "Missing shingle reports", "Storm damage inspection requests"]
+        : campaignMode === "HVAC Emergency"
+          ? ["No-cool emergency calls", "After-hours HVAC failures", "Comfort outage requests"]
+          : campaignMode === "Water Damage"
+            ? ["Freeze risk service calls", "Pipe burst alerts", "Water intrusion demand"]
+            : phrases[category];
+    const phrase = phrasePool[Math.floor(rand() * phrasePool.length)];
     const tags = [
       tagsByCategory[category][Math.floor(rand() * tagsByCategory[category].length)],
       tagsByCategory[category][Math.floor(rand() * tagsByCategory[category].length)],
@@ -331,9 +347,9 @@ function createDemoOpportunities({
     const timeWindow = intentScore >= 80 ? "next 2 hours" : intentScore >= 68 ? "today" : "this week";
     const distance = distanceSummary(i, locationText);
     const distanceMiles = 4 + (i % 5) * 6;
-    const serviceType = displayService(category);
+    const serviceType = displayCampaignService(category, campaignMode);
     const demandSignal = tags.join(", ");
-    const reasonSummary = `Why this opportunity: ${weatherSignal}, ${timeWindow} demand window, ${distance}, ${displayService(category)} service match.`;
+    const reasonSummary = `Why this opportunity: ${weatherSignal}, ${timeWindow} demand window, ${distance}, ${serviceType} service match.`;
 
     out.push({
       id,
@@ -349,7 +365,7 @@ function createDemoOpportunities({
         intentScore,
         tags,
         title: `${phrase} near ${locationText}`,
-        description: `Signals indicate ${displayService(category).toLowerCase()} demand lift in this zone.`,
+        description: `Signals indicate ${serviceType.toLowerCase()} demand lift in this zone.`,
         reasonSummary,
         raw: {
           mode: "demo",

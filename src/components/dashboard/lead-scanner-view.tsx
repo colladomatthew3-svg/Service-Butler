@@ -18,7 +18,8 @@ import {
   Wrench,
   X,
   Settings2,
-  TestTube2
+  TestTube2,
+  Clock3
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -34,7 +35,7 @@ import { isDemoMode } from "@/lib/services/review-mode";
 type Mode = "demo" | "live";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
 type Tab = "feed" | "rules" | "harness";
-type CampaignMode = "Restoration" | "Plumbing" | "Demo / Asbestos";
+type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
 type Trigger = "storm" | "heavy-rain" | "freeze" | "high-wind";
 
 type ScannerEvent = {
@@ -81,11 +82,48 @@ const categoryLabel: Record<Category, string> = {
   general: "General"
 };
 
+const campaignOptions: Array<{
+  value: CampaignMode;
+  label: string;
+  helper: string;
+  categories: Category[];
+  triggers: Trigger[];
+}> = [
+  {
+    value: "Storm Response",
+    label: "Storm Damage / Restoration",
+    helper: "Roof damage, wind loss, emergency tarping, water intrusion.",
+    categories: ["restoration"],
+    triggers: ["storm", "heavy-rain", "high-wind"]
+  },
+  {
+    value: "Roofing",
+    label: "Roof Leaks / Roofing",
+    helper: "Shingles, leak calls, storm inspection demand.",
+    categories: ["restoration", "general"],
+    triggers: ["storm", "heavy-rain", "high-wind"]
+  },
+  {
+    value: "Water Damage",
+    label: "Freeze / Pipe Burst",
+    helper: "Burst pipes, flooding, water extraction, mitigation.",
+    categories: ["plumbing", "restoration"],
+    triggers: ["freeze", "heavy-rain"]
+  },
+  {
+    value: "HVAC Emergency",
+    label: "HVAC Failure",
+    helper: "No-cool, no-heat, outage-driven comfort calls.",
+    categories: ["general"],
+    triggers: ["high-wind", "freeze"]
+  }
+];
+
 export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   const [mode, setMode] = useState<Mode>("demo");
   const [tab, setTab] = useState<Tab>(initialTab);
   const [location, setLocation] = useState("11788");
-  const [campaignMode, setCampaignMode] = useState<CampaignMode>("Restoration");
+  const [campaignMode, setCampaignMode] = useState<CampaignMode>("Storm Response");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
   const [radius, setRadius] = useState("25");
@@ -129,6 +167,31 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     const pick = selectedCategories[0] || "general";
     return rules.find((rule) => rule.category === pick && rule.enabled) || null;
   }, [rules, selectedCategories]);
+
+  const intakeSummary = useMemo(() => {
+    const summary = sortedEvents.reduce(
+      (acc, event) => {
+        acc.total += 1;
+        acc.bySource[event.source] = (acc.bySource[event.source] || 0) + 1;
+        if (event.intent_score >= 78) acc.highUrgency += 1;
+        if (String(event.raw?.weather_signal || "").trim()) acc.weatherDriven += 1;
+        return acc;
+      },
+      {
+        total: 0,
+        highUrgency: 0,
+        weatherDriven: 0,
+        bySource: {} as Record<string, number>
+      }
+    );
+
+    const topSource = Object.entries(summary.bySource).sort((a, b) => b[1] - a[1])[0]?.[0] || "demo";
+
+    return {
+      ...summary,
+      topSource
+    };
+  }, [sortedEvents]);
 
   useEffect(() => {
     setTab(initialTab);
@@ -463,8 +526,8 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Opportunity Scanner"
-        subtitle="Live signal feed for dispatch: route each opportunity to a lead or scheduled job in one click."
+      title="Opportunity Scanner"
+      subtitle="Find weather-driven jobs, explain why they matter, and route the best ones into leads or scheduled work."
         actions={
           <div className="flex items-center gap-2">
             <Link href="/dashboard/scanner/harness">
@@ -514,15 +577,19 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 value={campaignMode}
                 onChange={(e) => {
                   const next = e.target.value as CampaignMode;
+                  const preset = campaignOptions.find((option) => option.value === next);
                   setCampaignMode(next);
-                  if (next === "Restoration") setSelectedCategories(["restoration"]);
-                  if (next === "Plumbing") setSelectedCategories(["plumbing"]);
-                  if (next === "Demo / Asbestos") setSelectedCategories(["demolition", "asbestos"]);
+                  if (preset) {
+                    setSelectedCategories(preset.categories);
+                    setSelectedTriggers(preset.triggers);
+                  }
                 }}
               >
-                <option value="Restoration">Restoration</option>
-                <option value="Plumbing">Plumbing</option>
-                <option value="Demo / Asbestos">Demo / Asbestos</option>
+                {campaignOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </Select>
             </div>
 
@@ -558,6 +625,16 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 {zip}
               </Button>
             ))}
+          </div>
+
+          <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Campaign focus</p>
+            <p className="mt-2 text-sm font-medium text-semantic-text">
+              {campaignOptions.find((option) => option.value === campaignMode)?.helper}
+            </p>
+            <p className="mt-1 text-sm text-semantic-muted">
+              Saved weather service area fills the scanner by default, so your demo always starts from the contractor’s real market.
+            </p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -648,6 +725,29 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
       {tab === "feed" && (
         <section className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-4">
+            <SummaryStat
+              label="Signals captured"
+              value={String(intakeSummary.total)}
+              helper="Scanner, weather, and demo opportunity intake."
+            />
+            <SummaryStat
+              label="High urgency"
+              value={String(intakeSummary.highUrgency)}
+              helper="Opportunities that should be called or booked first."
+            />
+            <SummaryStat
+              label="Weather driven"
+              value={String(intakeSummary.weatherDriven)}
+              helper="Records with an active weather explanation."
+            />
+            <SummaryStat
+              label="Top source"
+              value={sourceLabel(intakeSummary.topSource)}
+              helper="Most active intake channel in the current feed."
+            />
+          </div>
+
           {loading && (
             <Card>
               <CardBody className="space-y-3">
@@ -664,7 +764,9 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               <CardBody className="py-12 text-center">
                 <Radar className="mx-auto h-10 w-10 text-brand-700" />
                 <p className="mt-3 text-lg font-semibold text-semantic-text">Scanner is listening</p>
-                <p className="mt-1 text-sm text-semantic-muted">Run a scan to populate live opportunities and dispatch actions.</p>
+                <p className="mt-1 text-sm text-semantic-muted">
+                  Run a scan to surface storm damage, water loss, freeze risk, and emergency service demand in your service area.
+                </p>
               </CardBody>
             </Card>
           )}
@@ -679,13 +781,19 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 <CardBody className="grid gap-4 lg:grid-cols-[180px_1fr_auto] lg:items-center">
                   <div className="space-y-2">
                     <Badge variant={event.intent_score >= 78 ? "warning" : event.intent_score >= 62 ? "brand" : "default"}>
-                      Intent {event.intent_score}
+                      {urgencyLabel(event.intent_score)}
                     </Badge>
                     <p className="text-sm font-semibold text-semantic-text">{categoryLabel[event.category]}</p>
-                    <p className="inline-flex items-center gap-1 text-xs text-semantic-muted">
-                      <Gauge className="h-3.5 w-3.5" />
-                      Confidence {event.confidence}
-                    </p>
+                    <div className="space-y-1 text-xs text-semantic-muted">
+                      <p className="inline-flex items-center gap-1">
+                        <Gauge className="h-3.5 w-3.5" />
+                        Intent {event.intent_score} · Confidence {event.confidence}
+                      </p>
+                      <p className="inline-flex items-center gap-1">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        Detected {relativeAge(event.created_at)}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -700,9 +808,11 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       <MapPin className="h-4 w-4" />
                       {event.location_text || "Service area"}
                     </p>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-semantic-muted">
-                      {sourceLabel(event.source)} · {relativeAge(event.created_at)}
-                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="default">Source: {sourceLabel(event.source)}</Badge>
+                      <Badge variant="default">Priority: {priorityFromScore(event.intent_score)}</Badge>
+                      <Badge variant="default">Detected: {relativeAge(event.created_at)}</Badge>
+                    </div>
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this opportunity exists</p>
                       <p className="mt-2 text-sm font-medium text-semantic-text">{reasonSummary}</p>
@@ -734,15 +844,15 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     </Button>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                      Add as Lead
+                      Create Lead
                     </Button>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
-                      Add as Job
+                      Schedule Inspection
                     </Button>
                     <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
-                      Claim Job
+                      {recommendedActionLabel(event.intent_score)}
                     </Button>
                   </div>
                 </CardBody>
@@ -1014,9 +1124,11 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 function sourceLabel(source: string) {
-  if (source === "weather") return "Contractor Board";
-  if (source === "public_feed") return "Neighborhood Forum";
-  return "FB Group";
+  if (source === "weather") return "Weather Watch";
+  if (source === "public_feed") return "Neighborhood Feed";
+  if (source === "google_places") return "Local Search";
+  if (source === "demo") return "Demo Feed";
+  return "Referral Feed";
 }
 
 function getOpportunityReasonDetails(event: ScannerEvent) {
@@ -1041,6 +1153,36 @@ function ReasonStat({ label, value }: { label: string; value: string }) {
       <p className="mt-2 text-sm font-medium text-semantic-text">{value}</p>
     </div>
   );
+}
+
+function SummaryStat({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return (
+    <Card>
+      <CardBody className="space-y-1 py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+        <p className="text-2xl font-semibold text-semantic-text">{value}</p>
+        <p className="text-sm text-semantic-muted">{helper}</p>
+      </CardBody>
+    </Card>
+  );
+}
+
+function urgencyLabel(intentScore: number) {
+  if (intentScore >= 85) return "Emergency response";
+  if (intentScore >= 72) return "Same-day follow-up";
+  return "Monitor and qualify";
+}
+
+function priorityFromScore(intentScore: number) {
+  if (intentScore >= 85) return "Call now";
+  if (intentScore >= 72) return "Follow up";
+  return "Schedule later";
+}
+
+function recommendedActionLabel(intentScore: number) {
+  if (intentScore >= 82) return "Convert to Job";
+  if (intentScore >= 68) return "Assign Follow-up";
+  return "Add to Pipeline";
 }
 
 function relativeAge(iso: string) {

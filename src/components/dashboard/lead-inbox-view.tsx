@@ -402,6 +402,16 @@ export function LeadInboxView() {
                     </div>
 
                     <IntentMeter score={lead.intentScore} signalCount={lead.signalCount} />
+                    <div className="flex flex-wrap gap-2 text-xs font-semibold text-semantic-muted">
+                      <span className="rounded-full bg-semantic-surface2 px-3 py-1">Source: {leadSourceLabel(lead.source)}</span>
+                      <span className="rounded-full bg-semantic-surface2 px-3 py-1">Detected: {relativeTime(lead.created_at)}</span>
+                      <span className="rounded-full bg-semantic-surface2 px-3 py-1">{lead.requested_timeframe || "Timing pending"}</span>
+                    </div>
+                    {lead.notes && (
+                      <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-3 py-2 text-sm text-semantic-muted">
+                        <span className="font-semibold text-semantic-text">Why this lead matters:</span> {lead.notes}
+                      </div>
+                    )}
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-3 py-2 text-sm text-semantic-muted">
                       <span className="font-semibold text-semantic-text">Next step:</span> {nextStepLabel(lead)}
                     </div>
@@ -492,8 +502,10 @@ export function LeadInboxView() {
                             <Badge variant={statusBadge(lead.status)}>{lead.status}</Badge>
                             {lead.converted_job_id && <Badge variant="success">Job</Badge>}
                             {isUrgent(lead.requested_timeframe) && <Badge variant="warning">ASAP</Badge>}
+                            <Badge variant="default">{leadSourceLabel(lead.source)}</Badge>
                           </div>
                           <p className="text-xs text-semantic-muted">{[lead.address, lead.city, lead.state].filter(Boolean).join(", ") || "Location pending"}</p>
+                          {lead.notes && <p className="text-xs text-semantic-muted">{lead.notes}</p>}
                         </div>
                       </TD>
                       <TD>
@@ -656,6 +668,14 @@ export function LeadInboxView() {
       )}
     </div>
   );
+}
+
+function leadSourceLabel(source: string) {
+  const normalized = String(source || "manual").toLowerCase();
+  if (normalized === "scanner") return "Scanner";
+  if (normalized === "import") return "Imported";
+  if (normalized === "manual") return "Manual";
+  return normalized.replace(/_/g, " ");
 }
 
 function FilterChips({

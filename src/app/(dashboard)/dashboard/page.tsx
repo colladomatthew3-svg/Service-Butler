@@ -263,16 +263,16 @@ export default async function DashboardOverviewPage() {
         </CardHeader>
         <CardBody className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/dashboard/scanner">
-            <Button size="lg" fullWidth>Claim Opportunity</Button>
+            <Button size="lg" fullWidth>Run Opportunity Scan</Button>
           </Link>
           <Link href="/dashboard/leads">
             <Button size="lg" variant="secondary" fullWidth>Call New Leads</Button>
           </Link>
           <Link href="/dashboard/pipeline">
-            <Button size="lg" variant="secondary" fullWidth>Move Pipeline</Button>
+            <Button size="lg" variant="secondary" fullWidth>Assign Follow-up</Button>
           </Link>
           <Link href="/dashboard/schedule">
-            <Button size="lg" variant="secondary" fullWidth>Review Schedule</Button>
+            <Button size="lg" variant="secondary" fullWidth>Schedule Inspection</Button>
           </Link>
         </CardBody>
       </Card>
@@ -338,6 +338,7 @@ export default async function DashboardOverviewPage() {
                   <div>
                     <p className="font-semibold text-semantic-text">{item.title}</p>
                     <p className="text-sm text-semantic-muted">{item.category} · {item.location_text || "Service area"}</p>
+                    <p className="mt-1 text-xs text-semantic-muted">Open Scanner to create a lead, assign follow-up, or schedule the inspection.</p>
                   </div>
                   <Badge variant={Number(item.intent_score) >= 75 ? "warning" : "default"}>
                     {Number(item.intent_score) || 0}

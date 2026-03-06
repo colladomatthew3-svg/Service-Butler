@@ -95,7 +95,10 @@ export function WeatherSettingsForm() {
     <div className="space-y-5">
       <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
         <p className="text-sm font-semibold text-semantic-text">Service area weather location</p>
-        <p className="mt-1 text-sm text-semantic-muted">Use city/state/postal for quick setup. Latitude/longitude is optional for precise routing.</p>
+        <p className="mt-1 text-sm text-semantic-muted">
+          Use the market you actually serve so storm damage, water intrusion, freeze risk, and HVAC urgency signals stay relevant.
+          Latitude/longitude is optional for precise routing.
+        </p>
         {current?.weather_location_label && (
           <p data-testid="weather-current-location" className="mt-2 text-sm text-semantic-muted">
             Current: {current.weather_location_label}

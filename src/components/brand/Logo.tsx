@@ -1,10 +1,10 @@
-"use client";
-
 import Image from "next/image";
-import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils/cn";
 
 type LogoVariant = "full" | "mark" | "wordmark" | "lockup";
+
+const FULL_LOGO_RATIO = 1228 / 938;
+const MARK_RATIO = 581 / 492;
 
 export function Logo({
   variant = "full",
@@ -15,35 +15,30 @@ export function Logo({
   size?: number;
   className?: string;
 }) {
-  const [broken, setBroken] = useState(false);
-  const normalized = variant === "wordmark" || variant === "lockup" ? "full" : variant;
-  const isMark = normalized === "mark";
+  const isMark = variant === "mark";
+  const width = Math.round(size * (isMark ? MARK_RATIO : FULL_LOGO_RATIO));
 
-  const source = useMemo(() => (isMark ? "/brand/logo-mark.png" : "/brand/logo.png"), [isMark]);
-  const width = isMark ? size : Math.round(size * 3.9);
-
-  if (broken) {
+  if (isMark) {
     return (
-      <span
-        className={cn(
-          "inline-flex items-center rounded-lg bg-semantic-surface2 px-3 py-1.5 text-sm font-semibold text-semantic-text",
-          className
-        )}
-      >
-        ServiceButler
-      </span>
+      <Image
+        src="/brand/servicebutler_icon.svg"
+        alt="Service Butler icon"
+        width={width}
+        height={size}
+        className={cn("h-auto w-auto object-contain", className)}
+        priority
+      />
     );
   }
 
   return (
     <Image
-      src={source}
-      alt={isMark ? "ServiceButler logo mark" : "ServiceButler logo"}
+      src="/brand/servicebutler_logo.svg"
+      alt="Service Butler logo"
       width={width}
       height={size}
       className={cn("h-auto w-auto object-contain", className)}
-      onError={() => setBroken(true)}
-      priority={!isMark}
+      priority
     />
   );
 }

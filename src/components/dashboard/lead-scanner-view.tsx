@@ -29,11 +29,13 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 type Mode = "demo" | "live";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
 type Tab = "feed" | "rules" | "harness";
 type CampaignMode = "Restoration" | "Plumbing" | "Demo / Asbestos";
+type Trigger = "storm" | "heavy-rain" | "freeze" | "high-wind";
 
 type ScannerEvent = {
   id: string;
@@ -64,6 +66,12 @@ type RoutingRule = {
 };
 
 const categories: Category[] = ["restoration", "plumbing", "demolition", "asbestos", "general"];
+const triggerOptions: Array<{ id: Trigger; label: string }> = [
+  { id: "storm", label: "Storm" },
+  { id: "heavy-rain", label: "Heavy Rain" },
+  { id: "freeze", label: "Freeze" },
+  { id: "high-wind", label: "High Wind" }
+];
 
 const categoryLabel: Record<Category, string> = {
   plumbing: "Plumbing",
@@ -83,10 +91,12 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   const [radius, setRadius] = useState("25");
   const [limit, setLimit] = useState("20");
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([...categories]);
+  const [selectedTriggers, setSelectedTriggers] = useState<Trigger[]>(["storm", "heavy-rain"]);
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<ScannerEvent[]>([]);
   const [preview, setPreview] = useState<ScannerEvent | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [demoActionMessage, setDemoActionMessage] = useState<string | null>(null);
 
   const [rules, setRules] = useState<RoutingRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
@@ -158,6 +168,30 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     loadRules();
   }, [loadEvents, loadRules]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWeatherDefaults() {
+      const res = await fetch("/api/settings/weather");
+      const data = (await res.json().catch(() => ({}))) as {
+        weather_location_label?: string | null;
+        weather_lat?: number | null;
+        weather_lng?: number | null;
+      };
+
+      if (!res.ok || cancelled) return;
+
+      setLocation((prev) => prev || data.weather_location_label || "11788");
+      setLat((prev) => prev || (data.weather_lat != null ? String(data.weather_lat) : ""));
+      setLon((prev) => prev || (data.weather_lng != null ? String(data.weather_lng) : ""));
+    }
+
+    loadWeatherDefaults();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function parseNum(value: string) {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -173,6 +207,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         location,
         campaignMode,
         categories: selectedCategories,
+        triggers: selectedTriggers,
         limit: Number(limit) || 20,
         radius: Number(radius) || 25,
         lat: parseNum(lat),
@@ -282,11 +317,19 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       mode?: "lead" | "job";
       leadId?: string;
       jobId?: string;
+      message?: string;
+      redirectPath?: string;
     };
     setDispatchingId(null);
 
     if (!res.ok) {
       showToast(data.error || "Dispatch failed");
+      return;
+    }
+
+    if (isDemoMode()) {
+      setDemoActionMessage(data.message || "Opportunity routed in demo mode.");
+      showToast(data.message || "Opportunity routed");
       return;
     }
 
@@ -440,6 +483,12 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
       <Card>
         <CardBody className="space-y-4">
+          {demoActionMessage && (
+            <div className="rounded-xl border border-brand-500/20 bg-brand-50/70 px-4 py-3 text-sm font-medium text-brand-700">
+              {demoActionMessage}
+            </div>
+          )}
+
           <div className="grid gap-3 lg:grid-cols-[140px_1fr_180px_120px_120px]">
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Mode</p>
@@ -451,7 +500,12 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Service Area</p>
-              <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="ZIP or city (11788, 11705, 10019)" />
+              <Input
+                data-testid="scanner-location"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="ZIP or city (11788, 11705, 10019)"
+              />
             </div>
 
             <div>
@@ -474,7 +528,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Radius (mi)</p>
-              <Select value={radius} onChange={(e) => setRadius(e.target.value)}>
+              <Select data-testid="scanner-radius" value={radius} onChange={(e) => setRadius(e.target.value)}>
                 {["5", "10", "25", "50", "100"].map((value) => (
                   <option key={value} value={value}>{value}</option>
                 ))}
@@ -491,7 +545,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </div>
 
             <div className="self-end">
-              <Button onClick={() => runScan(true)} disabled={loading} fullWidth>
+              <Button data-testid="scanner-run" onClick={() => runScan(true)} disabled={loading} fullWidth>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 Scan Now
               </Button>
@@ -519,7 +573,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </div>
 
             <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Categories</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Services</p>
               <div className="flex flex-wrap gap-2">
                 {categories.map((category) => {
                   const active = selectedCategories.includes(category);
@@ -541,6 +595,33 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                   );
                 })}
               </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Triggers</p>
+            <div className="flex flex-wrap gap-2">
+              {triggerOptions.map((trigger) => {
+                const active = selectedTriggers.includes(trigger.id);
+                return (
+                  <button
+                    key={trigger.id}
+                    type="button"
+                    data-testid={`scanner-trigger-${trigger.id}`}
+                    onClick={() =>
+                      setSelectedTriggers((prev) =>
+                        prev.includes(trigger.id) ? prev.filter((item) => item !== trigger.id) : [...prev, trigger.id]
+                      )
+                    }
+                    className={cn(
+                      "min-h-11 rounded-full px-4 text-sm font-semibold",
+                      active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
+                    )}
+                  >
+                    {trigger.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </CardBody>
@@ -593,7 +674,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             const reasonSummary = String(event.raw?.reason_summary || "Signal pattern indicates near-term service demand.");
 
             return (
-              <Card key={event.id} className="transition hover:shadow-card">
+              <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
                 <CardBody className="grid gap-4 lg:grid-cols-[180px_1fr_auto] lg:items-center">
                   <div className="space-y-2">
                     <Badge variant={event.intent_score >= 78 ? "warning" : event.intent_score >= 62 ? "brand" : "default"}>
@@ -657,7 +738,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         <section className="grid gap-5 xl:grid-cols-[1.2fr_1fr]">
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Routing Rules</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Routing Rules</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               {rulesLoading && (
@@ -701,7 +782,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">{editing ? "Edit Rule" : "Add Rule"}</h2>
+              <h2 className="dashboard-section-title text-semantic-text">{editing ? "Edit Rule" : "Add Rule"}</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <label>
@@ -796,7 +877,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         <section className="space-y-4">
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Live Test Harness</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Live Test Harness</h2>
             </CardHeader>
             <CardBody className="grid gap-3 md:grid-cols-[1fr_180px_180px_auto]">
               <div>
@@ -829,7 +910,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Captured Opportunities ({captured.length})</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Captured Opportunities ({captured.length})</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               {captured.length === 0 && (

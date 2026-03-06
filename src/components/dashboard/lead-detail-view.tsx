@@ -336,7 +336,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         <div className="space-y-5">
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Customer & Job Details</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Customer & Job Details</h2>
             </CardHeader>
             <CardBody className="grid gap-3 sm:grid-cols-2">
               <Detail label="Phone" value={lead.phone || "-"} icon={<PhoneCall className="h-4 w-4" />} />
@@ -358,7 +358,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
           <div ref={scheduleSectionRef}>
             <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Scheduling</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Scheduling</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <div className="flex flex-wrap gap-2">
@@ -389,7 +389,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Notes</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Notes</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <Textarea rows={6} value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="Capture key details for dispatch and tech handoff." />
@@ -408,7 +408,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-lg font-semibold text-semantic-text">Recent Activity</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Recent Activity</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               {timeline.map((entry, idx) => (
@@ -431,7 +431,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-semantic-text">Intent Signals</h2>
+              <h2 className="dashboard-section-title text-semantic-text">Intent Signals</h2>
               <Button variant="secondary" size="sm" onClick={refreshSignals}>
                 <RefreshCw className={cn("h-4 w-4", signalsLoading && "animate-spin")} />
                 Refresh Signals

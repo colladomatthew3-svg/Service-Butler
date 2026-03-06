@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getForecastByLatLng } from "@/lib/services/weather";
+import { isDemoMode } from "@/lib/services/review-mode";
+import { getDemoWeatherSettings } from "@/lib/demo/store";
 
 export async function GET(req: NextRequest) {
-  const lat = Number(req.nextUrl.searchParams.get("lat"));
-  const lng = Number(req.nextUrl.searchParams.get("lng"));
+  let lat = Number(req.nextUrl.searchParams.get("lat"));
+  let lng = Number(req.nextUrl.searchParams.get("lng"));
+
+  if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && isDemoMode()) {
+    const settings = await getDemoWeatherSettings();
+    lat = settings.weather_lat;
+    lng = settings.weather_lng;
+  }
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "lat and lng are required numbers" }, { status: 400 });

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { dispatchDemoScannerEvent } from "@/lib/demo/store";
 import { generateSignals } from "@/lib/services/intent-engine";
+import { isDemoMode } from "@/lib/services/review-mode";
 import { getForecastByLatLng } from "@/lib/services/weather";
 
 type CreateMode = "lead" | "job";
@@ -52,6 +54,25 @@ function randomPhone(seed: string) {
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (isDemoMode()) {
+    const body = (await req.json().catch(() => ({}))) as {
+      createMode?: CreateMode;
+    };
+    const result = dispatchDemoScannerEvent(id, normalizeMode(body.createMode) || undefined);
+    if (!result) {
+      return NextResponse.json({ error: "Scanner event not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      dispatched: true,
+      mode: result.mode,
+      leadId: result.leadId,
+      jobId: result.jobId,
+      message: result.message,
+      redirectPath: "/dashboard/scanner?demoAction=1"
+    });
+  }
+
   const { accountId, role, supabase } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 

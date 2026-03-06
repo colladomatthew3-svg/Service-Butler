@@ -8,6 +8,7 @@ import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
 import { AppTopBar } from "@/components/brand/AppTopBar";
+import { buttonStyles } from "@/components/ui/button";
 
 type NavItem = {
   href: string;
@@ -50,7 +51,7 @@ export function DashboardAppShell({
         >
           <div className="mb-8 flex items-center justify-between">
             <div className="space-y-3">
-              <Logo variant="full" size={34} />
+              <Logo variant="full" size={42} className="h-10 w-auto" />
               <p className="text-xs uppercase tracking-[0.14em] text-semantic-muted">Ops Console</p>
             </div>
             <button
@@ -71,7 +72,7 @@ export function DashboardAppShell({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition",
+                    "sidebar-label flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 transition",
                     active ? "bg-brand-50 text-brand-700" : "text-semantic-muted hover:bg-semantic-surface2 hover:text-semantic-text"
                   )}
                   onClick={() => setOpen(false)}
@@ -85,7 +86,7 @@ export function DashboardAppShell({
 
           <div className="mt-8 rounded-xl bg-semantic-surface2 p-4">
             <p className="text-xs uppercase tracking-wide text-semantic-muted">Today</p>
-            <p className="mt-2 text-sm font-medium text-semantic-text">Prioritize new high-urgency leads first.</p>
+            <p className="sidebar-label mt-2 text-semantic-text">Prioritize new high-urgency leads first.</p>
           </div>
 
           <div className="mt-auto pt-8">{onSignOut}</div>
@@ -115,19 +116,19 @@ export function DashboardAppShell({
                 <Menu className="h-5 w-5" />
               </button>
               <div className="md:hidden">
-                <Logo variant="mark" size={28} />
+                <Logo variant="mark" size={32} className="h-8 w-auto" />
               </div>
               <AppTopBar />
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 lg:hidden">
-              <Link href="/dashboard/scanner">
-                <button className="h-11 w-full rounded-xl bg-semantic-brand px-3 text-sm font-semibold text-white">Scan</button>
+              <Link href="/dashboard/scanner" className={buttonStyles({ size: "sm", className: "w-full" })}>
+                Scan
               </Link>
-              <Link href="/dashboard/leads">
-                <button className="h-11 w-full rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-sm font-semibold text-semantic-text">Leads</button>
+              <Link href="/dashboard/leads" className={buttonStyles({ size: "sm", variant: "secondary", className: "w-full" })}>
+                Leads
               </Link>
-              <Link href="/dashboard/pipeline">
-                <button className="h-11 w-full rounded-xl border border-semantic-border bg-semantic-surface2 px-3 text-sm font-semibold text-semantic-text">Pipeline</button>
+              <Link href="/dashboard/pipeline" className={buttonStyles({ size: "sm", variant: "secondary", className: "w-full" })}>
+                Pipeline
               </Link>
             </div>
           </header>

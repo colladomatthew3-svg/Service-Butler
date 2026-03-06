@@ -205,6 +205,11 @@ function suggestedNextAction(category: ScannerCategory, intentScore: number, loc
   return `Dispatch to lead inbox and follow up within 30 minutes for ${locationText}.`;
 }
 
+function distanceSummary(index: number, locationText: string) {
+  const miles = 4 + (index % 5) * 6;
+  return `${miles} mi from ${locationText}`;
+}
+
 function suggestedSchedule(intentScore: number, slaMinutes = 90) {
   const now = Date.now();
   const target = new Date(now + Math.max(30, slaMinutes) * 60_000);
@@ -320,6 +325,12 @@ function createDemoOpportunities({
     const { intentScore, confidence } = scoreOpportunity(category, tags, forecast, 58 + Math.floor(rand() * 14));
     const locationText = location.includes(",") ? location : `${location}, NY`;
     const id = mkId(["demo", category, phrase, locationText, String(i)]);
+    const weatherSignal = forecast?.current.precipitationChance
+      ? `${forecast.current.precipitationChance}% rain chance`
+      : "stable weather window";
+    const timeWindow = intentScore >= 80 ? "next 2 hours" : intentScore >= 68 ? "today" : "this week";
+    const distance = distanceSummary(i, locationText);
+    const reasonSummary = `Why this opportunity: ${weatherSignal}, ${timeWindow} demand window, ${distance}, ${displayService(category)} service match.`;
 
     out.push({
       id,
@@ -336,13 +347,13 @@ function createDemoOpportunities({
         tags,
         title: `${phrase} near ${locationText}`,
         description: `Signals indicate ${displayService(category).toLowerCase()} demand lift in this zone.`,
-        reasonSummary: `Intent boosted by ${tags.join(", ")} and real-time market pressure.`,
+        reasonSummary,
         raw: { mode: "demo", category, triggers: triggers || [] }
       }),
       confidence,
       tags,
       nextAction: suggestedNextAction(category, intentScore, locationText),
-      reasonSummary: `Intent boosted by ${tags.join(", ")} and real-time market pressure.`,
+      reasonSummary,
       recommendedCreateMode: intentScore >= 76 ? "job" : "lead",
       recommendedScheduleIso: intentScore >= 70 ? suggestedSchedule(intentScore, 75) : null,
       raw: { mode: "demo", category, triggers: triggers || [] },

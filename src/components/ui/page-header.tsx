@@ -12,8 +12,8 @@ export function PageHeader({
   return (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 className="font-heading text-3xl font-semibold tracking-tight text-semantic-text">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-semantic-muted">{subtitle}</p>}
+        <h1 className="dashboard-page-title text-semantic-text">{title}</h1>
+        {subtitle && <p className="dashboard-body mt-1 text-semantic-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-3">{actions}</div>}
     </header>

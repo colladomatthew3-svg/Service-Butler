@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "check:clean": "bash scripts/check-clean.sh",
+    "proof:ui": "node scripts/proof-ui.mjs",
     "test:e2e": "playwright test",
     "db:start": "npx supabase start",
     "db:reset": "npx supabase db reset",

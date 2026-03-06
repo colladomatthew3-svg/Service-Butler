@@ -20,7 +20,7 @@ export default async function JobsPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-lg font-semibold text-semantic-text">Jobs Board</h2>
+          <h2 className="dashboard-section-title text-semantic-text">Jobs Board</h2>
         </CardHeader>
         <CardBody className="space-y-3">
           {(jobs || []).length === 0 && <p className="text-sm text-semantic-muted">No jobs yet. Convert a lead or dispatch from Scanner.</p>}

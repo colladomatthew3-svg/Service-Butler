@@ -3,12 +3,16 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 const FALLBACK_ACCOUNT_ID = "11111111-1111-1111-1111-111111111111";
 const FALLBACK_USER_ID = "00000000-0000-0000-0000-000000000001";
 
+function flagEnabled(value: string | undefined) {
+  return typeof value === "string" && ["1", "true", "on", "yes"].includes(value.toLowerCase());
+}
+
 export function isReviewMode(): boolean {
-  return process.env.NODE_ENV === "development" && process.env.REVIEW_MODE === "on";
+  return process.env.NODE_ENV === "development" && flagEnabled(process.env.REVIEW_MODE);
 }
 
 export function isDemoMode(): boolean {
-  return process.env.NODE_ENV === "development" && process.env.DEMO_MODE === "on";
+  return process.env.NODE_ENV === "development" && flagEnabled(process.env.DEMO_MODE);
 }
 
 export function isLocalBypassMode(): boolean {
@@ -17,6 +21,7 @@ export function isLocalBypassMode(): boolean {
 
 export async function resolveReviewAccountId(): Promise<string> {
   if (!isLocalBypassMode()) return FALLBACK_ACCOUNT_ID;
+  if (isDemoMode()) return FALLBACK_ACCOUNT_ID;
 
   try {
     const admin = getSupabaseAdminClient();

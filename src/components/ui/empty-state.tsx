@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardBody } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { buttonStyles } from "@/components/ui/button";
 import type { ReactNode } from "react";
 
 export function EmptyState({
@@ -23,8 +23,8 @@ export function EmptyState({
         <h3 className="text-lg font-semibold text-semantic-text">{title}</h3>
         <p className="mt-2 max-w-md text-sm text-semantic-muted">{description}</p>
         {ctaLabel && ctaHref && (
-          <Link href={ctaHref} className="mt-6">
-            <Button>{ctaLabel}</Button>
+          <Link href={ctaHref} className={buttonStyles({ className: "mt-6" })}>
+            {ctaLabel}
           </Link>
         )}
       </CardBody>

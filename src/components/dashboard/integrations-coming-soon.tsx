@@ -12,7 +12,7 @@ export function IntegrationsComingSoon() {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-lg font-semibold text-semantic-text">Integrations (Coming Soon)</h2>
+        <h2 className="dashboard-section-title text-semantic-text">Integrations (Coming Soon)</h2>
         <p className="mt-1 text-sm text-semantic-muted">We can run alongside your existing CRM or be your CRM.</p>
       </CardHeader>
       <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

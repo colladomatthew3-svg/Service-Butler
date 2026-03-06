@@ -69,10 +69,12 @@ const DEMO_LOCATION_MAP: Record<string, { label: string; lat: number; lng: numbe
   "11705": { label: "Bayport, NY 11705", lat: 40.7384, lng: -73.0518 },
   "11788": { label: "Hauppauge, NY 11788", lat: 40.8257, lng: -73.2026 },
   "10019": { label: "Midtown West, NY 10019", lat: 40.7654, lng: -73.9858 },
+  "33602": { label: "Tampa, FL 33602", lat: 27.9506, lng: -82.4572 },
   "brentwood,ny": { label: "Brentwood, NY 11717", lat: 40.7812, lng: -73.2462 },
   "bay shore,ny": { label: "Bay Shore, NY 11706", lat: 40.7251, lng: -73.2454 },
   "hauppauge,ny": { label: "Hauppauge, NY 11788", lat: 40.8257, lng: -73.2026 },
-  "tampa,fl": { label: "Tampa, FL 33602", lat: 27.9506, lng: -82.4572 }
+  "tampa,fl": { label: "Tampa, FL 33602", lat: 27.9506, lng: -82.4572 },
+  "tampa,fl,33602": { label: "Tampa, FL 33602", lat: 27.9506, lng: -82.4572 }
 };
 
 function cacheKey(lat: number, lng: number) {

@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
+import { createDemoWeatherCookieValue, getDemoWeatherSettings } from "@/lib/demo/store";
 import { geocodeLocation } from "@/lib/services/weather";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 export async function GET() {
+  if (isDemoMode()) {
+    const data = await getDemoWeatherSettings();
+    return NextResponse.json(data);
+  }
+
   const { accountId, supabase } = await getCurrentUserContext();
   const { data } = await supabase
     .from("account_settings")
@@ -14,6 +21,53 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (isDemoMode()) {
+    const body = (await req.json()) as {
+      label?: string;
+      lat?: number;
+      lng?: number;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+    };
+
+    let label = body.label?.trim();
+    let lat = Number(body.lat);
+    let lng = Number(body.lng);
+
+    if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && (body.city || body.state || body.postalCode)) {
+      const query = [body.city, body.state, body.postalCode].filter(Boolean).join(", ");
+      const geo = await geocodeLocation(query);
+      if (geo) {
+        label = label || geo.label;
+        lat = geo.lat;
+        lng = geo.lng;
+      }
+    }
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return NextResponse.json({ error: "Provide lat/lng or a resolvable location" }, { status: 400 });
+    }
+
+    const payload = {
+      weather_location_label: label || `${lat.toFixed(3)}, ${lng.toFixed(3)}`,
+      weather_lat: lat,
+      weather_lng: lng,
+      home_base_city: body.city || null,
+      home_base_state: body.state || null,
+      home_base_postal_code: body.postalCode || null
+    };
+
+    const response = NextResponse.json(payload);
+    response.cookies.set("sb_demo_weather", createDemoWeatherCookieValue(payload), {
+      httpOnly: false,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30
+    });
+    return response;
+  }
+
   const { accountId, supabase } = await getCurrentUserContext();
   const body = (await req.json()) as {
     label?: string;

@@ -1,9 +1,21 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getReviewEmail, getReviewUserId, isLocalBypassMode, resolveReviewAccountId } from "@/lib/services/review-mode";
+import { getDemoAccountContext } from "@/lib/demo/store";
+import { getReviewEmail, getReviewUserId, isDemoMode, isLocalBypassMode, resolveReviewAccountId } from "@/lib/services/review-mode";
 import type { AccountRole } from "@/types/domain";
 
 export async function getCurrentUserContext() {
+  if (isDemoMode()) {
+    const demo = getDemoAccountContext();
+    return {
+      userId: demo.userId,
+      email: demo.email,
+      accountId: demo.accountId,
+      role: "ACCOUNT_OWNER" as AccountRole,
+      supabase: null as never
+    };
+  }
+
   if (isLocalBypassMode()) {
     const accountId = await resolveReviewAccountId();
     return {

@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
+import { listDemoScannerEvents } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 export async function GET(req: NextRequest) {
+  if (isDemoMode()) {
+    const source = req.nextUrl.searchParams.get("source");
+    const category = req.nextUrl.searchParams.get("category");
+    const limitRaw = Number(req.nextUrl.searchParams.get("limit") || 50);
+    const limit = Math.max(1, Math.min(200, Number.isFinite(limitRaw) ? limitRaw : 50));
+    const q = (req.nextUrl.searchParams.get("q") || "").trim();
+    return NextResponse.json({
+      events: listDemoScannerEvents({ source, category, limit, query: q })
+    });
+  }
+
   const { accountId, supabase } = await getCurrentUserContext();
   const source = req.nextUrl.searchParams.get("source");
   const category = req.nextUrl.searchParams.get("category");

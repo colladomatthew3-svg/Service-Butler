@@ -1,3 +1,5 @@
+import { isDemoMode } from "@/lib/services/review-mode";
+
 type CachedEntry<T> = {
   expiresAt: number;
   value: T;
@@ -62,6 +64,16 @@ export type ForecastSummary = {
 
 const cache = new Map<string, CachedEntry<ForecastSummary>>();
 const TEN_MINUTES = 10 * 60 * 1000;
+const DEMO_LOCATION_MAP: Record<string, { label: string; lat: number; lng: number }> = {
+  "11717": { label: "Brentwood, NY 11717", lat: 40.7812, lng: -73.2462 },
+  "11705": { label: "Bayport, NY 11705", lat: 40.7384, lng: -73.0518 },
+  "11788": { label: "Hauppauge, NY 11788", lat: 40.8257, lng: -73.2026 },
+  "10019": { label: "Midtown West, NY 10019", lat: 40.7654, lng: -73.9858 },
+  "brentwood,ny": { label: "Brentwood, NY 11717", lat: 40.7812, lng: -73.2462 },
+  "bay shore,ny": { label: "Bay Shore, NY 11706", lat: 40.7251, lng: -73.2454 },
+  "hauppauge,ny": { label: "Hauppauge, NY 11788", lat: 40.8257, lng: -73.2026 },
+  "tampa,fl": { label: "Tampa, FL 33602", lat: 27.9506, lng: -82.4572 }
+};
 
 function cacheKey(lat: number, lng: number) {
   return `${lat.toFixed(3)},${lng.toFixed(3)}`;
@@ -91,7 +103,61 @@ function dayLabel(iso: string) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+function deterministicUnit(seed: number) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+function buildDemoForecast(lat: number, lng: number): ForecastSummary {
+  const seed = Math.round((lat + 90) * 1000 + (lng + 180) * 1000);
+  const currentTemp = Math.round(48 + deterministicUnit(seed) * 28);
+  const currentPrecip = Math.round(18 + deterministicUnit(seed + 2) * 68);
+  const currentWind = Math.round(8 + deterministicUnit(seed + 3) * 30);
+  const condition = currentPrecip >= 60 ? "Rain showers" : currentWind >= 24 ? "Windy" : "Partly cloudy";
+
+  return {
+    location: { lat, lng },
+    current: {
+      temp: currentTemp,
+      feelsLike: currentTemp - (currentWind >= 24 ? 3 : 1),
+      windKph: currentWind,
+      precipitationChance: currentPrecip,
+      condition
+    },
+    next6Hours: Array.from({ length: 6 }, (_, index) => ({
+      time: hourLabel(new Date(Date.now() + index * 60 * 60 * 1000).toISOString()),
+      temp: currentTemp + Math.round(deterministicUnit(seed + index + 10) * 6) - 3,
+      precipChance: Math.max(5, Math.min(95, currentPrecip + Math.round(deterministicUnit(seed + index + 20) * 26) - 13)),
+      condition: index <= 2 && currentPrecip >= 50 ? "Rain" : index >= 4 ? "Clearing" : condition
+    })),
+    next5Days: Array.from({ length: 5 }, (_, index) => ({
+      date: dayLabel(new Date(Date.now() + index * 24 * 60 * 60 * 1000).toISOString()),
+      min: currentTemp - 8 + index,
+      max: currentTemp + 2 + index,
+      precipChance: Math.max(10, Math.min(90, currentPrecip - 10 + index * 6)),
+      condition: index === 0 && currentPrecip >= 55 ? "Rain showers" : index === 1 ? "Cloudy" : "Partly cloudy"
+    }))
+  };
+}
+
+function normalizeDemoQuery(query: string) {
+  return query.toLowerCase().replace(/\s+/g, "").replace(/,+/g, ",");
+}
+
+function hashQuery(query: string) {
+  let hash = 0;
+  for (let i = 0; i < query.length; i += 1) {
+    hash = (hash << 5) - hash + query.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
 export async function getForecastByLatLng(lat: number, lng: number): Promise<ForecastSummary> {
+  if (isDemoMode()) {
+    return buildDemoForecast(lat, lng);
+  }
+
   const key = cacheKey(lat, lng);
   const now = Date.now();
   const cached = cache.get(key);
@@ -149,6 +215,24 @@ export async function getForecastByLatLng(lat: number, lng: number): Promise<For
 }
 
 export async function geocodeLocation(query: string) {
+  if (isDemoMode()) {
+    const normalized = normalizeDemoQuery(query);
+    const mapped = DEMO_LOCATION_MAP[normalized];
+    if (mapped) return mapped;
+
+    const digits = query.match(/\b\d{5}\b/)?.[0];
+    if (digits && DEMO_LOCATION_MAP[digits]) return DEMO_LOCATION_MAP[digits];
+
+    const seed = hashQuery(normalized || query);
+    const lat = 28 + (seed % 1500) / 100;
+    const lng = -(81 + (seed % 900) / 100);
+    return {
+      label: query.trim() || "Demo Service Area",
+      lat: Number(lat.toFixed(4)),
+      lng: Number(lng.toFixed(4))
+    };
+  }
+
   const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
   url.searchParams.set("name", query);
   url.searchParams.set("count", "1");

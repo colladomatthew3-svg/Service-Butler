@@ -97,13 +97,16 @@ export function WeatherSettingsForm() {
         <p className="text-sm font-semibold text-semantic-text">Service area weather location</p>
         <p className="mt-1 text-sm text-semantic-muted">Use city/state/postal for quick setup. Latitude/longitude is optional for precise routing.</p>
         {current?.weather_location_label && (
-          <p className="mt-2 text-sm text-semantic-muted">Current: {current.weather_location_label}</p>
+          <p data-testid="weather-current-location" className="mt-2 text-sm text-semantic-muted">
+            Current: {current.weather_location_label}
+          </p>
         )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="City">
           <Input
+            data-testid="weather-city"
             placeholder="Brentwood"
             value={state.city}
             onChange={(e) => setState((prev) => ({ ...prev, city: e.target.value }))}
@@ -111,6 +114,7 @@ export function WeatherSettingsForm() {
         </Field>
         <Field label="State">
           <Input
+            data-testid="weather-state"
             placeholder="NY"
             value={state.stateCode}
             onChange={(e) => setState((prev) => ({ ...prev, stateCode: e.target.value }))}
@@ -118,6 +122,7 @@ export function WeatherSettingsForm() {
         </Field>
         <Field label="Postal code">
           <Input
+            data-testid="weather-postal"
             placeholder="11717"
             value={state.postalCode}
             onChange={(e) => setState((prev) => ({ ...prev, postalCode: e.target.value }))}
@@ -128,6 +133,7 @@ export function WeatherSettingsForm() {
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Latitude (optional)">
           <Input
+            data-testid="weather-lat"
             placeholder="40.7812"
             value={state.lat}
             onChange={(e) => setState((prev) => ({ ...prev, lat: e.target.value }))}
@@ -135,6 +141,7 @@ export function WeatherSettingsForm() {
         </Field>
         <Field label="Longitude (optional)">
           <Input
+            data-testid="weather-lng"
             placeholder="-73.2462"
             value={state.lng}
             onChange={(e) => setState((prev) => ({ ...prev, lng: e.target.value }))}
@@ -142,7 +149,7 @@ export function WeatherSettingsForm() {
         </Field>
       </div>
 
-      <Button size="lg" onClick={save} disabled={saving}>
+      <Button data-testid="weather-save" size="lg" onClick={save} disabled={saving}>
         {saving ? "Saving..." : "Use this location"}
       </Button>
 

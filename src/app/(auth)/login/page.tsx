@@ -1,5 +1,6 @@
-import { signInWithDevQuickLogin, signInWithMagicLink } from "@/actions/auth";
+import { signInWithDevQuickLogin, signInWithMagicLink, startDemoSession } from "@/actions/auth";
 import { hasDevAuthPassword } from "@/lib/auth/dev-quick-login";
+import { isDemoMode } from "@/lib/services/review-mode";
 import Link from "next/link";
 import { Footer } from "@/components/brand/Footer";
 import { Logo } from "@/components/brand/Logo";
@@ -14,6 +15,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const devQuickLoginConfigured = process.env.NODE_ENV === "development" && hasDevAuthPassword();
+  const demoMode = isDemoMode();
 
   return (
     <>
@@ -30,6 +32,18 @@ export default async function LoginPage({
               <p className="mt-1 text-sm text-semantic-muted">Use your work email to get a secure magic link.</p>
             </CardHeader>
             <CardBody>
+              {demoMode && (
+                <div className="mb-4 rounded-xl border border-brand-500/20 bg-brand-50/70 p-4">
+                  <p className="text-sm font-semibold text-semantic-text">Demo mode is enabled</p>
+                  <p className="mt-1 text-sm text-semantic-muted">Use the demo login to enter the product with seeded Scanner and Weather data.</p>
+                  <form action={startDemoSession} className="mt-3">
+                    <Button type="submit" size="lg" fullWidth>
+                      Demo Login
+                    </Button>
+                  </form>
+                </div>
+              )}
+
               {params.membership === "required" && (
                 <p className="mb-4 rounded-xl border border-danger-500/25 bg-danger-100 px-4 py-3 text-sm text-danger-700">
                   Your user does not have an active account membership. Seed users or assign an account role first.

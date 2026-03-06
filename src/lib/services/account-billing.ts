@@ -1,8 +1,17 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { isSubscriptionAllowed } from "@/lib/services/stripe";
 import { isBillingDisabled } from "@/lib/services/billing-mode";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 export async function getAccountBillingState(accountId: string) {
+  if (isDemoMode()) {
+    return {
+      status: "demo",
+      allowed: true,
+      allowedReason: "dev_override"
+    };
+  }
+
   if (isBillingDisabled()) {
     return {
       status: "disabled",

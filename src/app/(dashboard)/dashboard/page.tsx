@@ -18,57 +18,132 @@ import { Badge } from "@/components/ui/badge";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { WeatherTicker } from "@/components/dashboard/weather-ticker";
 import { getForecastByLatLng } from "@/lib/services/weather";
+import { getDemoDashboardSnapshot, getDemoWeatherSettings } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 const pipelineColumns = ["NEW", "CONTACTED", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "WON", "LOST"] as const;
 
+type DashboardLeadRow = {
+  id: string;
+  name?: string | null;
+  service_type?: string | null;
+  city?: string | null;
+  state?: string | null;
+  status?: string | null;
+  requested_timeframe?: string | null;
+  created_at: string;
+  scheduled_for?: string | null;
+  intent?: number;
+  intentScore?: number;
+};
+
+type DashboardJobRow = {
+  id: string;
+  pipeline_status?: string | null;
+  scheduled_for?: string | null;
+  estimated_value?: number | null;
+  service_type?: string | null;
+  customer_name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  intent_score?: number | null;
+};
+
+type DashboardOpportunityRow = {
+  id: string;
+  category?: string | null;
+  title?: string | null;
+  location_text?: string | null;
+  intent_score?: number | null;
+  confidence?: number | null;
+  created_at: string;
+};
+
 export default async function DashboardOverviewPage() {
-  const { accountId, supabase } = await getCurrentUserContext();
+  const demoMode = isDemoMode();
+  let leadRows: DashboardLeadRow[] = [];
+  let jobRows: DashboardJobRow[] = [];
+  let opportunities: DashboardOpportunityRow[] = [];
+  let enrichedLeads: Array<DashboardLeadRow & { intent: number }> = [];
+  let settings:
+    | {
+        weather_lat?: number | null;
+        weather_lng?: number | null;
+        weather_location_label?: string | null;
+        home_base_city?: string | null;
+        home_base_state?: string | null;
+      }
+    | null = null;
 
-  const [{ data: leads }, { data: settings }, { data: jobs }] = await Promise.all([
-    supabase
-      .from("leads")
-      .select("id,name,service_type,city,state,status,requested_timeframe,created_at,scheduled_for")
+  if (demoMode) {
+    const snapshot = getDemoDashboardSnapshot();
+    const weather = await getDemoWeatherSettings();
+
+    leadRows = snapshot.leads;
+    jobRows = snapshot.jobs;
+    opportunities = snapshot.opportunities;
+    enrichedLeads = snapshot.leads.map((lead) => ({
+      ...lead,
+      intent: Number(lead.intentScore || 0)
+    }));
+    settings = {
+      weather_lat: weather.weather_lat,
+      weather_lng: weather.weather_lng,
+      weather_location_label: weather.weather_location_label,
+      home_base_city: weather.home_base_city,
+      home_base_state: weather.home_base_state
+    };
+  } else {
+    const { accountId, supabase } = await getCurrentUserContext();
+
+    const [{ data: leads }, { data: loadedSettings }, { data: jobs }] = await Promise.all([
+      supabase
+        .from("leads")
+        .select("id,name,service_type,city,state,status,requested_timeframe,created_at,scheduled_for")
+        .eq("account_id", accountId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("account_settings")
+        .select("weather_lat,weather_lng,weather_location_label,home_base_city,home_base_state")
+        .eq("account_id", accountId)
+        .maybeSingle(),
+      supabase
+        .from("jobs")
+        .select("id,pipeline_status,scheduled_for,estimated_value,service_type,customer_name,city,state,intent_score")
+        .eq("account_id", accountId)
+        .order("scheduled_for", { ascending: true, nullsFirst: false })
+    ]);
+
+    const { data: loadedOpportunities } = await supabase
+      .from("opportunities")
+      .select("id,category,title,location_text,intent_score,confidence,created_at")
       .eq("account_id", accountId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("account_settings")
-      .select("weather_lat,weather_lng,weather_location_label,home_base_city,home_base_state")
-      .eq("account_id", accountId)
-      .maybeSingle(),
-    supabase
-      .from("jobs")
-      .select("id,pipeline_status,scheduled_for,estimated_value,service_type,customer_name,city,state,intent_score")
-      .eq("account_id", accountId)
-      .order("scheduled_for", { ascending: true, nullsFirst: false })
-  ]);
+      .order("created_at", { ascending: false })
+      .limit(30);
 
-  const { data: opportunities } = await supabase
-    .from("opportunities")
-    .select("id,category,title,location_text,intent_score,confidence,created_at")
-    .eq("account_id", accountId)
-    .order("created_at", { ascending: false })
-    .limit(30);
+    leadRows = leads || [];
+    jobRows = jobs || [];
+    opportunities = loadedOpportunities || [];
+    settings = loadedSettings;
 
-  const leadRows = leads || [];
-  const jobRows = jobs || [];
+    const leadIds = leadRows.map((l) => String(l.id));
+    let scoreMap: Record<string, number[]> = {};
+    if (leadIds.length > 0) {
+      const { data: signals } = await supabase.from("lead_intent_signals").select("lead_id,score").in("lead_id", leadIds);
+      scoreMap = (signals || []).reduce<Record<string, number[]>>((acc, row) => {
+        const key = String(row.lead_id);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(Number(row.score) || 0);
+        return acc;
+      }, {});
+    }
 
-  const leadIds = leadRows.map((l) => l.id as string);
-  let scoreMap: Record<string, number[]> = {};
-  if (leadIds.length > 0) {
-    const { data: signals } = await supabase.from("lead_intent_signals").select("lead_id,score").in("lead_id", leadIds);
-    scoreMap = (signals || []).reduce<Record<string, number[]>>((acc, row) => {
-      const key = String(row.lead_id);
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(Number(row.score) || 0);
-      return acc;
-    }, {});
+    enrichedLeads = leadRows.map((lead) => {
+      const values = scoreMap[String(lead.id)] || [];
+      const intent = values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
+      return { ...lead, intent };
+    });
   }
-
-  const enrichedLeads = leadRows.map((lead) => {
-    const values = scoreMap[String(lead.id)] || [];
-    const intent = values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
-    return { ...lead, intent };
-  });
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -148,7 +223,9 @@ export default async function DashboardOverviewPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Opportunities Near You</p>
             <h1 className="dashboard-page-title mt-1 text-semantic-text">Find and claim jobs before your competitors.</h1>
             <p className="mt-2 text-sm text-semantic-muted">
-              Scanner intelligence across Long Island and NYC. Focus zip seeds: 11705, 11788, 10019.
+              {demoMode
+                ? "Demo-ready Scanner and Weather signals using saved service-area data. Try storm response in Brentwood, Hauppauge, or Midtown."
+                : "Scanner intelligence across Long Island and NYC. Focus zip seeds: 11705, 11788, 10019."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

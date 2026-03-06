@@ -11,12 +11,16 @@ const PUBLIC_PATHS = [
   "/api/twilio/status"
 ];
 
+function flagEnabled(value: string | undefined) {
+  return typeof value === "string" && ["1", "true", "on", "yes"].includes(value.toLowerCase());
+}
+
 function isReviewMode() {
-  return process.env.NODE_ENV === "development" && process.env.REVIEW_MODE === "on";
+  return process.env.NODE_ENV === "development" && flagEnabled(process.env.REVIEW_MODE);
 }
 
 function isDemoMode() {
-  return process.env.NODE_ENV === "development" && process.env.DEMO_MODE === "on";
+  return process.env.NODE_ENV === "development" && flagEnabled(process.env.DEMO_MODE);
 }
 
 export async function middleware(req: NextRequest) {

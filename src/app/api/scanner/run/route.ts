@@ -1,8 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { addDemoScannerEvents, getDemoWeatherSettings } from "@/lib/demo/store";
 import { runScanner } from "@/lib/services/scanner";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 export async function POST(req: NextRequest) {
+  if (isDemoMode()) {
+    const body = (await req.json()) as {
+      mode?: "demo" | "live";
+      location?: string;
+      categories?: string[];
+      limit?: number;
+      lat?: number;
+      lon?: number;
+      radius?: number;
+      campaignMode?: "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
+      triggers?: string[];
+    };
+
+    const settings = await getDemoWeatherSettings();
+    const location = String(body.location || "").trim() || settings.weather_location_label;
+    const lat = Number.isFinite(body.lat) ? Number(body.lat) : settings.weather_lat;
+    const lon = Number.isFinite(body.lon) ? Number(body.lon) : settings.weather_lng;
+
+    const result = await runScanner({
+      mode: "demo",
+      location,
+      categories: Array.isArray(body.categories) ? body.categories : undefined,
+      limit: Number.isFinite(body.limit) ? Number(body.limit) : 20,
+      lat,
+      lon,
+      radius: Number.isFinite(body.radius) ? Number(body.radius) : 25,
+      campaignMode: body.campaignMode,
+      triggers: Array.isArray(body.triggers) ? body.triggers : undefined
+    });
+
+    addDemoScannerEvents(result.opportunities);
+
+    return NextResponse.json({
+      mode: result.mode,
+      weatherRisk: result.weatherRisk,
+      locationResolved: result.locationResolved,
+      opportunities: result.opportunities
+    });
+  }
+
   const { accountId, role, supabase } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 

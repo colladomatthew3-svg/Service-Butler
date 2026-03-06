@@ -36,7 +36,7 @@ const server = spawn(
     cwd: rootDir,
     env: {
       ...process.env,
-      DEMO_MODE: process.env.DEMO_MODE || "on"
+      DEMO_MODE: process.env.DEMO_MODE || "true"
     },
     stdio: "pipe"
   }

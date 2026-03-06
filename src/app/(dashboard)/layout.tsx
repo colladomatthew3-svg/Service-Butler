@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { signOut } from "@/actions/auth";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { getAccountBillingState } from "@/lib/services/account-billing";
+import { isDemoMode } from "@/lib/services/review-mode";
 import { DashboardAppShell } from "@/components/dashboard/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonStyles } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Card, CardBody } from "@/components/ui/card";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const demoMode = process.env.NODE_ENV === "development" && process.env.DEMO_MODE === "on";
+  const demoMode = isDemoMode();
   let accountId: string;
   try {
     ({ accountId } = await getCurrentUserContext());

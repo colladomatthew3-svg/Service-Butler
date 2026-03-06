@@ -81,7 +81,18 @@ async function tryDevQuickLogin(formData: FormData) {
 }
 
 export async function signOut() {
+  if (isDemoMode()) {
+    redirect("/login");
+  }
+
   const supabase = await getSupabaseServerClient();
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+export async function startDemoSession() {
+  if (!isDemoMode()) {
+    redirect("/login");
+  }
+  redirect("/dashboard");
 }

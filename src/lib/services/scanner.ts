@@ -93,7 +93,13 @@ function normalizeCategories(input?: string[]): ScannerCategory[] {
 
 function parseLatLon(location?: string, lat?: number | null, lon?: number | null) {
   if (Number.isFinite(lat) && Number.isFinite(lon)) {
-    return { lat: Number(lat), lon: Number(lon), label: `${Number(lat).toFixed(3)}, ${Number(lon).toFixed(3)}` };
+    const trimmedLocation = String(location || "").trim();
+    const locationLooksLikeCoords = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/.test(trimmedLocation);
+    return {
+      lat: Number(lat),
+      lon: Number(lon),
+      label: trimmedLocation && !locationLooksLikeCoords ? trimmedLocation : `${Number(lat).toFixed(3)}, ${Number(lon).toFixed(3)}`
+    };
   }
   const match = String(location || "").match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
   if (match) {
@@ -222,6 +228,29 @@ function suggestedNextAction(category: ScannerCategory, intentScore: number, loc
 function distanceSummary(index: number, locationText: string) {
   const miles = 4 + (index % 5) * 6;
   return `${miles} mi from ${locationText}`;
+}
+
+function parseMarketLocation(location: string) {
+  const normalized = String(location || "").trim();
+  const zipMatch = normalized.match(/\b\d{5}\b/);
+  const stateMatch = normalized.match(/\b([A-Z]{2})\b/);
+  const city = normalized.split(",")[0]?.trim() || "Brentwood";
+
+  return {
+    city,
+    state: stateMatch?.[1] || "NY",
+    postalCode: zipMatch?.[0] || "11717"
+  };
+}
+
+function generateDemoAddress(seed: string, location: string) {
+  const { city, state, postalCode } = parseMarketLocation(location);
+  const number = 118 + (hash(seed) % 700);
+  const streets = ["Cedar Ridge", "Maple Crest", "Oak Hollow", "Bayview", "Harbor Lane", "Riverview", "Spruce Hill", "Chestnut"];
+  const suffixes = ["Drive", "Lane", "Avenue", "Court", "Road", "Place"];
+  const street = streets[hash(`${seed}:street`) % streets.length];
+  const suffix = suffixes[hash(`${seed}:suffix`) % suffixes.length];
+  return `${number} ${street} ${suffix}, ${city}, ${state} ${postalCode}`;
 }
 
 function incidentCatalog(campaignMode?: CampaignMode): DemoIncidentTemplate[] {
@@ -479,7 +508,8 @@ function createDemoOpportunities({
     );
 
     const { intentScore, confidence } = scoreOpportunity(category, tags, forecast, 58 + Math.floor(rand() * 14));
-    const locationText = location.includes(",") ? location : `${location}, NY`;
+    const marketLabel = location.includes(",") ? location : `${location}, NY`;
+    const locationText = generateDemoAddress(`${template.incidentType}:${i}`, marketLabel);
     const id = mkId(["demo", category, template.incidentType, template.title, locationText, String(i)]);
     const weatherSignal =
       template.weatherSignal || (forecast?.current.precipitationChance ? `${forecast.current.precipitationChance}% rain chance` : "stable weather window");

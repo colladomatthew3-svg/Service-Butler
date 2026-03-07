@@ -4,7 +4,7 @@ test("marketing homepage and login form render", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    /turn weather signals into more jobs, faster response, and tighter scheduling/i
+    /find the jobs before competitors do and turn them into booked work/i
   );
 
   await page.goto("/login");

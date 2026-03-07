@@ -111,7 +111,13 @@ export function WeatherTicker({
   return (
     <Card className="overflow-hidden">
       <CardHeader>
-        <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
+            {locationLabel && <p className="mt-1 text-sm text-semantic-muted">{locationLabel}</p>}
+          </div>
+          <BadgeStat icon={<TriangleAlert className="h-3 w-3" />} label={impact.title} />
+        </div>
       </CardHeader>
       <CardBody className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
@@ -134,7 +140,7 @@ export function WeatherTicker({
           )}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className={`grid gap-3 ${compact ? "sm:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-4"}`}>
           {buildWeatherSignals(forecast).map((signal) => (
             <div key={signal.title} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
               <div className="flex items-center gap-2 text-brand-700">
@@ -172,8 +178,8 @@ export function WeatherTicker({
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-2">
-          {forecast.next5Days.map((day) => (
+        <div className={`grid gap-2 ${compact ? "grid-cols-3" : "grid-cols-3 sm:grid-cols-5"}`}>
+          {(compact ? forecast.next5Days.slice(0, 3) : forecast.next5Days).map((day) => (
             <div key={day.date} className="rounded-lg border border-semantic-border bg-semantic-surface2 p-2 text-center">
               <p className="text-[11px] font-semibold text-semantic-muted">{day.date.split(",")[0]}</p>
               <p className="mt-1 text-sm font-semibold text-semantic-text">{day.max}°</p>
@@ -193,12 +199,21 @@ export function WeatherTicker({
               <p className="text-sm text-semantic-muted">{impact.detail}</p>
             </div>
           )}
-          <Link href={`/dashboard/scanner${locationLabel ? `?location=${encodeURIComponent(locationLabel)}` : ""}`}>
-            <Button size="sm">
-              Scan for Weather Opportunities
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/dashboard/scanner${locationLabel ? `?location=${encodeURIComponent(locationLabel)}` : ""}`}>
+              <Button size="sm">
+                Scan for Weather Opportunities
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            {compact && (
+              <Link href="/dashboard/settings">
+                <Button size="sm" variant="secondary">
+                  Edit Service Area
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
       </CardBody>
     </Card>

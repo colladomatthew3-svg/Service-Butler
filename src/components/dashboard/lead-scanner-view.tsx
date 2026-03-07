@@ -7,8 +7,6 @@ import {
   Square,
   Radar,
   MapPin,
-  Gauge,
-  Tags,
   Eye,
   Download,
   Route,
@@ -18,8 +16,7 @@ import {
   Wrench,
   X,
   Settings2,
-  TestTube2,
-  Clock3
+  TestTube2
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -776,90 +773,70 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
           {sortedEvents.map((event) => {
             const nextAction = String(event.raw?.next_action || event.raw?.recommended_action || "Dispatch within SLA and send first contact.");
-            const reasonSummary = String(event.raw?.reason_summary || "Signal pattern indicates near-term service demand.");
             const reasonDetails = getOpportunityReasonDetails(event);
+            const displayAddress = formatOpportunityAddress(event, location);
+            const bullets = opportunityBullets(reasonDetails);
 
             return (
               <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
-                <CardBody className="grid gap-4 lg:grid-cols-[180px_1fr_auto] lg:items-center">
-                  <div className="space-y-2">
-                    <Badge variant={event.intent_score >= 78 ? "warning" : event.intent_score >= 62 ? "brand" : "default"}>
-                      {urgencyLabel(event.intent_score)}
-                    </Badge>
-                    <p className="text-sm font-semibold text-semantic-text">{categoryLabel[event.category]}</p>
-                    <div className="space-y-1 text-xs text-semantic-muted">
-                      <p className="inline-flex items-center gap-1">
-                        <Gauge className="h-3.5 w-3.5" />
-                        Intent {event.intent_score} · Confidence {event.confidence}
-                      </p>
-                      <p className="inline-flex items-center gap-1">
-                        <Clock3 className="h-3.5 w-3.5" />
-                        Detected {relativeAge(event.created_at)}
-                      </p>
-                    </div>
-                  </div>
+                <CardBody className="grid gap-5 xl:grid-cols-[280px_1fr_220px] xl:items-start">
+                  <OpportunityPropertyVisual event={event} address={displayAddress} />
 
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg font-semibold text-semantic-text">{event.title}</p>
-                        <p className="mt-1 text-sm text-semantic-muted">{event.description}</p>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={event.intent_score >= 78 ? "warning" : event.intent_score >= 62 ? "brand" : "default"}>
+                          {urgencyLabel(event.intent_score)}
+                        </Badge>
+                        <Badge variant="default">{reasonDetails.incidentType}</Badge>
                       </div>
-                      <Badge>{reasonDetails.serviceType}</Badge>
+                      <p className="text-xl font-semibold text-semantic-text">{event.title}</p>
+                      <p className="inline-flex items-center gap-2 text-base text-semantic-muted">
+                        <MapPin className="h-4 w-4" />
+                        {displayAddress}
+                      </p>
+                      <p className="text-sm font-medium text-semantic-muted">{reasonDetails.distance}</p>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      <ReasonStat label="Incident type" value={reasonDetails.incidentType} />
-                      <ReasonStat label="Location" value={event.location_text || "Service area"} />
-                      <ReasonStat label="Distance" value={reasonDetails.distance} />
+
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      <MetricStat label="Intent score" value={String(event.intent_score)} />
+                      <MetricStat label="Confidence score" value={String(event.confidence)} />
+                      <MetricStat label="Service category" value={reasonDetails.serviceType} />
+                      <MetricStat label="Urgency" value={reasonDetails.urgencyWindow} />
                     </div>
-                    <p className="inline-flex items-center gap-1 text-sm text-semantic-muted">
-                      <MapPin className="h-4 w-4" />
-                      {event.location_text || "Service area"}
-                    </p>
+
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="default">Source: {reasonDetails.signalSource}</Badge>
-                      <Badge variant="default">Priority: {priorityFromScore(event.intent_score)}</Badge>
-                      <Badge variant="default">Detected: {relativeAge(event.created_at)}</Badge>
+                      <Badge variant="default">{reasonDetails.signalSource}</Badge>
+                      <Badge variant="default">{priorityFromScore(event.intent_score)}</Badge>
+                      <Badge variant="default">Detected {relativeAge(event.created_at)}</Badge>
                     </div>
+
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Demand signal explanation</p>
-                      <p className="mt-2 text-sm font-medium text-semantic-text">{reasonSummary}</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        <ReasonStat label="Weather / signal" value={reasonDetails.weatherEvent} />
-                        <ReasonStat label="Recommended service" value={reasonDetails.serviceType} />
-                        <ReasonStat label="Urgency window" value={reasonDetails.urgencyWindow} />
-                        <ReasonStat label="Demand signal" value={reasonDetails.demandSignal} />
-                      </div>
-                      {reasonDetails.demandExplanation && (
-                        <p className="mt-3 text-sm text-semantic-muted">{reasonDetails.demandExplanation}</p>
-                      )}
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this opportunity exists</p>
+                      <ul className="mt-3 grid gap-2 text-sm text-semantic-text">
+                        {bullets.map((bullet) => (
+                          <li key={bullet} className="flex items-start gap-2">
+                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-brand-700" />
+                            <span>{bullet}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
+
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next action</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Suggested next action</p>
                       <p className="mt-2 text-sm text-semantic-text">{nextAction}</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Tags className="h-3.5 w-3.5 text-semantic-muted" />
-                      {(event.tags || []).map((tag) => (
-                        <span key={`${event.id}-${tag}`} className="rounded-full bg-semantic-surface2 px-3 py-1 text-xs font-semibold text-semantic-muted">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                    <Button size="lg" variant="secondary" onClick={() => setPreview(event)}>
-                      <Eye className="h-4 w-4" />
-                      Preview
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
+                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
+                      Schedule Inspection
                     </Button>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                       Create Lead
-                    </Button>
-                    <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
-                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
-                      Schedule Inspection
                     </Button>
                     <Button
                       size="lg"
@@ -870,9 +847,13 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
                       Assign Technician
                     </Button>
-                    <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
+                    <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
                       {recommendedActionLabel(event.intent_score)}
+                    </Button>
+                    <Button size="lg" variant="ghost" onClick={() => setPreview(event)}>
+                      <Eye className="h-4 w-4" />
+                      Preview
                     </Button>
                   </div>
                 </CardBody>
@@ -1173,13 +1154,20 @@ function getOpportunityReasonDetails(event: ScannerEvent) {
   };
 }
 
-function ReasonStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-semantic-border bg-semantic-surface px-3 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
-      <p className="mt-2 text-sm font-medium text-semantic-text">{value}</p>
-    </div>
-  );
+function formatOpportunityAddress(event: ScannerEvent, serviceArea: string) {
+  const raw = String(event.location_text || "").trim();
+  const looksLikeCoordinates = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(raw);
+  if (raw && !looksLikeCoordinates) return raw;
+  if (serviceArea.includes(",")) return `Property near ${serviceArea}`;
+  return "Property near saved service area";
+}
+
+function opportunityBullets(details: ReturnType<typeof getOpportunityReasonDetails>) {
+  return [
+    `${details.incidentType} is creating near-term demand in the market.`,
+    `${details.demandSignal} supports a ${details.serviceType.toLowerCase()} response.`,
+    `${details.urgencyWindow} response window with ${details.distance} travel distance.`
+  ];
 }
 
 function SummaryStat({ label, value, helper }: { label: string; value: string; helper: string }) {
@@ -1191,6 +1179,40 @@ function SummaryStat({ label, value, helper }: { label: string; value: string; h
         <p className="text-sm text-semantic-muted">{helper}</p>
       </CardBody>
     </Card>
+  );
+}
+
+function MetricStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-semantic-border bg-semantic-surface px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-2 text-base font-semibold text-semantic-text">{value}</p>
+    </div>
+  );
+}
+
+function OpportunityPropertyVisual({ event, address }: { event: ScannerEvent; address: string }) {
+  return (
+    <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(33,43,38,0.96),rgba(91,108,100,0.86))] p-4 text-white shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-white/80">
+          {String(event.raw?.incident_type || categoryLabel[event.category])}
+        </span>
+        <span className="text-sm font-semibold text-brand-200">{categoryLabel[event.category]}</span>
+      </div>
+      <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))] p-4">
+        <div className="flex h-40 items-end justify-center rounded-[1rem] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_60%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]">
+          <div className="relative mb-4 h-20 w-28 rounded-t-[1.4rem] bg-white/85">
+            <div className="absolute left-3 top-5 h-5 w-5 rounded bg-[rgb(var(--sb-primary-soft))]" />
+            <div className="absolute right-3 top-5 h-5 w-5 rounded bg-[rgb(var(--sb-primary-soft))]" />
+            <div className="absolute bottom-0 left-1/2 h-10 w-8 -translate-x-1/2 rounded-t-lg bg-[rgb(var(--sb-copper-soft))]" />
+            <div className="absolute -top-7 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[64px] border-b-[30px] border-x-transparent border-b-white/85" />
+          </div>
+        </div>
+      </div>
+      <p className="mt-4 text-sm font-semibold text-white">{address}</p>
+      <p className="mt-1 text-sm text-white/70">{String(event.raw?.service_type || categoryLabel[event.category])}</p>
+    </div>
   );
 }
 

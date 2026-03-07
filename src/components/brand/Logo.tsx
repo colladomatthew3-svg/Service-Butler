@@ -32,13 +32,15 @@ export function Logo({
   }
 
   return (
-    <Image
-      src="/brand/servicebutler_logo.svg"
-      alt="Service Butler logo"
-      width={width}
-      height={size}
-      className={cn("h-auto w-auto object-contain", className)}
-      priority
-    />
+    <span className={cn("inline-flex items-center rounded-2xl bg-[rgb(var(--sb-bg))] px-3 py-2 shadow-sm", className)}>
+      <Image
+        src="/brand/servicebutler_logo.svg"
+        alt="Service Butler logo"
+        width={width}
+        height={size}
+        className="h-auto w-auto object-contain"
+        priority
+      />
+    </span>
   );
 }

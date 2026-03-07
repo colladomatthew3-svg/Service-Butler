@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -28,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { isDemoMode } from "@/lib/services/review-mode";
+import type { EnrichmentRecord } from "@/lib/services/enrichment";
 
 type Mode = "demo" | "live";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
@@ -116,10 +118,18 @@ const campaignOptions: Array<{
   }
 ];
 
+const marketPresets = [
+  { label: "Brentwood, NY", value: "Brentwood, NY 11717" },
+  { label: "Bay Shore, NY", value: "Bay Shore, NY 11706" },
+  { label: "Patchogue, NY", value: "Patchogue, NY 11772" },
+  { label: "Hauppauge, NY", value: "Hauppauge, NY 11788" },
+  { label: "Tampa, FL", value: "Tampa, FL 33602" }
+] as const;
+
 export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
-  const [mode, setMode] = useState<Mode>("demo");
+  const [mode, setMode] = useState<Mode>(isDemoMode() ? "demo" : "live");
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [location, setLocation] = useState("11788");
+  const [location, setLocation] = useState("Hauppauge, NY 11788");
   const [campaignMode, setCampaignMode] = useState<CampaignMode>("Storm Response");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
@@ -620,9 +630,14 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {["11705", "11788", "10019"].map((zip) => (
-              <Button key={zip} size="sm" variant={location === zip ? "primary" : "secondary"} onClick={() => setLocation(zip)}>
-                {zip}
+            {marketPresets.map((market) => (
+              <Button
+                key={market.value}
+                size="sm"
+                variant={location === market.value ? "primary" : "secondary"}
+                onClick={() => setLocation(market.value)}
+              >
+                {market.label}
               </Button>
             ))}
           </div>
@@ -782,11 +797,13 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             const displayAddress = formatOpportunityAddress(event, location);
             const addressParts = splitDisplayAddress(displayAddress);
             const bullets = opportunityBullets(reasonDetails);
+            const enrichment = getEventEnrichment(event);
+            const areaContext = [String(event.raw?.neighborhood || "").trim(), String(event.raw?.county || "").trim()].filter(Boolean).join(" · ");
 
             return (
               <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
                 <CardBody className="grid gap-5 xl:grid-cols-[280px_1fr_220px] xl:items-start">
-                  <OpportunityPropertyVisual event={event} address={displayAddress} addressLine={addressParts.streetLine} />
+                  <OpportunityPropertyVisual event={event} address={displayAddress} addressLine={addressParts.streetLine} enrichment={enrichment} />
 
                   <div className="space-y-4">
                     <div className="space-y-2">
@@ -803,6 +820,8 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       </p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-semantic-muted">
                         <span>{addressParts.marketLine}</span>
+                        {areaContext ? <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" /> : null}
+                        {areaContext ? <span>{areaContext}</span> : null}
                         <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
                         <span>{reasonDetails.distance}</span>
                         <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
@@ -817,6 +836,18 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       <MetricStat label="Urgency" value={reasonDetails.urgencyWindow} />
                     </div>
 
+                    {enrichment && (
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        <MetricStat label="Lead source" value={reasonDetails.signalSource} />
+                        <MetricStat label="Neighborhood" value={enrichment.neighborhood} />
+                        <MetricStat label="Property value" value={enrichment.propertyValueEstimate || "Unavailable"} />
+                        <MetricStat
+                          label="Owner contact"
+                          value={enrichment.ownerContact ? `${enrichment.ownerContact.name} · ${enrichment.ownerContact.confidenceLabel}` : "Unavailable"}
+                        />
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="default">{reasonDetails.signalSource}</Badge>
                       <Badge variant="default">{priorityFromScore(event.intent_score)}</Badge>
@@ -826,8 +857,8 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this opportunity exists</p>
                       <ul className="mt-3 grid gap-2 text-sm text-semantic-text">
-                        {bullets.map((bullet) => (
-                          <li key={bullet} className="flex items-start gap-2">
+                        {bullets.map((bullet, index) => (
+                          <li key={`${event.id}-reason-${index}`} className="flex items-start gap-2">
                             <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-brand-700" />
                             <span>{bullet}</span>
                           </li>
@@ -842,6 +873,10 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                   </div>
 
                   <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    <div className="rounded-xl border border-brand-500/20 bg-brand-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Next action</p>
+                      <p className="mt-2 text-sm font-semibold text-semantic-text">Schedule inspection first, then claim the lead.</p>
+                    </div>
                     <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
                       Schedule Inspection
@@ -1105,8 +1140,11 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Tags</p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {(preview.tags || []).map((tag) => (
-                    <span key={tag} className="rounded-full bg-semantic-surface2 px-3 py-1 text-xs font-semibold text-semantic-muted">
+                  {(preview.tags || []).map((tag, index) => (
+                    <span
+                      key={`${preview.id}-tag-${index}`}
+                      className="rounded-full bg-semantic-surface2 px-3 py-1 text-xs font-semibold text-semantic-muted"
+                    >
                       {tag}
                     </span>
                   ))}
@@ -1167,6 +1205,16 @@ function getOpportunityReasonDetails(event: ScannerEvent) {
 }
 
 function formatOpportunityAddress(event: ScannerEvent, serviceArea: string) {
+  const propertyAddress = String(event.raw?.property_address || "").trim();
+  const propertyCity = String(event.raw?.property_city || "").trim();
+  const propertyState = String(event.raw?.property_state || "").trim();
+  const propertyPostal = String(event.raw?.property_postal_code || "").trim();
+  const normalized = [propertyAddress, [propertyCity, propertyState].filter(Boolean).join(", "), propertyPostal].filter(Boolean).join(" ");
+  if (normalized) {
+    const fixed = normalized.replace(/\s+,/g, ",").replace(/,\s+/g, ", ").trim();
+    if (fixed) return fixed;
+  }
+
   const raw = String(event.location_text || "").trim();
   const looksLikeCoordinates = /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(raw);
   if (raw && !looksLikeCoordinates) return raw;
@@ -1211,14 +1259,16 @@ function MetricStat({ label, value, emphasize }: { label: string; value: string;
 function OpportunityPropertyVisual({
   event,
   address,
-  addressLine
+  addressLine,
+  enrichment
 }: {
   event: ScannerEvent;
   address: string;
   addressLine: string;
+  enrichment: EnrichmentRecord | null;
 }) {
   return (
-    <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(33,43,38,0.96),rgba(91,108,100,0.86))] p-4 text-white shadow-sm">
+    <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(29,38,34,0.98),rgba(79,95,87,0.92))] p-4 text-white shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-white/80">
           {String(event.raw?.incident_type || categoryLabel[event.category])}
@@ -1226,22 +1276,40 @@ function OpportunityPropertyVisual({
         <span className="text-sm font-semibold text-brand-200">{categoryLabel[event.category]}</span>
       </div>
       <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))] p-4">
-        <div className="relative flex h-40 items-end justify-center overflow-hidden rounded-[1rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.04))]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_56%),linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))]" />
-          <div className="absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(180deg,rgba(130,180,61,0.08),rgba(130,180,61,0.18))]" />
-          <div className="relative mb-4 h-20 w-28 rounded-t-[1.4rem] bg-white/85">
-            <div className="absolute left-3 top-5 h-5 w-5 rounded bg-[rgb(var(--sb-primary-soft))]" />
-            <div className="absolute right-3 top-5 h-5 w-5 rounded bg-[rgb(var(--sb-primary-soft))]" />
-            <div className="absolute bottom-0 left-1/2 h-10 w-8 -translate-x-1/2 rounded-t-lg bg-[rgb(var(--sb-copper-soft))]" />
-            <div className="absolute -top-7 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[64px] border-b-[30px] border-x-transparent border-b-white/85" />
-          </div>
+        <div className="relative h-40 overflow-hidden rounded-[1rem]">
+          <Image
+            src="/marketing/property-preview.svg"
+            alt="Property preview"
+            fill
+            className="object-cover"
+            sizes="(max-width: 1280px) 280px, 320px"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(22,29,26,0.04),rgba(22,29,26,0.28))]" />
           <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85">
-            Property image
+            {enrichment?.propertyImageLabel || "Property image"}
           </div>
+          {enrichment?.ownerContact && (
+            <div className="absolute bottom-3 right-3 rounded-full bg-black/30 px-3 py-1 text-[11px] font-semibold text-white/88">
+              {enrichment.ownerContact.confidenceLabel}
+            </div>
+          )}
         </div>
       </div>
       <p className="mt-4 text-sm font-semibold text-white">{addressLine}</p>
       <p className="mt-1 text-sm text-white/70">{address}</p>
+      {enrichment && (
+        <div className="mt-4 grid gap-2 text-xs text-white/80">
+          <p>
+            <span className="font-semibold text-white">Neighborhood:</span> {enrichment.neighborhood}
+          </p>
+          <p>
+            <span className="font-semibold text-white">Value:</span> {enrichment.propertyValueEstimate || "Unavailable"}
+          </p>
+          <p>
+            <span className="font-semibold text-white">Owner:</span> {enrichment.ownerContact?.name || "Unavailable"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1299,4 +1367,10 @@ function conversationStylePost(event: ScannerEvent) {
     "If anyone has a trusted contractor please DM ASAP."
   ];
   return `${snippets.join(" ")} Signals: ${(event.tags || []).join(", ")}.`;
+}
+
+function getEventEnrichment(event: ScannerEvent) {
+  const enrichment = event.raw?.enrichment;
+  if (!enrichment || typeof enrichment !== "object") return null;
+  return enrichment as EnrichmentRecord;
 }

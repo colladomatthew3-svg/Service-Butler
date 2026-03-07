@@ -14,19 +14,7 @@
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
-        "app/(dashboard)/dashboard/settings/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
         "app/(dashboard)/dashboard/leads/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/leads/[id]/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/pipeline/page": {
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
@@ -39,10 +27,7 @@
         "app/(auth)/login/page": "rsc",
         "app/(dashboard)/dashboard/page": "rsc",
         "app/(dashboard)/dashboard/scanner/page": "rsc",
-        "app/(dashboard)/dashboard/settings/page": "rsc",
         "app/(dashboard)/dashboard/leads/page": "rsc",
-        "app/(dashboard)/dashboard/leads/[id]/page": "rsc",
-        "app/(dashboard)/dashboard/pipeline/page": "rsc",
         "app/(dashboard)/dashboard/jobs/page": "rsc"
       },
       "filename": "actions/auth.ts",
@@ -62,19 +47,7 @@
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
-        "app/(dashboard)/dashboard/settings/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
         "app/(dashboard)/dashboard/leads/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/leads/[id]/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/pipeline/page": {
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
@@ -87,10 +60,7 @@
         "app/(auth)/login/page": "rsc",
         "app/(dashboard)/dashboard/page": "rsc",
         "app/(dashboard)/dashboard/scanner/page": "rsc",
-        "app/(dashboard)/dashboard/settings/page": "rsc",
         "app/(dashboard)/dashboard/leads/page": "rsc",
-        "app/(dashboard)/dashboard/leads/[id]/page": "rsc",
-        "app/(dashboard)/dashboard/pipeline/page": "rsc",
         "app/(dashboard)/dashboard/jobs/page": "rsc"
       },
       "filename": "actions/auth.ts",
@@ -110,19 +80,7 @@
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
-        "app/(dashboard)/dashboard/settings/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
         "app/(dashboard)/dashboard/leads/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/leads/[id]/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/pipeline/page": {
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
@@ -135,10 +93,7 @@
         "app/(auth)/login/page": "rsc",
         "app/(dashboard)/dashboard/page": "rsc",
         "app/(dashboard)/dashboard/scanner/page": "rsc",
-        "app/(dashboard)/dashboard/settings/page": "rsc",
         "app/(dashboard)/dashboard/leads/page": "rsc",
-        "app/(dashboard)/dashboard/leads/[id]/page": "rsc",
-        "app/(dashboard)/dashboard/pipeline/page": "rsc",
         "app/(dashboard)/dashboard/jobs/page": "rsc"
       },
       "filename": "actions/auth.ts",
@@ -158,19 +113,7 @@
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
-        "app/(dashboard)/dashboard/settings/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
         "app/(dashboard)/dashboard/leads/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/leads/[id]/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        },
-        "app/(dashboard)/dashboard/pipeline/page": {
           "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fmatthewcollado%2FDownloads%2FService%20Butler%2Fsrc%2Factions%2Fauth.ts%22%2C%5B%7B%22id%22%3A%22004ff1cd955b3dc34e927c06bdded84ea720785be1%22%2C%22exportedName%22%3A%22startDemoSession%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%220065254f8aded48b56b18e02921f76b0f73dcff8af%22%2C%22exportedName%22%3A%22signOut%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%224025472139b73910c1a7cfeb1a4e8365a16bdeba3e%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%2C%7B%22id%22%3A%22403b67a3772fb7fd32b3a99a38e6515d948dfea8f9%22%2C%22exportedName%22%3A%22signInWithDevQuickLogin%22%2C%22filename%22%3A%22actions%2Fauth.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         },
@@ -183,10 +126,7 @@
         "app/(auth)/login/page": "rsc",
         "app/(dashboard)/dashboard/page": "rsc",
         "app/(dashboard)/dashboard/scanner/page": "rsc",
-        "app/(dashboard)/dashboard/settings/page": "rsc",
         "app/(dashboard)/dashboard/leads/page": "rsc",
-        "app/(dashboard)/dashboard/leads/[id]/page": "rsc",
-        "app/(dashboard)/dashboard/pipeline/page": "rsc",
         "app/(dashboard)/dashboard/jobs/page": "rsc"
       },
       "filename": "actions/auth.ts",

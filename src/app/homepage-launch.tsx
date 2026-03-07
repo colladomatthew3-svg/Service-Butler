@@ -1,5 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, MapPin, ShieldCheck } from "lucide-react";
+import { ArrowRight, ShieldCheck } from "lucide-react";
 import { Footer } from "@/components/brand/Footer";
 import { TopNav } from "@/components/brand/TopNav";
 import { buttonStyles } from "@/components/ui/button";
@@ -71,26 +72,17 @@ export default function LaunchHomepage() {
                 <div className="absolute inset-x-14 top-10 h-40 rounded-full bg-[rgb(var(--sb-primary-soft))/0.95] blur-3xl" />
                 <div className="relative overflow-hidden rounded-[2rem] border border-semantic-border bg-white p-4 shadow-[var(--shadow-lift)] sm:p-5">
                   <div className="overflow-hidden rounded-[1.6rem] border border-semantic-border bg-[linear-gradient(180deg,rgba(244,247,245,1),rgba(233,238,235,1))]">
-                    <div className="h-[320px] bg-[linear-gradient(180deg,rgba(196,214,188,0.55),rgba(240,244,241,0.35)),radial-gradient(circle_at_top,rgba(255,255,255,0.9),transparent_55%)] p-6 sm:h-[360px]">
-                      <div className="relative flex h-full items-end justify-center overflow-hidden rounded-[1.4rem] border border-white/70 bg-[linear-gradient(180deg,rgba(241,245,242,0.8),rgba(223,231,226,0.92))]">
-                        <div className="absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(255,255,255,0))]" />
-                        <div className="absolute inset-x-10 bottom-0 h-24 rounded-t-[2rem] bg-[linear-gradient(180deg,rgba(157,186,130,0.35),rgba(157,186,130,0.12))]" />
-                        <div className="relative mb-14 h-32 w-40 rounded-t-[2rem] bg-white shadow-[0_18px_34px_rgba(30,42,36,0.12)]">
-                          <div className="absolute left-5 top-8 h-7 w-7 rounded-md bg-[rgb(var(--sb-primary-soft))]" />
-                          <div className="absolute right-5 top-8 h-7 w-7 rounded-md bg-[rgb(var(--sb-primary-soft))]" />
-                          <div className="absolute bottom-0 left-1/2 h-14 w-10 -translate-x-1/2 rounded-t-xl bg-[rgb(var(--sb-copper-soft))]" />
-                          <div className="absolute -top-10 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[92px] border-b-[44px] border-x-transparent border-b-white" />
-                        </div>
+                    <div className="p-4 sm:p-5">
+                      <div className="overflow-hidden rounded-[1.4rem] border border-white/70 bg-white">
+                        <Image
+                          src="/marketing/hero-property-visual.svg"
+                          alt="Property preview showing the kind of homes surfaced by Service Butler"
+                          width={1200}
+                          height={860}
+                          className="h-auto w-full object-cover"
+                          priority
+                        />
                       </div>
-                    </div>
-
-                    <div className="border-t border-semantic-border bg-white px-6 py-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">Example opportunity</p>
-                      <p className="mt-2 text-xl font-semibold text-semantic-text">Storm damage inspection opportunity</p>
-                      <p className="mt-2 inline-flex items-center gap-2 text-sm text-semantic-muted">
-                        <MapPin className="h-4 w-4" />
-                        148 Cedar Ridge Drive, Brentwood, NY 11717
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -193,11 +185,11 @@ export default function LaunchHomepage() {
 
         <section id="pricing" className="page-section py-14">
           <div className="container">
-            <div className="rounded-[2rem] border border-semantic-border bg-[rgb(var(--sb-bg))] px-6 py-10 text-white shadow-[var(--shadow-card)] sm:px-10 sm:py-12">
+            <div className="rounded-[2rem] border border-semantic-border bg-white px-6 py-10 shadow-[var(--shadow-card)] sm:px-10 sm:py-12">
               <div className="max-w-2xl">
-                <p className="eyebrow bg-white/10 text-white">See the demo</p>
-                <h2 className="section-title mt-5 text-white">See how Service Butler helps your team find work and book it faster.</h2>
-                <p className="mt-4 text-lg leading-8 text-white/78">
+                <p className="eyebrow">See the demo</p>
+                <h2 className="section-title mt-5 text-semantic-text">See how Service Butler helps your team find work and book it faster.</h2>
+                <p className="mt-4 text-lg leading-8 text-semantic-muted">
                   Start with the homepage, open the demo, set the service area, run the scanner, and move an opportunity
                   into a booked inspection.
                 </p>
@@ -208,7 +200,7 @@ export default function LaunchHomepage() {
                 </Link>
                 <a
                   href="mailto:sales@servicebutler.ai?subject=Service%20Butler%20Launch%20Demo"
-                  className={buttonStyles({ size: "lg", variant: "secondary", className: "border-white/12 bg-white/8 text-white hover:bg-white/12" })}
+                  className={buttonStyles({ size: "lg", variant: "secondary" })}
                 >
                   Book Demo
                   <ArrowRight className="h-4 w-4" />

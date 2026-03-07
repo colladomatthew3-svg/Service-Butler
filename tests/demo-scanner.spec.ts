@@ -18,4 +18,6 @@ test("scanner demo flow shows deterministic opportunities", async ({ page }) => 
   await expect(cards.first()).toContainText("Why this opportunity exists");
   await expect(cards.first()).toContainText("Suggested next action");
   await expect(cards.first()).toContainText(/storm restoration|abatement|inspection|mitigation|demolition/i);
+  await expect(cards.first()).toContainText(/\d+\s+[A-Za-z].*,\s*[A-Za-z ]+,\s*[A-Z]{2}\s+\d{5}/);
+  await expect(cards.first()).not.toContainText(/-?\d+\.\d+\s*,\s*-?\d+\.\d+/);
 });

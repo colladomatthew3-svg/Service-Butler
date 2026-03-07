@@ -1,17 +1,15 @@
-<svg width="1200" height="340" viewBox="0 0 1200 340" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <g transform="translate(20,10)">
-    <path d="M164 62L78 140" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M162 60L256 60L256 134" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M256 60L256 30L288 30L288 88" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M256 62L352 140" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M124 150L124 244C124 258 136 270 150 270H362C376 270 388 258 388 244V150" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="208" y="168" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
-    <rect x="256" y="168" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
-    <rect x="208" y="216" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
-    <rect x="256" y="216" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
+<svg width="1700" height="340" viewBox="0 0 1700 340" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(24 34) scale(0.55)">
+    <path d="M 116 249 L 110 261 L 114 274 Q 120 288 134 288 L 145 288 L 145 303 Q 145 316 158 316 L 423 316 Q 436 316 436 303 L 436 288 L 447 288 Q 461 288 467 274 L 471 261 L 465 249 L 302 102 Q 295 96 290 96 Q 285 96 278 102 Z" fill="#82B43D"/>
+    <path d="M 233 60 Q 233 52 241 52 L 276 52 Q 284 52 284 60 L 284 139 Q 284 147 276 147 L 241 147 Q 233 147 233 139 Z" fill="#82B43D"/>
+    <rect x="169" y="180" width="243" height="216" rx="60" fill="#82B43D"/>
+    <rect x="240" y="228" width="54" height="54" rx="12" fill="#ffffff"/>
+    <rect x="316" y="228" width="54" height="54" rx="12" fill="#ffffff"/>
+    <rect x="240" y="304" width="54" height="54" rx="12" fill="#ffffff"/>
+    <rect x="316" y="304" width="54" height="54" rx="12" fill="#ffffff"/>
   </g>
-  <g transform="translate(440,0)">
-    <text x="0" y="240" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="700" fill="#88BC42">service</text>
-    <text x="498" y="240" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="400" fill="#DD9F74">butler</text>
+  <g transform="translate(378 0)">
+    <text x="0" y="236" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="700" fill="#82B43D">service</text>
+    <text x="586" y="236" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="400" fill="#D99D72">butler</text>
   </g>
 </svg>

@@ -3,8 +3,8 @@ import { cn } from "@/lib/utils/cn";
 
 type LogoVariant = "full" | "mark" | "wordmark" | "lockup";
 
-const FULL_LOGO_RATIO = 1200 / 340;
-const MARK_RATIO = 220 / 220;
+const FULL_LOGO_RATIO = 1700 / 340;
+const MARK_RATIO = 581 / 492;
 
 export function Logo({
   variant = "full",

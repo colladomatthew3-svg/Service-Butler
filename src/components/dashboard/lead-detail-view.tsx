@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarPlus, MessageSquare, PhoneCall, RefreshCw, Save, Clock3, Wrench, Gauge, BadgeCheck } from "lucide-react";
@@ -337,16 +338,17 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             </CardHeader>
             <CardBody className="space-y-4">
               <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(33,43,38,0.96),rgba(91,108,100,0.86))] p-4 text-white">
-                <div className="relative flex h-44 items-end justify-center overflow-hidden rounded-[1.1rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.02))]">
+                <div className="relative h-44 overflow-hidden rounded-[1.1rem]">
+                  <Image
+                    src="/marketing/property-preview.svg"
+                    alt="Property preview"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 1024px) 100vw, 420px"
+                  />
+                  <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(22,29,26,0.04),rgba(22,29,26,0.26))]" />
                   <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/88">
                     {lead.enrichment.propertyImageLabel}
-                  </div>
-                  <div className="absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(180deg,rgba(130,180,61,0.08),rgba(130,180,61,0.2))]" />
-                  <div className="relative mb-5 h-24 w-32 rounded-t-[1.7rem] bg-white/88">
-                    <div className="absolute left-4 top-7 h-6 w-6 rounded bg-[rgb(var(--sb-primary-soft))]" />
-                    <div className="absolute right-4 top-7 h-6 w-6 rounded bg-[rgb(var(--sb-primary-soft))]" />
-                    <div className="absolute bottom-0 left-1/2 h-12 w-9 -translate-x-1/2 rounded-t-xl bg-[rgb(var(--sb-copper-soft))]" />
-                    <div className="absolute -top-8 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[74px] border-b-[34px] border-x-transparent border-b-white/88" />
                   </div>
                 </div>
               </div>
@@ -439,6 +441,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <CardBody className="grid gap-3 sm:grid-cols-2">
               <Detail label="Phone" value={lead.phone || "-"} icon={<PhoneCall className="h-4 w-4" />} />
               <Detail label="Service" value={lead.service_type || "-"} icon={<Wrench className="h-4 w-4" />} />
+              <Detail label="Lead source" value={formatLeadSource(lead.source)} />
               <Detail
                 label="Address"
                 value={[lead.address, lead.city, lead.state, lead.postal_code].filter(Boolean).join(", ") || "-"}
@@ -619,6 +622,14 @@ function formatVerification(value: string) {
   if (value === "public-record") return "Public record";
   if (value === "verified") return "Verified";
   return value;
+}
+
+function formatLeadSource(value: string) {
+  const normalized = String(value || "manual").toLowerCase();
+  if (normalized === "scanner") return "Scanner";
+  if (normalized === "imported" || normalized === "import") return "Imported";
+  if (normalized === "manual") return "Manual";
+  return normalized.replace(/_/g, " ");
 }
 
 function Detail({

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 import { dispatchDemoScannerEvent } from "@/lib/demo/store";
 import { generateSignals } from "@/lib/services/intent-engine";
+import { resolveOpportunityAddress } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getForecastByLatLng } from "@/lib/services/weather";
 
@@ -110,9 +111,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq("name", assignee)
     .maybeSingle();
 
-  const location = String(event.location_text || "");
-  const city = location.split(",")[0]?.trim() || "Service Area";
-  const state = location.split(",")[1]?.trim() || "NY";
+  const addressInfo = resolveOpportunityAddress({
+    locationText: String(event.raw?.property_address || event.location_text || ""),
+    lat: event.lat,
+    lon: event.lon,
+    serviceAreaLabel: String(event.raw?.service_area_label || event.location_text || "Service Area"),
+    seed: event.id
+  });
 
   const leadPayload = {
     account_id: accountId,
@@ -122,8 +127,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     name: event.title,
     phone: randomPhone(`${event.id}:${event.title}`),
     service_type: categoryService(event.category),
-    city,
-    state,
+    address: addressInfo.address,
+    city: addressInfo.city,
+    state: addressInfo.state,
+    postal_code: addressInfo.postalCode,
     requested_timeframe: Number(event.intent_score) >= 78 ? "ASAP" : "Today",
     notes: `Scanner dispatch: ${event.description || "opportunity"}`
   };
@@ -131,7 +138,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data: lead, error: leadError } = await supabase
     .from("leads")
     .insert(leadPayload)
-    .select("id,service_type,requested_timeframe,city,state")
+    .select("id,service_type,requested_timeframe,address,city,state,postal_code")
     .single();
 
   if (leadError || !lead) {

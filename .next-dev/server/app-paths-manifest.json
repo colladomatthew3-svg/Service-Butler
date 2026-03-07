@@ -1,11 +1,12 @@
 {
-  "/api/jobs/route": "app/api/jobs/route.js",
-  "/api/leads/[id]/route": "app/api/leads/[id]/route.js",
+  "/api/weather/route": "app/api/weather/route.js",
+  "/api/scanner/events/route": "app/api/scanner/events/route.js",
+  "/api/scanner/run/route": "app/api/scanner/run/route.js",
+  "/api/leads/route": "app/api/leads/route.js",
   "/page": "app/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
   "/(dashboard)/dashboard/scanner/page": "app/(dashboard)/dashboard/scanner/page.js",
+  "/(dashboard)/dashboard/jobs/page": "app/(dashboard)/dashboard/jobs/page.js",
   "/(dashboard)/dashboard/leads/page": "app/(dashboard)/dashboard/leads/page.js",
-  "/(dashboard)/dashboard/settings/page": "app/(dashboard)/dashboard/settings/page.js",
-  "/(dashboard)/dashboard/leads/[id]/page": "app/(dashboard)/dashboard/leads/[id]/page.js",
-  "/(dashboard)/dashboard/pipeline/page": "app/(dashboard)/dashboard/pipeline/page.js",
-  "/(dashboard)/dashboard/jobs/page": "app/(dashboard)/dashboard/jobs/page.js"
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js"
 }

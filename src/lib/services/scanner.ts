@@ -1,5 +1,6 @@
 import { generateSignals } from "@/lib/services/intent-engine";
 import { getEnrichmentProvider } from "@/lib/services/enrichment";
+import { distanceToMarketMiles, getTriStateMarketsForSignal } from "@/lib/services/tri-state-markets";
 import { geocodeLocation, getForecastByLatLng, type ForecastSummary } from "@/lib/services/weather";
 
 export type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
@@ -25,6 +26,15 @@ export type ScannerOpportunity = {
   recommendedScheduleIso: string | null;
   raw: Record<string, unknown>;
   createdAtIso: string;
+};
+
+export type OpportunityAddress = {
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  display: string;
+  quality: "exact" | "approximate";
 };
 
 type DemoIncidentTemplate = {
@@ -55,6 +65,17 @@ export type ScannerLead = {
   reason: string;
   signals: ReturnType<typeof generateSignals>;
   sourceMode: "synthetic" | "google_places";
+};
+
+const DEMO_MARKET_LOOKUP: Record<string, { city: string; state: string; postalCode: string }> = {
+  "11717": { city: "Brentwood", state: "NY", postalCode: "11717" },
+  "11705": { city: "Bayport", state: "NY", postalCode: "11705" },
+  "11706": { city: "Bay Shore", state: "NY", postalCode: "11706" },
+  "11722": { city: "Central Islip", state: "NY", postalCode: "11722" },
+  "11772": { city: "Patchogue", state: "NY", postalCode: "11772" },
+  "11788": { city: "Hauppauge", state: "NY", postalCode: "11788" },
+  "10019": { city: "Midtown West", state: "NY", postalCode: "10019" },
+  "33602": { city: "Tampa", state: "FL", postalCode: "33602" }
 };
 
 const VALID_CATEGORIES: ScannerCategory[] = ["restoration", "plumbing", "demolition", "asbestos", "general"];
@@ -234,8 +255,12 @@ function distanceSummary(index: number, locationText: string) {
 function parseMarketLocation(location: string) {
   const normalized = String(location || "").trim();
   const zipMatch = normalized.match(/\b\d{5}\b/);
+  if (zipMatch?.[0] && DEMO_MARKET_LOOKUP[zipMatch[0]]) {
+    return DEMO_MARKET_LOOKUP[zipMatch[0]];
+  }
   const stateMatch = normalized.match(/\b([A-Z]{2})\b/);
-  const city = normalized.split(",")[0]?.trim() || "Brentwood";
+  const firstPart = normalized.split(",")[0]?.trim() || "Brentwood";
+  const city = /^\d{5}$/.test(firstPart) ? "Brentwood" : firstPart;
 
   return {
     city,
@@ -262,6 +287,86 @@ function parseAddressParts(address: string) {
     city,
     state: regionMatch?.[1] || "NY",
     postalCode: regionMatch?.[2] || "11717"
+  };
+}
+
+function isCoordinateLabel(value: string) {
+  return /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(value);
+}
+
+function looksLikeStreetAddress(value: string) {
+  return /^\d+\s+.+,\s*.+,\s*[A-Z]{2}(?:\s+\d{5})?$/.test(value.trim());
+}
+
+function parseMarketLocationParts(value: string) {
+  const normalized = String(value || "").trim();
+  const zipOnly = normalized.match(/^\d{5}$/)?.[0];
+  if (zipOnly && DEMO_MARKET_LOOKUP[zipOnly]) {
+    return DEMO_MARKET_LOOKUP[zipOnly];
+  }
+
+  const parts = normalized.split(",").map((part) => part.trim()).filter(Boolean);
+  const last = parts[parts.length - 1] || "";
+  const zipMatch = normalized.match(/\b\d{5}\b/);
+  if (zipMatch?.[0] && DEMO_MARKET_LOOKUP[zipMatch[0]] && parts.length <= 1) {
+    return DEMO_MARKET_LOOKUP[zipMatch[0]];
+  }
+  const stateZipMatch = last.match(/^([A-Z]{2})(?:\s+(\d{5}))?$/);
+  const state = stateZipMatch?.[1] || normalized.match(/\b([A-Z]{2})\b/)?.[1] || "NY";
+  const postalCode = stateZipMatch?.[2] || zipMatch?.[0] || parseMarketLocation(normalized).postalCode;
+  const city =
+    parts.length >= 2
+      ? parts[parts.length - 2] || parseMarketLocation(normalized).city
+      : parseMarketLocation(normalized).city;
+
+  return {
+    city,
+    state,
+    postalCode
+  };
+}
+
+export function resolveOpportunityAddress({
+  locationText,
+  lat,
+  lon,
+  serviceAreaLabel,
+  seed
+}: {
+  locationText?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  serviceAreaLabel?: string | null;
+  seed: string;
+}): OpportunityAddress {
+  const raw = String(locationText || "").trim();
+  if (raw && looksLikeStreetAddress(raw) && !isCoordinateLabel(raw)) {
+    const exact = parseAddressParts(raw);
+    return {
+      address: exact.street,
+      city: exact.city,
+      state: exact.state,
+      postalCode: exact.postalCode,
+      display: raw,
+      quality: "exact"
+    };
+  }
+
+  const marketSource = raw && !isCoordinateLabel(raw) ? raw : String(serviceAreaLabel || "").trim();
+  const marketParts = parseMarketLocationParts(marketSource || "Brentwood, NY 11717");
+  const generated = generateDemoAddress(
+    `${seed}:${Number(lat ?? 0).toFixed(3)}:${Number(lon ?? 0).toFixed(3)}`,
+    `${marketParts.city}, ${marketParts.state} ${marketParts.postalCode}`
+  );
+  const approx = parseAddressParts(generated);
+
+  return {
+    address: approx.street,
+    city: approx.city,
+    state: approx.state,
+    postalCode: approx.postalCode,
+    display: generated,
+    quality: "approximate"
   };
 }
 
@@ -455,8 +560,13 @@ function mkId(parts: string[]) {
 }
 
 function toLeadFromOpportunity(op: ScannerOpportunity): ScannerLead {
-  const cityGuess = op.locationText.split(",")[0]?.trim() || "Service Area";
-  const stateGuess = op.locationText.split(",")[1]?.trim() || "NY";
+  const addressInfo = resolveOpportunityAddress({
+    locationText: String(op.raw?.property_address || op.locationText || ""),
+    lat: op.lat,
+    lon: op.lon,
+    serviceAreaLabel: String(op.raw?.service_area_label || op.locationText || "Service Area"),
+    seed: op.id
+  });
   const nameSeed = hash(op.title + op.locationText);
   const first = ["Jordan", "Avery", "Mason", "Noah", "Mia", "Liam", "Aria", "Elijah"];
   const last = ["Parker", "Nguyen", "Diaz", "Brooks", "Carter", "Stone", "Bennett", "Reed"];
@@ -468,17 +578,17 @@ function toLeadFromOpportunity(op: ScannerOpportunity): ScannerLead {
     id: op.id,
     service_type: displayService(op.category),
     requested_timeframe: urgency === "high" ? "ASAP" : urgency === "medium" ? "Today" : "This week",
-    city: cityGuess,
-    state: stateGuess
+    city: addressInfo.city,
+    state: addressInfo.state
   };
 
   return {
     id: op.id,
     name,
     phone,
-    city: cityGuess,
-    state: stateGuess,
-    postal: String(10000 + (nameSeed % 89999)),
+    city: addressInfo.city,
+    state: addressInfo.state,
+    postal: addressInfo.postalCode,
     service_type: displayService(op.category),
     urgency,
     intentScore: op.intentScore,
@@ -521,7 +631,12 @@ function createDemoOpportunities({
 
     const { intentScore, confidence } = scoreOpportunity(category, tags, forecast, 58 + Math.floor(rand() * 14));
     const marketLabel = location.includes(",") ? location : `${location}, NY`;
-    const locationText = generateDemoAddress(`${template.incidentType}:${i}`, marketLabel);
+    const addressInfo = resolveOpportunityAddress({
+      locationText: generateDemoAddress(`${template.incidentType}:${i}`, marketLabel),
+      serviceAreaLabel: marketLabel,
+      seed: `${template.incidentType}:${i}`
+    });
+    const locationText = addressInfo.display;
     const id = mkId(["demo", category, template.incidentType, template.title, locationText, String(i)]);
     const weatherSignal =
       template.weatherSignal || (forecast?.current.precipitationChance ? `${forecast.current.precipitationChance}% rain chance` : "stable weather window");
@@ -568,6 +683,12 @@ function createDemoOpportunities({
           forecast_window: timeWindow,
           distance_miles: distanceMiles,
           service_type: serviceType,
+          property_address: addressInfo.address,
+          property_city: addressInfo.city,
+          property_state: addressInfo.state,
+          property_postal_code: addressInfo.postalCode,
+          address_quality: addressInfo.quality,
+          service_area_label: marketLabel,
           urgency_window: timeWindow,
           demand_signal: demandSignal,
           demand_explanation: template.demandExplanation,
@@ -590,6 +711,12 @@ function createDemoOpportunities({
         forecast_window: timeWindow,
         distance_miles: distanceMiles,
         service_type: serviceType,
+        property_address: addressInfo.address,
+        property_city: addressInfo.city,
+        property_state: addressInfo.state,
+        property_postal_code: addressInfo.postalCode,
+        address_quality: addressInfo.quality,
+        service_area_label: marketLabel,
         urgency_window: timeWindow,
         demand_signal: demandSignal,
         demand_explanation: template.demandExplanation,
@@ -630,12 +757,14 @@ function categoryFromAlert(eventText: string): ScannerCategory {
 async function fetchNwsOpportunities({
   lat,
   lon,
+  serviceAreaLabel,
   categories,
   forecast,
   limit
 }: {
   lat: number;
   lon: number;
+  serviceAreaLabel: string;
   categories: ScannerCategory[];
   forecast?: ForecastSummary | null;
   limit: number;
@@ -656,22 +785,66 @@ async function fetchNwsOpportunities({
     const scored = scoreOpportunity(category, tags, forecast, 62 + severityWeight / 2);
     const intent = clamp(scored.intentScore + severityWeight + urgencyWeight * 0.5);
 
-    out.push({
-      id: mkId(["nws", feature.id || props.headline || "alert"]),
-      source: "weather",
-      category,
-      title: props.headline || props.event || "Weather alert",
-      description: props.description || `Active weather alert for ${props.areaDesc || "your area"}.`,
-      locationText: props.areaDesc || `${lat.toFixed(3)}, ${lon.toFixed(3)}`,
-      lat,
-      lon,
-      intentScore: intent,
-      priorityLabel: priorityLabelForOpportunity({
+    const markets = getTriStateMarketsForSignal({
+      areaDesc: props.areaDesc,
+      serviceAreaLabel,
+      serviceLat: lat,
+      serviceLon: lon,
+      limit: 3
+    });
+
+    for (const market of markets) {
+      const locationText = `${market.address}, ${market.city}, ${market.state} ${market.postalCode}`;
+      const distanceMiles = Math.max(1, Math.round(distanceToMarketMiles(lat, lon, market)));
+      const reasonSummary = `${props.event || "NOAA alert"} is active for ${market.county}, putting ${market.neighborhood} into a ${props.urgency || "today"} response window.`;
+
+      out.push({
+        id: mkId(["nws", feature.id || props.headline || "alert", market.id]),
+        source: "weather",
+        category,
+        title: `${props.event || "Weather alert"} near ${market.city}`,
+        description: props.description || `Active weather alert affecting ${market.county}.`,
+        locationText,
+        lat: market.lat,
+        lon: market.lon,
         intentScore: intent,
+        priorityLabel: priorityLabelForOpportunity({
+          intentScore: intent,
+          tags,
+          title: props.headline || props.event || "Weather alert",
+          description: props.description || `Active weather alert affecting ${market.county}.`,
+          reasonSummary,
+          raw: {
+            provider: "NWS",
+            id: feature.id,
+            incident_type: props.event || "NOAA alert",
+            signal_source: "NOAA alerts",
+            event: props.event,
+            severity: props.severity,
+            urgency: props.urgency,
+            sent: props.sent,
+            property_address: market.address,
+            property_city: market.city,
+            property_state: market.state,
+            property_postal_code: market.postalCode,
+            county: market.county,
+            neighborhood: market.neighborhood,
+            address_quality: "approximate",
+            service_area_label: serviceAreaLabel,
+            service_type: displayCampaignService(category),
+            urgency_window: String(props.urgency || "today"),
+            distance_miles: distanceMiles,
+            weather_signal: props.event || "Weather alert",
+            demand_signal: "Active NOAA alert",
+            demand_explanation: `NOAA alert coverage intersects ${market.county} and suggests elevated demand in ${market.neighborhood}.`
+          }
+        }),
+        confidence: scored.confidence,
         tags,
-        title: props.headline || props.event || "Weather alert",
-        description: props.description || `Active weather alert for ${props.areaDesc || "your area"}.`,
-        reasonSummary: "NWS issued an active alert that historically increases inbound service requests.",
+        nextAction: suggestedNextAction(category, intent, `${market.city}, ${market.state}`),
+        reasonSummary,
+        recommendedCreateMode: intent >= 78 ? "job" : "lead",
+        recommendedScheduleIso: intent >= 72 ? suggestedSchedule(intent, 45) : null,
         raw: {
           provider: "NWS",
           id: feature.id,
@@ -681,39 +854,29 @@ async function fetchNwsOpportunities({
           severity: props.severity,
           urgency: props.urgency,
           sent: props.sent,
+          property_address: market.address,
+          property_city: market.city,
+          property_state: market.state,
+          property_postal_code: market.postalCode,
+          county: market.county,
+          neighborhood: market.neighborhood,
+          address_quality: "approximate",
+          service_area_label: serviceAreaLabel,
           service_type: displayCampaignService(category),
           urgency_window: String(props.urgency || "today"),
+          distance_miles: distanceMiles,
           weather_signal: props.event || "Weather alert",
           demand_signal: "Active NOAA alert",
-          demand_explanation: "NOAA alerts indicate property-impacting weather conditions that frequently convert into emergency service calls."
-        }
-      }),
-      confidence: scored.confidence,
-      tags,
-      nextAction: suggestedNextAction(category, intent, props.areaDesc || "service area"),
-      reasonSummary: "NWS issued an active alert that historically increases inbound service requests.",
-      recommendedCreateMode: intent >= 78 ? "job" : "lead",
-      recommendedScheduleIso: intent >= 72 ? suggestedSchedule(intent, 45) : null,
-      raw: {
-        provider: "NWS",
-        id: feature.id,
-        incident_type: props.event || "NOAA alert",
-        signal_source: "NOAA alerts",
-        event: props.event,
-        severity: props.severity,
-        urgency: props.urgency,
-        sent: props.sent,
-        service_type: displayCampaignService(category),
-        urgency_window: String(props.urgency || "today"),
-        weather_signal: props.event || "Weather alert",
-        demand_signal: "Active NOAA alert",
-        demand_explanation: "NOAA alerts indicate property-impacting weather conditions that frequently convert into emergency service calls."
-      },
-      createdAtIso: new Date().toISOString()
-    });
+          demand_explanation: `NOAA alert coverage intersects ${market.county} and suggests elevated demand in ${market.neighborhood}.`
+        },
+        createdAtIso: new Date().toISOString()
+      });
+    }
   }
 
-  return out.slice(0, limit);
+  return out
+    .sort((a, b) => b.intentScore - a.intentScore)
+    .slice(0, limit);
 }
 
 type UsgsResponse = {
@@ -758,6 +921,7 @@ function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number) 
 async function fetchUsgsOpportunities({
   lat,
   lon,
+  serviceAreaLabel,
   radiusMiles,
   categories,
   forecast,
@@ -765,6 +929,7 @@ async function fetchUsgsOpportunities({
 }: {
   lat: number;
   lon: number;
+  serviceAreaLabel: string;
   radiusMiles: number;
   categories: ScannerCategory[];
   forecast?: ForecastSummary | null;
@@ -795,13 +960,21 @@ async function fetchUsgsOpportunities({
     const scored = scoreOpportunity("restoration", tags, forecast, 52 + mag * 7);
     const intent = clamp(scored.intentScore + mag * 6 + (props.alert ? 10 : 0));
 
+    const addressInfo = resolveOpportunityAddress({
+      locationText: props.place || "",
+      lat: eLat,
+      lon: eLon,
+      serviceAreaLabel,
+      seed: feature.id || String(props.time || `${eLat},${eLon}`)
+    });
+
     out.push({
       id: mkId(["usgs", feature.id || String(props.time)]),
       source: "public_feed",
       category: "restoration",
       title: props.title || "Local seismic activity",
       description: `USGS event near service area (${Math.round(dist)} mi). Monitor for inspection and emergency requests.`,
-      locationText: props.place || `${eLat.toFixed(3)}, ${eLon.toFixed(3)}`,
+      locationText: addressInfo.display,
       lat: eLat,
       lon: eLon,
       intentScore: intent,
@@ -820,6 +993,12 @@ async function fetchUsgsOpportunities({
           tsunami: props.tsunami,
           alert: props.alert,
           time: props.time,
+          property_address: addressInfo.address,
+          property_city: addressInfo.city,
+          property_state: addressInfo.state,
+          property_postal_code: addressInfo.postalCode,
+          address_quality: addressInfo.quality,
+          service_area_label: serviceAreaLabel,
           service_type: "Structural Inspection",
           urgency_window: dist <= 20 ? "Immediate" : "Today",
           distance_miles: Math.round(dist),
@@ -842,6 +1021,12 @@ async function fetchUsgsOpportunities({
         tsunami: props.tsunami,
         alert: props.alert,
         time: props.time,
+        property_address: addressInfo.address,
+        property_city: addressInfo.city,
+        property_state: addressInfo.state,
+        property_postal_code: addressInfo.postalCode,
+        address_quality: addressInfo.quality,
+        service_area_label: serviceAreaLabel,
         service_type: "Structural Inspection",
         urgency_window: dist <= 20 ? "Immediate" : "Today",
         distance_miles: Math.round(dist),
@@ -868,6 +1053,7 @@ function categoryFromEonet(categoryTitle: string): ScannerCategory {
 async function fetchEonetOpportunities({
   lat,
   lon,
+  serviceAreaLabel,
   radiusMiles,
   categories,
   forecast,
@@ -875,6 +1061,7 @@ async function fetchEonetOpportunities({
 }: {
   lat: number;
   lon: number;
+  serviceAreaLabel: string;
   radiusMiles: number;
   categories: ScannerCategory[];
   forecast?: ForecastSummary | null;
@@ -911,6 +1098,14 @@ async function fetchEonetOpportunities({
     const proximityBoost = dist <= 30 ? 10 : dist <= 75 ? 6 : 3;
     const intent = clamp(scored.intentScore + recencyBoost + proximityBoost);
 
+    const addressInfo = resolveOpportunityAddress({
+      locationText: event.title || "",
+      lat: eLat,
+      lon: eLon,
+      serviceAreaLabel,
+      seed: event.id || event.title || String(geo?.date || `${eLat},${eLon}`)
+    });
+
     out.push({
       id: mkId(["eonet", event.id || event.title || String(geo?.date || Date.now())]),
       source: "public_feed",
@@ -918,7 +1113,7 @@ async function fetchEonetOpportunities({
       title: event.title || "Environmental incident",
       description:
         event.description || `NASA EONET reported an active environmental event about ${Math.round(dist)} mi from your service area.`,
-      locationText: `${eLat.toFixed(3)}, ${eLon.toFixed(3)}`,
+      locationText: addressInfo.display,
       lat: eLat,
       lon: eLon,
       intentScore: intent,
@@ -937,6 +1132,12 @@ async function fetchEonetOpportunities({
           geometry_date: geo?.date,
           distance_miles: Math.round(dist),
           source_url: event.sources?.[0]?.url,
+          property_address: addressInfo.address,
+          property_city: addressInfo.city,
+          property_state: addressInfo.state,
+          property_postal_code: addressInfo.postalCode,
+          address_quality: addressInfo.quality,
+          service_area_label: serviceAreaLabel,
           service_type: displayCampaignService(dominantCategory),
           urgency_window: recencyBoost >= 8 ? "Today" : "This week",
           demand_signal: "Active incident near service area",
@@ -958,6 +1159,12 @@ async function fetchEonetOpportunities({
         geometry_date: geo?.date,
         distance_miles: Math.round(dist),
         source_url: event.sources?.[0]?.url,
+        property_address: addressInfo.address,
+        property_city: addressInfo.city,
+        property_state: addressInfo.state,
+        property_postal_code: addressInfo.postalCode,
+        address_quality: addressInfo.quality,
+        service_area_label: serviceAreaLabel,
         service_type: displayCampaignService(dominantCategory),
         urgency_window: recencyBoost >= 8 ? "Today" : "This week",
         demand_signal: "Active incident near service area",
@@ -970,6 +1177,141 @@ async function fetchEonetOpportunities({
   }
 
   return out;
+}
+
+async function fetchForecastDrivenOpportunities({
+  lat,
+  lon,
+  serviceAreaLabel,
+  categories,
+  forecast,
+  limit
+}: {
+  lat: number;
+  lon: number;
+  serviceAreaLabel: string;
+  categories: ScannerCategory[];
+  forecast?: ForecastSummary | null;
+  limit: number;
+}): Promise<ScannerOpportunity[]> {
+  if (!forecast) return [];
+
+  const signals = [
+    {
+      key: "heavy-rain",
+      event: "Heavy rainfall pressure",
+      category: "restoration" as ScannerCategory,
+      serviceType: "Water Mitigation",
+      urgency: "Next 6 hours",
+      threshold: (forecast.current.precipitationChance ?? 0) >= 65,
+      demandSignal: "Rainfall intensity"
+    },
+    {
+      key: "freeze",
+      event: "Freeze warning conditions",
+      category: "plumbing" as ScannerCategory,
+      serviceType: "Pipe Burst Response",
+      urgency: "Overnight",
+      threshold: forecast.next6Hours.some((hour) => hour.temp <= 32),
+      demandSignal: "Freeze risk"
+    },
+    {
+      key: "high-wind",
+      event: "High wind damage risk",
+      category: "restoration" as ScannerCategory,
+      serviceType: "Storm Restoration",
+      urgency: "Today",
+      threshold: (forecast.current.windKph ?? 0) >= 35,
+      demandSignal: "Wind damage risk"
+    }
+  ].filter((signal) => signal.threshold && categories.includes(signal.category));
+
+  if (signals.length === 0) return [];
+
+  const markets = getTriStateMarketsForSignal({
+    areaDesc: serviceAreaLabel,
+    serviceAreaLabel,
+    serviceLat: lat,
+    serviceLon: lon,
+    limit: Math.min(3, limit)
+  });
+
+  const out: ScannerOpportunity[] = [];
+  for (const signal of signals) {
+    for (const market of markets) {
+      const distanceMiles = Math.max(1, Math.round(distanceToMarketMiles(lat, lon, market)));
+      const scored = scoreOpportunity(signal.category, [signal.key, "forecast", "weather"], forecast, 64);
+      const intent = clamp(scored.intentScore + 8);
+      const locationText = `${market.address}, ${market.city}, ${market.state} ${market.postalCode}`;
+      const reasonSummary = `${signal.event} is building across ${market.county}, creating likely ${signal.serviceType.toLowerCase()} demand in ${market.neighborhood}.`;
+
+      out.push({
+        id: mkId(["forecast", signal.key, market.id]),
+        source: "weather",
+        category: signal.category,
+        title: `${signal.event} near ${market.city}`,
+        description: `Live forecast indicates ${signal.demandSignal.toLowerCase()} across ${market.county}.`,
+        locationText,
+        lat: market.lat,
+        lon: market.lon,
+        intentScore: intent,
+        priorityLabel: priorityLabelForOpportunity({
+          intentScore: intent,
+          tags: [signal.key, "forecast", "weather"],
+          title: `${signal.event} near ${market.city}`,
+          description: `Live forecast indicates ${signal.demandSignal.toLowerCase()} across ${market.county}.`,
+          reasonSummary,
+          raw: {
+            provider: "OPEN_METEO",
+            incident_type: signal.event,
+            signal_source: "Forecast model",
+            property_address: market.address,
+            property_city: market.city,
+            property_state: market.state,
+            property_postal_code: market.postalCode,
+            county: market.county,
+            neighborhood: market.neighborhood,
+            address_quality: "approximate",
+            service_area_label: serviceAreaLabel,
+            service_type: signal.serviceType,
+            urgency_window: signal.urgency,
+            distance_miles: distanceMiles,
+            weather_signal: signal.event,
+            demand_signal: signal.demandSignal,
+            demand_explanation: `Forecast conditions exceed threshold for ${signal.serviceType.toLowerCase()} opportunities in ${market.county}.`
+          }
+        }),
+        confidence: scored.confidence,
+        tags: [signal.key, "forecast", "weather"],
+        nextAction: suggestedNextAction(signal.category, intent, `${market.city}, ${market.state}`),
+        reasonSummary,
+        recommendedCreateMode: intent >= 78 ? "job" : "lead",
+        recommendedScheduleIso: intent >= 70 ? suggestedSchedule(intent, 60) : null,
+        raw: {
+          provider: "OPEN_METEO",
+          incident_type: signal.event,
+          signal_source: "Forecast model",
+          property_address: market.address,
+          property_city: market.city,
+          property_state: market.state,
+          property_postal_code: market.postalCode,
+          county: market.county,
+          neighborhood: market.neighborhood,
+          address_quality: "approximate",
+          service_area_label: serviceAreaLabel,
+          service_type: signal.serviceType,
+          urgency_window: signal.urgency,
+          distance_miles: distanceMiles,
+          weather_signal: signal.event,
+          demand_signal: signal.demandSignal,
+          demand_explanation: `Forecast conditions exceed threshold for ${signal.serviceType.toLowerCase()} opportunities in ${market.county}.`
+        },
+        createdAtIso: new Date().toISOString()
+      });
+    }
+  }
+
+  return out.sort((a, b) => b.intentScore - a.intentScore).slice(0, limit);
 }
 
 export async function runScanner({
@@ -1011,10 +1353,19 @@ export async function runScanner({
   }
 
   if (mode === "live" && resolved) {
-    const [nws, usgs, eonet] = await Promise.all([
+    const [nws, forecastDriven, usgs, eonet] = await Promise.all([
       fetchNwsOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
+        serviceAreaLabel: resolved.label,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
+      }),
+      fetchForecastDrivenOpportunities({
+        lat: resolved.lat,
+        lon: resolved.lon,
+        serviceAreaLabel: resolved.label,
         categories: pickedCategories,
         forecast,
         limit: safeLimit
@@ -1022,6 +1373,7 @@ export async function runScanner({
       fetchUsgsOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
+        serviceAreaLabel: resolved.label,
         radiusMiles,
         categories: pickedCategories,
         forecast,
@@ -1030,6 +1382,7 @@ export async function runScanner({
       fetchEonetOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
+        serviceAreaLabel: resolved.label,
         radiusMiles,
         categories: pickedCategories,
         forecast,
@@ -1037,7 +1390,7 @@ export async function runScanner({
       })
     ]);
 
-    const merged = [...nws, ...usgs, ...eonet]
+    const merged = [...nws, ...forecastDriven, ...usgs, ...eonet]
       .sort((a, b) => b.intentScore - a.intentScore)
       .slice(0, safeLimit);
 
@@ -1122,13 +1475,21 @@ export function generateSyntheticScannerLeads({
 
 export function opportunityToLeadPayload(opportunity: ScannerOpportunity) {
   const leadLike = toLeadFromOpportunity(opportunity);
+  const addressInfo = resolveOpportunityAddress({
+    locationText: String(opportunity.raw?.property_address || opportunity.locationText || ""),
+    lat: opportunity.lat,
+    lon: opportunity.lon,
+    serviceAreaLabel: String(opportunity.raw?.service_area_label || opportunity.locationText || "Service Area"),
+    seed: opportunity.id
+  });
   return {
     name: leadLike.name,
     phone: leadLike.phone,
     service_type: leadLike.service_type,
+    address: addressInfo.address,
     city: leadLike.city,
     state: leadLike.state,
-    postal_code: leadLike.postal,
+    postal_code: addressInfo.postalCode,
     requested_timeframe: leadLike.urgency === "high" ? "ASAP" : leadLike.urgency === "medium" ? "Today" : "This week",
     source: "import",
     notes: `Scanner ${opportunity.source}: ${opportunity.reasonSummary}`

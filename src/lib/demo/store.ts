@@ -610,7 +610,7 @@ export function dispatchDemoScannerEvent(id: string, createMode?: "lead" | "job"
     name: leadPayload.name,
     phone: leadPayload.phone,
     service_type: leadPayload.service_type,
-    address: "",
+    address: leadPayload.address || "",
     city: leadPayload.city,
     state: leadPayload.state,
     postal_code: leadPayload.postal_code,

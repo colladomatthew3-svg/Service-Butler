@@ -4,19 +4,21 @@ import { addDemoScannerEvents, getDemoWeatherSettings } from "@/lib/demo/store";
 import { runScanner } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
 
+type ScannerRunRequestBody = {
+  mode?: "demo" | "live";
+  location?: string;
+  categories?: string[];
+  limit?: number;
+  lat?: number;
+  lon?: number;
+  radius?: number;
+  campaignMode?: "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
+  triggers?: string[];
+};
+
 export async function POST(req: NextRequest) {
   if (isDemoMode()) {
-    const body = (await req.json()) as {
-      mode?: "demo" | "live";
-      location?: string;
-      categories?: string[];
-      limit?: number;
-      lat?: number;
-      lon?: number;
-      radius?: number;
-      campaignMode?: "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
-      triggers?: string[];
-    };
+    const body = await readScannerRunBody(req);
 
     const settings = await getDemoWeatherSettings();
     const location = String(body.location || "").trim() || settings.weather_location_label;
@@ -48,17 +50,7 @@ export async function POST(req: NextRequest) {
   const { accountId, role, supabase } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 
-  const body = (await req.json()) as {
-    mode?: "demo" | "live";
-    location?: string;
-    categories?: string[];
-    limit?: number;
-    lat?: number;
-    lon?: number;
-    radius?: number;
-    campaignMode?: "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
-    triggers?: string[];
-  };
+  const body = await readScannerRunBody(req);
 
   const mode = body.mode === "live" ? "live" : "demo";
   const location = String(body.location || "").trim();
@@ -156,4 +148,12 @@ export async function POST(req: NextRequest) {
     locationResolved: result.locationResolved,
     opportunities: result.opportunities
   });
+}
+
+async function readScannerRunBody(req: NextRequest): Promise<ScannerRunRequestBody> {
+  try {
+    return (await req.json()) as ScannerRunRequestBody;
+  } catch {
+    return {};
+  }
 }

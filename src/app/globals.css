@@ -9,7 +9,7 @@
   --sb-card: 255 255 255;
   --sb-border: 216 224 219;
   --sb-text: 30 42 36;
-  --sb-muted: 91 108 100;
+  --sb-muted: 69 84 76;
   --sb-primary-soft: 231 243 209;
   --sb-surface-alt: 242 245 243;
   --sb-surface-subtle: 234 239 236;
@@ -100,8 +100,8 @@
 }
 
 body {
-  background: radial-gradient(1200px 600px at 10% -10%, rgb(var(--brandSoft) / 0.85), transparent 50%),
-    radial-gradient(900px 540px at 100% 0%, rgb(var(--accentSoft) / 0.72), transparent 45%),
+  background:
+    linear-gradient(180deg, rgb(var(--brandSoft) / 0.4), transparent 18%),
     rgb(var(--bg));
   color: rgb(var(--text));
 }
@@ -131,7 +131,7 @@ body {
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.05em;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .eyebrow {
@@ -161,7 +161,7 @@ body {
   font-size: clamp(2.5rem, 5vw, 3rem);
   font-weight: 700;
   letter-spacing: -0.05em;
-  line-height: 0.98;
+  line-height: 1.02;
 }
 
 .title-card {
@@ -174,7 +174,7 @@ body {
 
 .text-body-lg {
   font-size: var(--text-body-lg);
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 .dashboard-page-title {

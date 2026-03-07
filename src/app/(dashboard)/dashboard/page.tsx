@@ -333,11 +333,14 @@ export default async function DashboardOverviewPage() {
           </CardHeader>
           <CardBody className="space-y-3">
             {(opportunities || []).slice(0, 6).map((item) => (
-              <Link key={item.id} href="/dashboard/scanner" className="block rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+              <Link key={item.id} href="/dashboard/scanner" className="block rounded-xl border border-semantic-border bg-semantic-surface2 p-4 transition hover:border-brand-300 hover:bg-white">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-semantic-text">{item.title}</p>
-                    <p className="text-sm text-semantic-muted">{item.category} · {item.location_text || "Service area"}</p>
+                    <p className="mt-1 text-sm text-semantic-muted">{item.location_text || "Service area"}</p>
+                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">
+                      {item.category} opportunity
+                    </p>
                     <p className="mt-1 text-xs text-semantic-muted">Open Scanner to create a lead, assign follow-up, or schedule the inspection.</p>
                   </div>
                   <Badge variant={Number(item.intent_score) >= 75 ? "warning" : "default"}>

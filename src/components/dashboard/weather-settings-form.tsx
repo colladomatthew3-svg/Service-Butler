@@ -93,16 +93,19 @@ export function WeatherSettingsForm() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+      <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-5">
         <p className="text-sm font-semibold text-semantic-text">Service area weather location</p>
         <p className="mt-1 text-sm text-semantic-muted">
-          Use the market you actually serve so storm damage, water intrusion, freeze risk, and HVAC urgency signals stay relevant.
-          Latitude/longitude is optional for precise routing.
+          Save the city your crews actually serve so Scanner opportunities stay grounded in the same weather pressure,
+          storm response, and service demand your team will act on.
         </p>
         {current?.weather_location_label && (
-          <p data-testid="weather-current-location" className="mt-2 text-sm text-semantic-muted">
-            Current: {current.weather_location_label}
-          </p>
+          <div className="mt-4 rounded-xl border border-semantic-border bg-white px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Current service area</p>
+            <p data-testid="weather-current-location" className="mt-2 text-sm font-semibold text-semantic-text">
+              {current.weather_location_label}
+            </p>
+          </div>
         )}
       </div>
 
@@ -133,30 +136,40 @@ export function WeatherSettingsForm() {
         </Field>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Latitude (optional)">
-          <Input
-            data-testid="weather-lat"
-            placeholder="40.7812"
-            value={state.lat}
-            onChange={(e) => setState((prev) => ({ ...prev, lat: e.target.value }))}
-          />
-        </Field>
-        <Field label="Longitude (optional)">
-          <Input
-            data-testid="weather-lng"
-            placeholder="-73.2462"
-            value={state.lng}
-            onChange={(e) => setState((prev) => ({ ...prev, lng: e.target.value }))}
-          />
-        </Field>
-      </div>
+      <details className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-semantic-text">Advanced map pin (optional)</summary>
+        <p className="mt-2 text-sm text-semantic-muted">
+          Only use coordinates if you need precise routing around a large metro or coastal service area.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Field label="Latitude (optional)">
+            <Input
+              data-testid="weather-lat"
+              placeholder="40.7812"
+              value={state.lat}
+              onChange={(e) => setState((prev) => ({ ...prev, lat: e.target.value }))}
+            />
+          </Field>
+          <Field label="Longitude (optional)">
+            <Input
+              data-testid="weather-lng"
+              placeholder="-73.2462"
+              value={state.lng}
+              onChange={(e) => setState((prev) => ({ ...prev, lng: e.target.value }))}
+            />
+          </Field>
+        </div>
+      </details>
 
       <Button data-testid="weather-save" size="lg" onClick={save} disabled={saving}>
-        {saving ? "Saving..." : "Use this location"}
+        {saving ? "Saving..." : "Save service area"}
       </Button>
 
-      <WeatherTicker lat={current?.weather_lat ?? null} lng={current?.weather_lng ?? null} />
+      <WeatherTicker
+        lat={current?.weather_lat ?? null}
+        lng={current?.weather_lng ?? null}
+        locationLabel={current?.weather_location_label || [current?.home_base_city, current?.home_base_state].filter(Boolean).join(", ")}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { EnrichmentRecord } from "@/lib/services/enrichment";
 import { generateSignals } from "@/lib/services/intent-engine";
 import { opportunityToLeadPayload, type ScannerOpportunity } from "@/lib/services/scanner";
 
@@ -63,6 +64,7 @@ type DemoLead = {
   converted_job_id: string | null;
   intentScore: number;
   signalCount: number;
+  enrichment?: EnrichmentRecord | null;
 };
 
 type DemoJob = {
@@ -181,7 +183,8 @@ function initialLeads(): DemoLead[] {
       scheduled_for: null,
       converted_job_id: null,
       intentScore: 84,
-      signalCount: 4
+      signalCount: 4,
+      enrichment: null
     },
     {
       id: "lead-demo-2",
@@ -201,7 +204,8 @@ function initialLeads(): DemoLead[] {
       scheduled_for: null,
       converted_job_id: null,
       intentScore: 71,
-      signalCount: 3
+      signalCount: 3,
+      enrichment: null
     }
   ];
 }
@@ -394,6 +398,90 @@ export function getDemoDashboardSnapshot() {
   return { leads, jobs, opportunities };
 }
 
+export function listDemoLeads({
+  status,
+  service,
+  search
+}: {
+  status?: string | null;
+  service?: string | null;
+  search?: string | null;
+}) {
+  const q = String(search || "").trim().toLowerCase();
+  const leads = [...getStore().leads]
+    .filter((lead) => {
+      if (status && status !== "all" && lead.status !== status) return false;
+      if (service && service !== "all" && lead.service_type !== service) return false;
+      if (!q) return true;
+      const haystack = `${lead.name} ${lead.phone} ${lead.address} ${lead.city} ${lead.state}`.toLowerCase();
+      return haystack.includes(q);
+    })
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+  const enriched = leads.map((lead) => ({
+    ...lead,
+    intentScore: lead.intentScore ?? 0,
+    signalCount: lead.signalCount ?? getDemoLeadSignals(lead.id).length
+  }));
+
+  const counts = enriched.reduce<Record<string, number>>((acc, lead) => {
+    const key = String(lead.status || "new");
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  return { leads: enriched, counts };
+}
+
+export function createDemoLead(input: {
+  name: string;
+  phone: string;
+  service_type: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  requested_timeframe?: string | null;
+  source?: string | null;
+  notes?: string | null;
+}) {
+  const store = getStore();
+  const leadId = generateId("lead", `${input.name}:${input.phone}:${input.address || input.city || nowIso()}`);
+  const leadSignals = generateSignals({
+    lead: {
+      id: leadId,
+      service_type: input.service_type.trim(),
+      requested_timeframe: input.requested_timeframe?.trim() || "ASAP",
+      city: input.city?.trim() || "",
+      state: input.state?.trim() || ""
+    }
+  });
+
+  const lead: DemoLead = {
+    id: leadId,
+    created_at: nowIso(),
+    status: "new",
+    stage: "NEW",
+    name: input.name.trim(),
+    phone: input.phone.trim(),
+    service_type: input.service_type.trim(),
+    address: input.address?.trim() || "",
+    city: input.city?.trim() || "",
+    state: input.state?.trim() || "",
+    postal_code: input.postal_code?.trim() || "",
+    requested_timeframe: input.requested_timeframe?.trim() || "ASAP",
+    source: input.source?.trim() || "manual",
+    notes: input.notes?.trim() || "",
+    scheduled_for: null,
+    converted_job_id: null,
+    intentScore: leadSignals.length ? Math.round(leadSignals.reduce((sum, signal) => sum + Number(signal.score || 0), 0) / leadSignals.length) : 0,
+    signalCount: leadSignals.length,
+    enrichment: null
+  };
+  store.leads.unshift(lead);
+  return lead;
+}
+
 export function getDemoLead(id: string) {
   return getStore().leads.find((lead) => lead.id === id) || null;
 }
@@ -532,7 +620,8 @@ export function dispatchDemoScannerEvent(id: string, createMode?: "lead" | "job"
     scheduled_for: null,
     converted_job_id: null,
     intentScore: event.intent_score,
-    signalCount: event.tags.length
+    signalCount: event.tags.length,
+    enrichment: (event.raw.enrichment as EnrichmentRecord | undefined) || null
   };
   store.leads.unshift(lead);
 

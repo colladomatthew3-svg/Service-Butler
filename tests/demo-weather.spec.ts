@@ -8,6 +8,7 @@ test("weather service area persists in demo mode", async ({ page }) => {
   await page.getByTestId("weather-city").fill("Tampa");
   await page.getByTestId("weather-state").fill("FL");
   await page.getByTestId("weather-postal").fill("33602");
+  await page.getByText("Advanced map pin (optional)").click();
   await page.getByTestId("weather-lat").fill("");
   await page.getByTestId("weather-lng").fill("");
   await page.getByTestId("weather-save").click();

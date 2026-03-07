@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarPlus, MessageSquare, PhoneCall, RefreshCw, Save, Clock3, Wrench, Gauge } from "lucide-react";
+import { CalendarPlus, MessageSquare, PhoneCall, RefreshCw, Save, Clock3, Wrench, Gauge, BadgeCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +30,26 @@ type Lead = {
   notes: string | null;
   scheduled_for: string | null;
   converted_job_id?: string | null;
+  enrichment?: {
+    provider: string;
+    simulated: boolean;
+    propertyAddress: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    neighborhood: string;
+    propertyImageLabel: string;
+    propertyValueEstimate: string | null;
+    propertyValueVerification: string;
+    ownerContact: {
+      name: string;
+      phone: string | null;
+      email: string | null;
+      verification: string;
+      confidenceLabel: string;
+    } | null;
+    notes: string[];
+  } | null;
 };
 
 type Signal = {
@@ -309,6 +329,84 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
         </CardBody>
       </Card>
 
+      {lead.enrichment && (
+        <section className="grid gap-5 lg:grid-cols-[0.88fr_1.12fr]">
+          <Card>
+            <CardHeader>
+              <h2 className="dashboard-section-title text-semantic-text">Property Snapshot</h2>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(33,43,38,0.96),rgba(91,108,100,0.86))] p-4 text-white">
+                <div className="relative flex h-44 items-end justify-center overflow-hidden rounded-[1.1rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.02))]">
+                  <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/88">
+                    {lead.enrichment.propertyImageLabel}
+                  </div>
+                  <div className="absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(180deg,rgba(130,180,61,0.08),rgba(130,180,61,0.2))]" />
+                  <div className="relative mb-5 h-24 w-32 rounded-t-[1.7rem] bg-white/88">
+                    <div className="absolute left-4 top-7 h-6 w-6 rounded bg-[rgb(var(--sb-primary-soft))]" />
+                    <div className="absolute right-4 top-7 h-6 w-6 rounded bg-[rgb(var(--sb-primary-soft))]" />
+                    <div className="absolute bottom-0 left-1/2 h-12 w-9 -translate-x-1/2 rounded-t-xl bg-[rgb(var(--sb-copper-soft))]" />
+                    <div className="absolute -top-8 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[74px] border-b-[34px] border-x-transparent border-b-white/88" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DetailCard label="Address" value={lead.enrichment.propertyAddress} />
+                <DetailCard label="Neighborhood" value={lead.enrichment.neighborhood} />
+                <DetailCard label="Property value" value={lead.enrichment.propertyValueEstimate || "Unavailable"} />
+                <DetailCard label="Value status" value={formatVerification(lead.enrichment.propertyValueVerification)} />
+              </div>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="dashboard-section-title text-semantic-text">Contact And Verification</h2>
+            </CardHeader>
+            <CardBody className="space-y-4">
+              <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Enrichment source</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm font-semibold text-semantic-text">
+                    <BadgeCheck className="h-4 w-4 text-brand-700" />
+                    {lead.enrichment.provider}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-semantic-muted">
+                    {lead.enrichment.simulated ? "Simulated demo data" : "Production enrichment"}
+                  </span>
+                </div>
+              </div>
+
+              {lead.enrichment.ownerContact ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <DetailCard label="Owner / contact" value={lead.enrichment.ownerContact.name} />
+                  <DetailCard label="Verification" value={formatVerification(lead.enrichment.ownerContact.verification)} />
+                  <DetailCard label="Phone" value={lead.enrichment.ownerContact.phone || "Unavailable"} />
+                  <DetailCard label="Email" value={lead.enrichment.ownerContact.email || "Unavailable"} />
+                </div>
+              ) : (
+                <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4 text-sm text-semantic-muted">
+                  No verified contact data is currently available for this lead.
+                </div>
+              )}
+
+              <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Notes</p>
+                <ul className="mt-3 space-y-2 text-sm text-semantic-text">
+                  {lead.enrichment.notes.map((note) => (
+                    <li key={note} className="flex gap-3">
+                      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-brand-700" />
+                      <span>{note}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
       {missingPhone && (
         <div className="rounded-xl border border-warning-500/20 bg-warning-100 px-4 py-3 text-sm text-warning-700">
           Add a phone number to enable Call and Text actions.
@@ -504,6 +602,23 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
       </div>
     </div>
   );
+}
+
+function DetailCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-semantic-text">{value}</p>
+    </div>
+  );
+}
+
+function formatVerification(value: string) {
+  if (value === "demo") return "Demo placeholder";
+  if (value === "estimated") return "Estimated";
+  if (value === "public-record") return "Public record";
+  if (value === "verified") return "Verified";
+  return value;
 }
 
 function Detail({

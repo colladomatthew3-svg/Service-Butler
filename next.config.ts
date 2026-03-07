@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+const isDevServer = process.env.NODE_ENV === "development";
+
 const nextConfig: NextConfig = {
-  distDir: ".next-build",
+  distDir: isDevServer ? ".next-dev" : ".next-build",
   outputFileTracingRoot: path.join(__dirname),
   images: {
     formats: ["image/avif", "image/webp"]

@@ -71,7 +71,10 @@ export function WeatherTicker({
           <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
         </CardHeader>
         <CardBody className="space-y-3">
-          <p className="text-sm text-semantic-muted">Add your service area to unlock weather-based demand and urgency signals.</p>
+          <p className="text-sm text-semantic-muted">
+            Add your service area to unlock weather-based demand signals for Scanner runs, urgency windows, and same-day dispatch planning.
+          </p>
+          {locationLabel && <p className="text-sm font-medium text-semantic-text">{locationLabel}</p>}
           <Link href="/dashboard/settings">
             <Button size="sm" variant="secondary">
               Set service area
@@ -140,6 +143,11 @@ export function WeatherTicker({
           )}
         </div>
 
+        <div className="rounded-xl border border-semantic-border bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">What this means for dispatch</p>
+          <p className="mt-2 text-sm text-semantic-text">{impact.detail}</p>
+        </div>
+
         <div className={`grid gap-3 ${compact ? "sm:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-4"}`}>
           {buildWeatherSignals(forecast).map((signal) => (
             <div key={signal.title} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
@@ -189,16 +197,6 @@ export function WeatherTicker({
         </div>
 
         <div className="space-y-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
-          {!compact && (
-            <div>
-              <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">
-                <TriangleAlert className="h-3.5 w-3.5" />
-                Impact
-              </p>
-              <p className="mt-1 text-sm font-medium text-semantic-text">{impact.title}</p>
-              <p className="text-sm text-semantic-muted">{impact.detail}</p>
-            </div>
-          )}
           <div className="flex flex-wrap gap-2">
             <Link href={`/dashboard/scanner${locationLabel ? `?location=${encodeURIComponent(locationLabel)}` : ""}`}>
               <Button size="sm">

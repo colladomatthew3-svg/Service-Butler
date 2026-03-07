@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { createDemoLead, listDemoLeads } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 import { generateSignals } from "@/lib/services/intent-engine";
 import { getForecastByLatLng } from "@/lib/services/weather";
 
@@ -21,6 +23,13 @@ function statusToStage(status: string) {
 }
 
 export async function GET(req: NextRequest) {
+  if (isDemoMode()) {
+    const status = req.nextUrl.searchParams.get("status");
+    const service = req.nextUrl.searchParams.get("service");
+    const search = req.nextUrl.searchParams.get("search");
+    return NextResponse.json(listDemoLeads({ status, service, search }));
+  }
+
   const { accountId, supabase } = await getCurrentUserContext();
   const status = req.nextUrl.searchParams.get("status");
   const service = req.nextUrl.searchParams.get("service");
@@ -73,6 +82,24 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (isDemoMode()) {
+    const body = (await req.json()) as {
+      name: string;
+      phone: string;
+      service_type: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      postal_code?: string;
+      requested_timeframe?: string;
+      source?: string;
+      notes?: string;
+    };
+
+    const lead = createDemoLead(body);
+    return NextResponse.json({ leadId: lead.id }, { status: 201 });
+  }
+
   const { accountId, role, supabase } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 
@@ -115,11 +142,7 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   let forecast = null;
-  const { data: settings } = await supabase
-    .from("account_settings")
-    .select("weather_lat,weather_lng")
-    .eq("account_id", accountId)
-    .maybeSingle();
+  const { data: settings } = await supabase.from("account_settings").select("weather_lat,weather_lng").eq("account_id", accountId).maybeSingle();
 
   if (settings?.weather_lat != null && settings?.weather_lng != null) {
     try {

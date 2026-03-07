@@ -4,8 +4,8 @@
   <path d="M144 38V20H164V58" stroke="#88BC42" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M144 40L192 88" stroke="#88BC42" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M58 96V170C58 181 67 190 78 190H160C171 190 180 181 180 170V96" stroke="#88BC42" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="92" y="112" width="20" height="20" rx="4" fill="#88BC42"/>
-  <rect x="120" y="112" width="20" height="20" rx="4" fill="#88BC42"/>
-  <rect x="92" y="140" width="20" height="20" rx="4" fill="#88BC42"/>
-  <rect x="120" y="140" width="20" height="20" rx="4" fill="#88BC42"/>
+  <rect x="92" y="112" width="20" height="20" rx="4" fill="#FEFEFE" stroke="#88BC42" stroke-width="5"/>
+  <rect x="120" y="112" width="20" height="20" rx="4" fill="#FEFEFE" stroke="#88BC42" stroke-width="5"/>
+  <rect x="92" y="140" width="20" height="20" rx="4" fill="#FEFEFE" stroke="#88BC42" stroke-width="5"/>
+  <rect x="120" y="140" width="20" height="20" rx="4" fill="#FEFEFE" stroke="#88BC42" stroke-width="5"/>
 </svg>

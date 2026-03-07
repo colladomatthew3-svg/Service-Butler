@@ -5,10 +5,10 @@
     <path d="M256 60L256 30L288 30L288 88" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M256 62L352 140" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M124 150L124 244C124 258 136 270 150 270H362C376 270 388 258 388 244V150" stroke="#88BC42" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="208" y="168" width="34" height="34" rx="6" fill="#88BC42"/>
-    <rect x="256" y="168" width="34" height="34" rx="6" fill="#88BC42"/>
-    <rect x="208" y="216" width="34" height="34" rx="6" fill="#88BC42"/>
-    <rect x="256" y="216" width="34" height="34" rx="6" fill="#88BC42"/>
+    <rect x="208" y="168" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
+    <rect x="256" y="168" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
+    <rect x="208" y="216" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
+    <rect x="256" y="216" width="34" height="34" rx="6" fill="#FEFEFE" stroke="#88BC42" stroke-width="8"/>
   </g>
   <g transform="translate(440,0)">
     <text x="0" y="240" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="700" fill="#88BC42">service</text>

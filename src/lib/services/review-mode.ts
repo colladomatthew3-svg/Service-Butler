@@ -12,7 +12,7 @@ export function isReviewMode(): boolean {
 }
 
 export function isDemoMode(): boolean {
-  return process.env.NODE_ENV === "development" && flagEnabled(process.env.DEMO_MODE);
+  return flagEnabled(process.env.DEMO_MODE);
 }
 
 export function isLocalBypassMode(): boolean {

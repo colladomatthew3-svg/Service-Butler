@@ -3,8 +3,8 @@ import { cn } from "@/lib/utils/cn";
 
 type LogoVariant = "full" | "mark" | "wordmark" | "lockup";
 
-const FULL_LOGO_RATIO = 1228 / 938;
-const MARK_RATIO = 581 / 492;
+const FULL_LOGO_RATIO = 1200 / 340;
+const MARK_RATIO = 220 / 220;
 
 export function Logo({
   variant = "full",
@@ -16,12 +16,13 @@ export function Logo({
   className?: string;
 }) {
   const isMark = variant === "mark";
+  const isFullLogo = variant === "full" || variant === "lockup" || variant === "wordmark";
   const width = Math.round(size * (isMark ? MARK_RATIO : FULL_LOGO_RATIO));
 
   if (isMark) {
     return (
       <Image
-        src="/brand/servicebutler_icon.svg"
+        src="/brand/logo-mark.svg"
         alt="Service Butler icon"
         width={width}
         height={size}
@@ -31,16 +32,18 @@ export function Logo({
     );
   }
 
-  return (
-    <span className={cn("inline-flex items-center rounded-2xl bg-[rgb(var(--sb-bg))] px-3 py-2 shadow-sm", className)}>
+  if (isFullLogo) {
+    return (
       <Image
-        src="/brand/servicebutler_logo.svg"
+        src="/brand/logo.svg"
         alt="Service Butler logo"
         width={width}
         height={size}
-        className="h-auto w-auto object-contain"
+        className={cn("h-auto w-auto object-contain", className)}
         priority
       />
-    </span>
-  );
+    );
+  }
+
+  return null;
 }

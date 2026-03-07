@@ -1,4 +1,5 @@
 import { generateSignals } from "@/lib/services/intent-engine";
+import { getEnrichmentProvider } from "@/lib/services/enrichment";
 import { geocodeLocation, getForecastByLatLng, type ForecastSummary } from "@/lib/services/weather";
 
 export type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
@@ -251,6 +252,17 @@ function generateDemoAddress(seed: string, location: string) {
   const street = streets[hash(`${seed}:street`) % streets.length];
   const suffix = suffixes[hash(`${seed}:suffix`) % suffixes.length];
   return `${number} ${street} ${suffix}, ${city}, ${state} ${postalCode}`;
+}
+
+function parseAddressParts(address: string) {
+  const [street = "", city = "", region = ""] = address.split(",").map((part) => part.trim());
+  const regionMatch = region.match(/^([A-Z]{2})\s+(\d{5})$/);
+  return {
+    street,
+    city,
+    state: regionMatch?.[1] || "NY",
+    postalCode: regionMatch?.[2] || "11717"
+  };
 }
 
 function incidentCatalog(campaignMode?: CampaignMode): DemoIncidentTemplate[] {
@@ -519,6 +531,15 @@ function createDemoOpportunities({
     const distanceMiles = 4 + (i % 5) * 6;
     const serviceType = template.serviceCategory || displayCampaignService(category, campaignMode);
     const demandSignal = template.demandSignal;
+    const addressParts = parseAddressParts(locationText);
+    const enrichment = getEnrichmentProvider("demo")?.enrichOpportunity({
+      seed: `${template.incidentType}:${i}`,
+      address: locationText,
+      city: addressParts.city,
+      state: addressParts.state,
+      postalCode: addressParts.postalCode,
+      serviceType
+    });
     const reasonSummary = `Why this opportunity: ${template.incidentType}, ${weatherSignal}, ${timeWindow} demand window, ${distance}, ${serviceType} service match. ${template.demandExplanation}`;
 
     out.push({
@@ -549,7 +570,8 @@ function createDemoOpportunities({
           service_type: serviceType,
           urgency_window: timeWindow,
           demand_signal: demandSignal,
-          demand_explanation: template.demandExplanation
+          demand_explanation: template.demandExplanation,
+          enrichment
         }
       }),
       confidence,
@@ -570,7 +592,8 @@ function createDemoOpportunities({
         service_type: serviceType,
         urgency_window: timeWindow,
         demand_signal: demandSignal,
-        demand_explanation: template.demandExplanation
+        demand_explanation: template.demandExplanation,
+        enrichment
       },
       createdAtIso: new Date().toISOString()
     });

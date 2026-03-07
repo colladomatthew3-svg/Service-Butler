@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Plus, PhoneCall, CalendarPlus, ChevronRight, X, Clock3, SlidersHorizontal, Upload } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -40,6 +41,7 @@ type SortMode = "intent" | "newest" | "schedule";
 const statusFilters = ["all", "new", "contacted", "scheduled", "won", "lost"] as const;
 
 export function LeadInboxView() {
+  const router = useRouter();
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<(typeof statusFilters)[number]>("all");
@@ -148,7 +150,8 @@ export function LeadInboxView() {
       requested_timeframe: "ASAP",
       notes: ""
     });
-    window.location.href = `/dashboard/leads/${(data as { leadId: string }).leadId}`;
+    router.push(`/dashboard/leads/${(data as { leadId: string }).leadId}`);
+    router.refresh();
   }
 
   async function scheduleLead(leadId: string, preset: "todayPm" | "tomorrowAm" | "thisWeek") {

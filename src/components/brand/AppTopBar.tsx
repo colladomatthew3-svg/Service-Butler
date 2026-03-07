@@ -10,7 +10,7 @@ export function AppTopBar() {
         <Logo variant="full" size={38} className="max-w-[228px]" />
       </Link>
       <div className="w-full max-w-md">
-        <Input placeholder="Search leads, jobs, customers..." className="h-11" />
+        <Input placeholder="Search leads, jobs, customers..." className="h-11 bg-white/90" />
       </div>
       <div className="ml-auto hidden items-center gap-3 sm:flex">
         <Link href="/dashboard/leads" className={buttonStyles({ size: "md" })}>

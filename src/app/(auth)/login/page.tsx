@@ -20,18 +20,28 @@ export default async function LoginPage({
   return (
     <>
       <main className="container py-16">
-        <div className="mx-auto max-w-lg">
-          <div className="mb-8 flex justify-center">
-            <Link href="/">
-              <Logo variant="full" size={56} className="h-12 w-auto sm:h-14" />
+        <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-[0.88fr_0.72fr] lg:items-center">
+          <section className="max-w-xl">
+            <Link href="/" className="inline-flex">
+              <Logo variant="full" size={44} className="h-10 w-auto sm:h-11" />
             </Link>
-          </div>
-          <Card>
-            <CardHeader>
-              <h1 className="text-2xl font-semibold text-semantic-text">Sign in</h1>
-              <p className="mt-1 text-sm text-semantic-muted">Use your work email to get a secure magic link.</p>
-            </CardHeader>
-            <CardBody>
+            <p className="eyebrow mt-8">Demo-ready opportunity engine</p>
+            <h1 className="title-hero mt-6 max-w-[10ch] text-semantic-text">
+              Turn live signals into leads your team can schedule today.
+            </h1>
+            <p className="text-body-lg mt-5 text-semantic-muted">
+              Demo mode includes a saved service area, weather-driven demand, and Scanner opportunities so you can walk
+              straight into the product story without external setup.
+            </p>
+          </section>
+
+          <div className="mx-auto w-full max-w-lg">
+            <Card className="shadow-card">
+              <CardHeader>
+                <h2 className="text-2xl font-semibold text-semantic-text">Sign in</h2>
+                <p className="mt-1 text-sm text-semantic-muted">Use your work email to get a secure magic link.</p>
+              </CardHeader>
+              <CardBody>
               {demoMode && (
                 <div className="mb-4 rounded-xl border border-brand-500/20 bg-brand-50/70 p-4">
                   <p className="text-sm font-semibold text-semantic-text">Demo mode is enabled</p>
@@ -70,45 +80,46 @@ export default async function LoginPage({
                   Send Magic Link
                 </Button>
               </form>
-            </CardBody>
-          </Card>
-
-          {process.env.NODE_ENV === "development" && (
-            <Card className="mt-5">
-              <CardHeader>
-                <h2 className="text-lg font-semibold text-semantic-text">Dev Quick Login</h2>
-                {devQuickLoginConfigured ? (
-                  <p className="mt-1 text-sm text-semantic-muted">
-                    Development only. Uses `DEV_AUTH_PASSWORD` and redirects to dashboard.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-sm text-semantic-muted">
-                    Dev quick login not configured. Set DEV_AUTH_PASSWORD in .env.local to enable.
-                  </p>
-                )}
-              </CardHeader>
-              <CardBody className="space-y-3">
-                <form action={signInWithDevQuickLogin}>
-                  <input type="hidden" name="email" value="owner@servicebutler.local" />
-                  <Button type="submit" size="lg" fullWidth disabled={!devQuickLoginConfigured}>
-                    Login as Owner
-                  </Button>
-                </form>
-                <form action={signInWithDevQuickLogin}>
-                  <input type="hidden" name="email" value="dispatcher@servicebutler.local" />
-                  <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
-                    Login as Dispatcher
-                  </Button>
-                </form>
-                <form action={signInWithDevQuickLogin}>
-                  <input type="hidden" name="email" value="tech@servicebutler.local" />
-                  <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
-                    Login as Tech
-                  </Button>
-                </form>
               </CardBody>
             </Card>
-          )}
+
+            {process.env.NODE_ENV === "development" && (
+              <Card className="mt-5">
+                <CardHeader>
+                  <h2 className="text-lg font-semibold text-semantic-text">Dev Quick Login</h2>
+                  {devQuickLoginConfigured ? (
+                    <p className="mt-1 text-sm text-semantic-muted">
+                      Development only. Uses `DEV_AUTH_PASSWORD` and redirects to dashboard.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-semantic-muted">
+                      Dev quick login not configured. Set DEV_AUTH_PASSWORD in .env.local to enable.
+                    </p>
+                  )}
+                </CardHeader>
+                <CardBody className="space-y-3">
+                  <form action={signInWithDevQuickLogin}>
+                    <input type="hidden" name="email" value="owner@servicebutler.local" />
+                    <Button type="submit" size="lg" fullWidth disabled={!devQuickLoginConfigured}>
+                      Login as Owner
+                    </Button>
+                  </form>
+                  <form action={signInWithDevQuickLogin}>
+                    <input type="hidden" name="email" value="dispatcher@servicebutler.local" />
+                    <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
+                      Login as Dispatcher
+                    </Button>
+                  </form>
+                  <form action={signInWithDevQuickLogin}>
+                    <input type="hidden" name="email" value="tech@servicebutler.local" />
+                    <Button type="submit" size="lg" variant="secondary" fullWidth disabled={!devQuickLoginConfigured}>
+                      Login as Tech
+                    </Button>
+                  </form>
+                </CardBody>
+              </Card>
+            )}
+          </div>
         </div>
       </main>
       <Footer />

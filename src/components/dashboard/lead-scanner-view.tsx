@@ -637,18 +637,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat (optional)</p>
-                <Input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="40.7812" />
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lon (optional)</p>
-                <Input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="-73.2462" />
-              </div>
-            </div>
-
+          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Services</p>
               <div className="flex flex-wrap gap-2">
@@ -673,6 +662,22 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 })}
               </div>
             </div>
+            <details className="rounded-xl border border-semantic-border bg-semantic-surface p-4 md:min-w-[280px]">
+              <summary className="cursor-pointer text-sm font-semibold text-semantic-text">Advanced map pin</summary>
+              <p className="mt-2 text-sm text-semantic-muted">
+                Optional only. Use coordinates if you need to target a specific metro or coastal service zone.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat (optional)</p>
+                  <Input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="40.7812" />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lon (optional)</p>
+                  <Input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="-73.2462" />
+                </div>
+              </div>
+            </details>
           </div>
 
           <div>
@@ -775,32 +780,39 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             const nextAction = String(event.raw?.next_action || event.raw?.recommended_action || "Dispatch within SLA and send first contact.");
             const reasonDetails = getOpportunityReasonDetails(event);
             const displayAddress = formatOpportunityAddress(event, location);
+            const addressParts = splitDisplayAddress(displayAddress);
             const bullets = opportunityBullets(reasonDetails);
 
             return (
               <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
                 <CardBody className="grid gap-5 xl:grid-cols-[280px_1fr_220px] xl:items-start">
-                  <OpportunityPropertyVisual event={event} address={displayAddress} />
+                  <OpportunityPropertyVisual event={event} address={displayAddress} addressLine={addressParts.streetLine} />
 
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="default">{reasonDetails.serviceType}</Badge>
                         <Badge variant={event.intent_score >= 78 ? "warning" : event.intent_score >= 62 ? "brand" : "default"}>
                           {urgencyLabel(event.intent_score)}
                         </Badge>
-                        <Badge variant="default">{reasonDetails.incidentType}</Badge>
                       </div>
                       <p className="text-xl font-semibold text-semantic-text">{event.title}</p>
-                      <p className="inline-flex items-center gap-2 text-base text-semantic-muted">
+                      <p className="inline-flex items-center gap-2 text-base font-medium text-semantic-text">
                         <MapPin className="h-4 w-4" />
-                        {displayAddress}
+                        {addressParts.streetLine}
                       </p>
-                      <p className="text-sm font-medium text-semantic-muted">{reasonDetails.distance}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-semantic-muted">
+                        <span>{addressParts.marketLine}</span>
+                        <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
+                        <span>{reasonDetails.distance}</span>
+                        <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
+                        <span>{reasonDetails.incidentType}</span>
+                      </div>
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                      <MetricStat label="Intent score" value={String(event.intent_score)} />
-                      <MetricStat label="Confidence score" value={String(event.confidence)} />
+                      <MetricStat label="Intent score" value={String(event.intent_score)} emphasize />
+                      <MetricStat label="Confidence score" value={String(event.confidence)} emphasize />
                       <MetricStat label="Service category" value={reasonDetails.serviceType} />
                       <MetricStat label="Urgency" value={reasonDetails.urgencyWindow} />
                     </div>
@@ -1164,9 +1176,9 @@ function formatOpportunityAddress(event: ScannerEvent, serviceArea: string) {
 
 function opportunityBullets(details: ReturnType<typeof getOpportunityReasonDetails>) {
   return [
-    `${details.incidentType} is creating near-term demand in the market.`,
-    `${details.demandSignal} supports a ${details.serviceType.toLowerCase()} response.`,
-    `${details.urgencyWindow} response window with ${details.distance} travel distance.`
+    `${details.demandSignal} supports a ${details.serviceType.toLowerCase()} opportunity.`,
+    `${details.weatherEvent} is keeping the urgency window active.`,
+    `${details.distance} from your service area, with ${details.signalSource.toLowerCase()} as the source.`
   ];
 }
 
@@ -1182,16 +1194,29 @@ function SummaryStat({ label, value, helper }: { label: string; value: string; h
   );
 }
 
-function MetricStat({ label, value }: { label: string; value: string }) {
+function MetricStat({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
   return (
-    <div className="rounded-xl border border-semantic-border bg-semantic-surface px-4 py-3">
+    <div
+      className={cn(
+        "rounded-xl border border-semantic-border bg-semantic-surface px-4 py-3",
+        emphasize && "bg-white"
+      )}
+    >
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
-      <p className="mt-2 text-base font-semibold text-semantic-text">{value}</p>
+      <p className={cn("mt-2 text-base font-semibold text-semantic-text", emphasize && "text-lg")}>{value}</p>
     </div>
   );
 }
 
-function OpportunityPropertyVisual({ event, address }: { event: ScannerEvent; address: string }) {
+function OpportunityPropertyVisual({
+  event,
+  address,
+  addressLine
+}: {
+  event: ScannerEvent;
+  address: string;
+  addressLine: string;
+}) {
   return (
     <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(33,43,38,0.96),rgba(91,108,100,0.86))] p-4 text-white shadow-sm">
       <div className="flex items-center justify-between gap-3">
@@ -1201,19 +1226,39 @@ function OpportunityPropertyVisual({ event, address }: { event: ScannerEvent; ad
         <span className="text-sm font-semibold text-brand-200">{categoryLabel[event.category]}</span>
       </div>
       <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))] p-4">
-        <div className="flex h-40 items-end justify-center rounded-[1rem] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_60%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))]">
+        <div className="relative flex h-40 items-end justify-center overflow-hidden rounded-[1rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.04))]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_56%),linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.01))]" />
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(180deg,rgba(130,180,61,0.08),rgba(130,180,61,0.18))]" />
           <div className="relative mb-4 h-20 w-28 rounded-t-[1.4rem] bg-white/85">
             <div className="absolute left-3 top-5 h-5 w-5 rounded bg-[rgb(var(--sb-primary-soft))]" />
             <div className="absolute right-3 top-5 h-5 w-5 rounded bg-[rgb(var(--sb-primary-soft))]" />
             <div className="absolute bottom-0 left-1/2 h-10 w-8 -translate-x-1/2 rounded-t-lg bg-[rgb(var(--sb-copper-soft))]" />
             <div className="absolute -top-7 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[64px] border-b-[30px] border-x-transparent border-b-white/85" />
           </div>
+          <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85">
+            Property image
+          </div>
         </div>
       </div>
-      <p className="mt-4 text-sm font-semibold text-white">{address}</p>
-      <p className="mt-1 text-sm text-white/70">{String(event.raw?.service_type || categoryLabel[event.category])}</p>
+      <p className="mt-4 text-sm font-semibold text-white">{addressLine}</p>
+      <p className="mt-1 text-sm text-white/70">{address}</p>
     </div>
   );
+}
+
+function splitDisplayAddress(address: string) {
+  const parts = address.split(",");
+  if (parts.length <= 1) {
+    return {
+      streetLine: address,
+      marketLine: "Saved service area"
+    };
+  }
+
+  return {
+    streetLine: parts[0]?.trim() || address,
+    marketLine: parts.slice(1).join(",").trim()
+  };
 }
 
 function urgencyLabel(intentScore: number) {

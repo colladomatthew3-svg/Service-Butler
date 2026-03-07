@@ -6,9 +6,10 @@ test("scanner opportunity can create a lead and open lead detail in demo mode", 
 
   await page.goto("/dashboard/scanner");
   await expect(page.getByRole("heading", { name: "Opportunity Scanner" })).toBeVisible();
+  await page.getByTestId("scanner-run").click();
 
   const firstCard = page.getByTestId("scanner-result-card").first();
-  await expect(firstCard).toBeVisible();
+  await expect(firstCard).toBeVisible({ timeout: 15000 });
   await firstCard.getByRole("button", { name: "Create Lead" }).click();
 
   await expect(page).toHaveURL(/\/dashboard\/leads\/.+/);

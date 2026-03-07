@@ -12,10 +12,10 @@ const navLinks = [
 
 export function TopNav() {
   return (
-    <header className="sticky top-0 z-40 border-b border-semantic-border/80 bg-semantic-surface/90 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-semantic-border/80 bg-[rgb(var(--sb-card))/0.9] backdrop-blur-xl">
       <div className="container flex min-h-24 items-center gap-4 py-4">
         <Link href="/" className="min-w-0 flex-1 md:flex-none">
-          <Logo variant="full" size={40} className="max-w-[252px] align-middle" />
+          <Logo variant="full" size={40} className="max-w-[270px] align-middle" />
         </Link>
         <nav className="ml-auto hidden items-center gap-7 text-base font-semibold text-semantic-muted lg:flex">
           {navLinks.map((link) => (
@@ -26,7 +26,7 @@ export function TopNav() {
         </nav>
         <div className="ml-2 hidden lg:block">
           <Link href="/login" className={buttonStyles({ className: "min-w-32" })}>
-            Start Free Trial
+            Try Demo
           </Link>
         </div>
         <details className="relative ml-auto lg:hidden">
@@ -46,7 +46,7 @@ export function TopNav() {
               ))}
             </nav>
             <Link href="/login" className={buttonStyles({ size: "sm", fullWidth: true, className: "mt-3" })}>
-              Start Free Trial
+              Try Demo
             </Link>
           </div>
         </details>

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { createDemoProspect } from "@/lib/demo/store";
+import { buildTerritory } from "@/lib/services/outbound";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 export async function POST(req: NextRequest) {
-  const { accountId, role, supabase } = await getCurrentUserContext();
-  assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
-
   const body = (await req.json()) as {
     rows?: Array<{
       name?: string;
@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
 
   const cleaned = rows
     .map((row) => ({
-      account_id: accountId,
       name: String(row.name || "").trim(),
       phone: row.phone ? String(row.phone).trim() : null,
       email: row.email ? String(row.email).trim() : null,
@@ -38,8 +37,50 @@ export async function POST(req: NextRequest) {
 
   if (cleaned.length === 0) return NextResponse.json({ error: "All rows were empty" }, { status: 400 });
 
-  const { error } = await supabase.from("outbound_contacts").insert(cleaned);
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (isDemoMode()) {
+    for (const row of cleaned) {
+      createDemoProspect({
+        company_name: row.name,
+        contact_name: row.name,
+        email: row.email,
+        phone: row.phone,
+        city: row.city,
+        state: row.state,
+        zip: row.postal_code,
+        territory: buildTerritory([row.city, row.state]),
+        prospect_type: row.service_type || "property_manager",
+        tags: row.tags,
+        source: row.source
+      });
+    }
+    return NextResponse.json({ inserted: cleaned.length });
+  }
 
-  return NextResponse.json({ inserted: cleaned.length });
+  const { accountId, role, supabase } = await getCurrentUserContext();
+  assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
+
+  const scoped = cleaned.map((row) => ({ ...row, account_id: accountId }));
+
+  const [{ error }, { error: prospectError }] = await Promise.all([
+    supabase.from("outbound_contacts").insert(scoped),
+    supabase.from("prospects").insert(
+      scoped.map((row) => ({
+        account_id: accountId,
+        company_name: row.name,
+        contact_name: row.name,
+        email: row.email,
+        phone: row.phone,
+        city: row.city,
+        state: row.state,
+        zip: row.postal_code,
+        territory: buildTerritory([row.city, row.state]),
+        prospect_type: row.service_type || "property_manager",
+        tags: row.tags,
+        source: row.source
+      }))
+    )
+  ]);
+  if (error || prospectError) return NextResponse.json({ error: error?.message || prospectError?.message }, { status: 400 });
+
+  return NextResponse.json({ inserted: scoped.length });
 }

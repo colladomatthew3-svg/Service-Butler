@@ -17,6 +17,8 @@ export type EnrichmentRecord = {
   postalCode: string;
   neighborhood: string;
   propertyImageLabel: string;
+  propertyImageUrl?: string | null;
+  propertyImageSource?: string | null;
   propertyValueEstimate: string | null;
   propertyValueVerification: EnrichmentVerification;
   ownerContact: EnrichmentContact | null;
@@ -32,6 +34,31 @@ export type EnrichmentProvider = {
     postalCode: string;
     serviceType: string;
   }): EnrichmentRecord;
+};
+
+type CensusGeocoderResponse = {
+  result?: {
+    addressMatches?: Array<{
+      matchedAddress?: string;
+      coordinates?: { x?: number; y?: number };
+      addressComponents?: {
+        city?: string;
+        state?: string;
+        zip?: string;
+      };
+      geographies?: {
+        Counties?: Array<{
+          NAME?: string;
+        }>;
+      };
+    }>;
+  };
+};
+
+type CensusZipValueResponse = string[][];
+type PremiumEnrichmentResponse = Partial<EnrichmentRecord> & {
+  provider?: string;
+  ownerContact?: Partial<EnrichmentContact> | null;
 };
 
 const neighborhoods = ["Downtown", "Harbor District", "North Ridge", "Maple Estates", "Bayview", "West End"];
@@ -70,6 +97,8 @@ class DemoEnrichmentProvider implements EnrichmentProvider {
       postalCode: input.postalCode,
       neighborhood,
       propertyImageLabel: `${input.serviceType} property preview`,
+      propertyImageUrl: null,
+      propertyImageSource: "Demo placeholder",
       propertyValueEstimate: `$${(325000 + (seed % 280000)).toLocaleString()}`,
       propertyValueVerification: "demo",
       ownerContact: {
@@ -77,10 +106,11 @@ class DemoEnrichmentProvider implements EnrichmentProvider {
         phone: `+1 (631) 555-${last4}`,
         email: `${ownerName.toLowerCase().replace(/\s+/g, ".")}@example-demo.com`,
         verification: "demo",
-        confidenceLabel: "Demo placeholder"
+        confidenceLabel: "Demo placeholder only"
       },
       notes: [
-        "Simulated for demo mode using realistic placeholder property data.",
+        "Simulated for demo mode using realistic placeholder property and homeowner data.",
+        "Do not treat owner name, phone, email, or value estimate as verified production records.",
         "Replace with licensed or public-record enrichment providers in production."
       ]
     };
@@ -88,6 +118,200 @@ class DemoEnrichmentProvider implements EnrichmentProvider {
 }
 
 const demoProvider = new DemoEnrichmentProvider();
+
+function formatCurrency(value?: number | null) {
+  if (!Number.isFinite(value)) return null;
+  return `$${Math.round(Number(value)).toLocaleString()}`;
+}
+
+async function fetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function geocodeWithCensus(address: string, city: string, state: string, postalCode: string) {
+  const query = [address, city, state, postalCode].filter(Boolean).join(", ");
+  if (!query) return null;
+
+  const url = new URL("https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress");
+  url.searchParams.set("address", query);
+  url.searchParams.set("benchmark", "Public_AR_Current");
+  url.searchParams.set("vintage", "Current_Current");
+  url.searchParams.set("format", "json");
+
+  const payload = await fetchJson<CensusGeocoderResponse>(url.toString());
+  const match = payload?.result?.addressMatches?.[0];
+  if (!match) return null;
+
+  return {
+    matchedAddress: match.matchedAddress || query,
+    city: match.addressComponents?.city || city,
+    state: match.addressComponents?.state || state,
+    postalCode: match.addressComponents?.zip || postalCode,
+    county: match.geographies?.Counties?.[0]?.NAME || null,
+    lat: match.coordinates?.y ?? null,
+    lon: match.coordinates?.x ?? null
+  };
+}
+
+async function fetchZipMedianHomeValue(postalCode: string) {
+  const zip = String(postalCode || "").trim();
+  if (!/^\d{5}$/.test(zip)) return null;
+
+  const url = new URL("https://api.census.gov/data/2023/acs/acs5");
+  url.searchParams.set("get", "B25077_001E");
+  url.searchParams.set("for", `zip code tabulation area:${zip}`);
+
+  const payload = await fetchJson<CensusZipValueResponse>(url.toString());
+  const value = payload?.[1]?.[0];
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function neighborhoodFromAddress(address: string, city: string) {
+  const cleaned = String(address || "").split(",")[0]?.trim() || "";
+  const streetName = cleaned.replace(/^\d+\s+/, "").replace(/\b(?:Road|Rd|Street|St|Avenue|Ave|Drive|Dr|Lane|Ln|Court|Ct|Place|Pl|Boulevard|Blvd|Parkway|Pkwy)\b\.?$/i, "").trim();
+  if (streetName) return `${streetName} area`;
+  return city ? `${city} service area` : "Service area";
+}
+
+function buildUsgsAerialImageUrl(lat?: number | null, lon?: number | null) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const lng = Number(lon);
+  const latitude = Number(lat);
+  const span = 0.0022;
+  const xmin = lng - span;
+  const ymin = latitude - span;
+  const xmax = lng + span;
+  const ymax = latitude + span;
+  const url = new URL("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export");
+  url.searchParams.set("bbox", `${xmin},${ymin},${xmax},${ymax}`);
+  url.searchParams.set("bboxSR", "4326");
+  url.searchParams.set("imageSR", "4326");
+  url.searchParams.set("size", "640,420");
+  url.searchParams.set("format", "jpg");
+  url.searchParams.set("transparent", "false");
+  url.searchParams.set("f", "image");
+  return url.toString();
+}
+
+export async function enrichOpportunityLive(input: {
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  serviceType: string;
+}) : Promise<EnrichmentRecord | null> {
+  const geocoded = await geocodeWithCensus(input.address, input.city, input.state, input.postalCode);
+  const normalizedAddress = geocoded?.matchedAddress || [input.address, input.city, input.state, input.postalCode].filter(Boolean).join(", ");
+  const normalizedCity = geocoded?.city || input.city;
+  const normalizedState = geocoded?.state || input.state;
+  const normalizedPostal = geocoded?.postalCode || input.postalCode;
+  const county = geocoded?.county || null;
+  const zipValue = await fetchZipMedianHomeValue(normalizedPostal);
+
+  if (!normalizedAddress) return null;
+
+  const publicRecord: EnrichmentRecord = {
+    provider: "US Census geocoder + ACS",
+    simulated: false,
+    propertyAddress: normalizedAddress,
+    city: normalizedCity,
+    state: normalizedState,
+    postalCode: normalizedPostal,
+    neighborhood: neighborhoodFromAddress(normalizedAddress, normalizedCity),
+    propertyImageLabel: "USGS aerial image",
+    propertyImageUrl: buildUsgsAerialImageUrl(geocoded?.lat, geocoded?.lon),
+    propertyImageSource: "USGS NAIP imagery",
+    propertyValueEstimate: formatCurrency(zipValue),
+    propertyValueVerification: zipValue != null ? "estimated" : "public-record",
+    ownerContact: null,
+    notes: [
+      county ? `County confirmed from Census geocoder: ${county}.` : "Address normalized through Census geocoder.",
+      geocoded?.lat != null && geocoded?.lon != null
+        ? "Aerial property context is sourced from public USGS imagery."
+        : "Aerial imagery is unavailable until a precise public geocode is returned.",
+      zipValue != null
+        ? `Property value is a ZIP-level ACS median owner-occupied home value estimate for ${normalizedPostal}.`
+        : "No public ZIP-level home value estimate was returned for this address.",
+      "No verified homeowner contact data is shown because a licensed contact-data provider is not connected yet."
+    ]
+  };
+
+  const premium = await fetchPremiumEnrichment({
+    address: normalizedAddress,
+    city: normalizedCity,
+    state: normalizedState,
+    postalCode: normalizedPostal,
+    serviceType: input.serviceType
+  });
+
+  if (!premium) return publicRecord;
+
+  return mergeEnrichment(publicRecord, premium);
+}
+
+async function fetchPremiumEnrichment(input: {
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  serviceType: string;
+}): Promise<PremiumEnrichmentResponse | null> {
+  const endpoint = process.env.SERVICE_BUTLER_ENRICHMENT_URL;
+  if (!endpoint) return null;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(process.env.SERVICE_BUTLER_ENRICHMENT_TOKEN
+          ? { authorization: `Bearer ${process.env.SERVICE_BUTLER_ENRICHMENT_TOKEN}` }
+          : {})
+      },
+      body: JSON.stringify(input),
+      cache: "no-store"
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as PremiumEnrichmentResponse;
+  } catch {
+    return null;
+  }
+}
+
+function mergeEnrichment(base: EnrichmentRecord, premium: PremiumEnrichmentResponse): EnrichmentRecord {
+  return {
+    provider: premium.provider ? `${base.provider} + ${premium.provider}` : base.provider,
+    simulated: false,
+    propertyAddress: premium.propertyAddress || base.propertyAddress,
+    city: premium.city || base.city,
+    state: premium.state || base.state,
+    postalCode: premium.postalCode || base.postalCode,
+    neighborhood: premium.neighborhood || base.neighborhood,
+    propertyImageLabel: premium.propertyImageLabel || base.propertyImageLabel,
+    propertyImageUrl: premium.propertyImageUrl ?? base.propertyImageUrl ?? null,
+    propertyImageSource: premium.propertyImageSource ?? base.propertyImageSource ?? null,
+    propertyValueEstimate: premium.propertyValueEstimate || base.propertyValueEstimate,
+    propertyValueVerification: premium.propertyValueVerification || base.propertyValueVerification,
+    ownerContact: premium.ownerContact
+      ? {
+          name: premium.ownerContact.name || "Verified contact",
+          phone: premium.ownerContact.phone || null,
+          email: premium.ownerContact.email || null,
+          verification: premium.ownerContact.verification || "verified",
+          confidenceLabel: premium.ownerContact.confidenceLabel || "Vendor verified"
+        }
+      : base.ownerContact,
+    notes: [...base.notes, ...(premium.notes || [])]
+  };
+}
 
 export function getEnrichmentProvider(mode: "demo" | "live") {
   if (mode === "demo") return demoProvider;

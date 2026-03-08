@@ -1,12 +1,13 @@
 {
   "/api/weather/route": "app/api/weather/route.js",
-  "/api/scanner/events/route": "app/api/scanner/events/route.js",
-  "/api/scanner/run/route": "app/api/scanner/run/route.js",
-  "/api/leads/route": "app/api/leads/route.js",
+  "/api/prospects/route": "app/api/prospects/route.js",
+  "/api/referral-partners/route": "app/api/referral-partners/route.js",
+  "/api/opportunities/route": "app/api/opportunities/route.js",
+  "/api/outbound-lists/route": "app/api/outbound-lists/route.js",
   "/page": "app/page.js",
+  "/blog/page": "app/blog/page.js",
   "/(auth)/login/page": "app/(auth)/login/page.js",
-  "/(dashboard)/dashboard/scanner/page": "app/(dashboard)/dashboard/scanner/page.js",
-  "/(dashboard)/dashboard/jobs/page": "app/(dashboard)/dashboard/jobs/page.js",
-  "/(dashboard)/dashboard/leads/page": "app/(dashboard)/dashboard/leads/page.js",
-  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js"
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/dashboard/jobs/[id]/page": "app/(dashboard)/dashboard/jobs/[id]/page.js",
+  "/(dashboard)/dashboard/outbound/page": "app/(dashboard)/dashboard/outbound/page.js"
 }

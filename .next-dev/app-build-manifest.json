@@ -16,6 +16,11 @@
       "static/chunks/main-app.js",
       "static/chunks/app/page.js"
     ],
+    "/blog/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/blog/page.js"
+    ],
     "/(auth)/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -36,45 +41,35 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/weather/route.js"
     ],
-    "/(dashboard)/dashboard/scanner/page": [
+    "/(dashboard)/dashboard/jobs/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/dashboard/scanner/page.js"
+      "static/chunks/app/(dashboard)/dashboard/jobs/[id]/page.js"
     ],
-    "/api/scanner/events/route": [
+    "/(dashboard)/dashboard/outbound/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/scanner/events/route.js"
+      "static/chunks/app/(dashboard)/dashboard/outbound/page.js"
     ],
-    "/api/routing-rules/route": [
+    "/api/prospects/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/routing-rules/route.js"
+      "static/chunks/app/api/prospects/route.js"
     ],
-    "/api/settings/weather/route": [
+    "/api/referral-partners/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/settings/weather/route.js"
+      "static/chunks/app/api/referral-partners/route.js"
     ],
-    "/api/scanner/run/route": [
+    "/api/opportunities/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/scanner/run/route.js"
+      "static/chunks/app/api/opportunities/route.js"
     ],
-    "/(dashboard)/dashboard/leads/page": [
+    "/api/outbound-lists/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/dashboard/leads/page.js"
-    ],
-    "/api/leads/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/leads/route.js"
-    ],
-    "/(dashboard)/dashboard/jobs/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/dashboard/jobs/page.js"
+      "static/chunks/app/api/outbound-lists/route.js"
     ]
   }
 }

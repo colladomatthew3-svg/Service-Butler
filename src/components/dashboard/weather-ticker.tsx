@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CloudRain, CloudSun, ChevronRight, Droplets, Snowflake, SunMedium, TriangleAlert } from "lucide-react";
+import { CloudRain, CloudSun, ChevronRight, Droplets, Snowflake, TriangleAlert } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -102,14 +102,7 @@ export function WeatherTicker({
   }
 
   const impact = weatherImpact(forecast);
-  const tickerItems = buildTickerItems({
-    locationLabel,
-    currentCondition: forecast.current.condition,
-    currentTemp: forecast.current.temp,
-    precipitationChance: forecast.current.precipitationChance,
-    windKph: forecast.current.windKph,
-    impact: impact.title
-  });
+  const signals = buildWeatherSignals(forecast).slice(0, compact ? 2 : 3);
 
   return (
     <Card className="overflow-hidden">
@@ -148,8 +141,8 @@ export function WeatherTicker({
           <p className="mt-2 text-sm text-semantic-text">{impact.detail}</p>
         </div>
 
-        <div className={`grid gap-3 ${compact ? "sm:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-4"}`}>
-          {buildWeatherSignals(forecast).map((signal) => (
+        <div className={`grid gap-3 ${compact ? "sm:grid-cols-2" : "md:grid-cols-3"}`}>
+          {signals.map((signal) => (
             <div key={signal.title} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
               <div className="flex items-center gap-2 text-brand-700">
                 <signal.icon className="h-4 w-4" />
@@ -161,39 +154,17 @@ export function WeatherTicker({
           ))}
         </div>
 
-        {compact && tickerItems.length > 0 && (
-          <div className="weather-ticker-strip" aria-label="Weather ticker updates">
-            <div className="weather-ticker-track">
-              {[...tickerItems, ...tickerItems].map((item, index) => (
-                <span key={`${item}-${index}`} className="weather-ticker-item">
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next 6 Hours</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Short-term outlook</p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             {forecast.next6Hours.slice(0, 3).map((h) => (
               <div key={h.time} className="rounded-lg border border-semantic-border bg-semantic-surface px-3 py-2">
                 <p className="text-xs font-semibold text-semantic-muted">{h.time}</p>
                 <p className="text-sm font-semibold text-semantic-text">{h.temp}°</p>
-                <p className="text-xs text-semantic-muted">{h.precipChance}% precip</p>
+                <p className="text-xs text-semantic-muted">{h.precipChance}% rain</p>
               </div>
             ))}
           </div>
-        </div>
-
-        <div className={`grid gap-2 ${compact ? "grid-cols-3" : "grid-cols-3 sm:grid-cols-5"}`}>
-          {(compact ? forecast.next5Days.slice(0, 3) : forecast.next5Days).map((day) => (
-            <div key={day.date} className="rounded-lg border border-semantic-border bg-semantic-surface2 p-2 text-center">
-              <p className="text-[11px] font-semibold text-semantic-muted">{day.date.split(",")[0]}</p>
-              <p className="mt-1 text-sm font-semibold text-semantic-text">{day.max}°</p>
-              <p className="text-[11px] text-semantic-muted">{day.min}°</p>
-            </div>
-          ))}
         </div>
 
         <div className="space-y-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
@@ -216,32 +187,6 @@ export function WeatherTicker({
       </CardBody>
     </Card>
   );
-}
-
-function buildTickerItems({
-  locationLabel,
-  currentCondition,
-  currentTemp,
-  precipitationChance,
-  windKph,
-  impact
-}: {
-  locationLabel?: string | null;
-  currentCondition: string;
-  currentTemp: number;
-  precipitationChance?: number;
-  windKph?: number;
-  impact: string;
-}) {
-  const items = [
-    locationLabel ? `Location: ${locationLabel}` : "Location: Service area",
-    `Now: ${currentTemp}° and ${currentCondition}`,
-    precipitationChance != null ? `Rain chance: ${precipitationChance}%` : null,
-    windKph != null ? `Wind: ${windKph} kph` : null,
-    `Demand signal: ${impact}`
-  ].filter(Boolean);
-
-  return items as string[];
 }
 
 function BadgeStat({ icon, label }: { icon: ReactNode; label: string }) {
@@ -281,7 +226,6 @@ export function weatherImpact(forecast: Forecast) {
 function buildWeatherSignals(forecast: Forecast) {
   const precip = forecast.current.precipitationChance ?? 0;
   const wind = forecast.current.windKph ?? 0;
-  const tempHigh = Math.max(...forecast.next5Days.map((day) => day.max));
   const tempLow = Math.min(...forecast.next5Days.map((day) => day.min));
   const nextWet = forecast.next6Hours.some((hour) => hour.precipChance >= 55);
 
@@ -303,12 +247,6 @@ function buildWeatherSignals(forecast: Forecast) {
       window: tempLow <= 34 ? "Overnight" : "Inactive",
       detail: tempLow <= 34 ? "Frozen pipe and no-heat urgency should increase." : "No freeze-driven service pressure in the current forecast.",
       icon: Snowflake
-    },
-    {
-      title: "Heat wave",
-      window: tempHigh >= 90 ? "Next 5 days" : "Normal load",
-      detail: tempHigh >= 90 ? "Expect higher HVAC volume and tighter scheduling windows." : "Heat-driven HVAC demand is in a normal operating range.",
-      icon: SunMedium
     }
   ];
 }

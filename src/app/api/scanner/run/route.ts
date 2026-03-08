@@ -90,6 +90,29 @@ export async function POST(req: NextRequest) {
   });
 
   if (result.opportunities.length > 0) {
+    const sourceRows = result.opportunities.map((op) => ({
+      account_id: accountId,
+      source_type: "scanner_signal",
+      platform: op.source,
+      source_url: typeof op.raw?.source_url === "string" ? op.raw.source_url : null,
+      headline: op.title,
+      body_text: op.description,
+      published_at: op.createdAtIso || new Date().toISOString(),
+      raw_location_text: op.locationText,
+      signal_category: op.category,
+      service_category_candidate: String(op.raw?.service_type || op.category || "general"),
+      damage_keywords: op.tags,
+      urgency_keywords: [String(op.raw?.urgency_window || op.priorityLabel || "monitor")],
+      media_count: Array.isArray(op.raw?.media_urls) ? op.raw.media_urls.length : 0,
+      raw_payload_json: {
+        ...op.raw,
+        scanner_opportunity_id: op.id
+      }
+    }));
+
+    const { data: sourceEvents } = await supabase.from("source_events").insert(sourceRows).select("id");
+    const sourceEventIds = (sourceEvents || []).map((item) => String(item.id));
+
     const rows = result.opportunities.map((op) => ({
       account_id: accountId,
       source: op.source,
@@ -115,19 +138,28 @@ export async function POST(req: NextRequest) {
     await supabase.from("scanner_events").insert(rows);
 
     await supabase.from("opportunities").insert(
-      result.opportunities.map((op) => ({
+      result.opportunities.map((op, index) => ({
         account_id: accountId,
         source_id: null,
         category: op.category,
+        lead_type: String(op.raw?.lead_type || "direct"),
         title: op.title,
         description: op.description,
+        service_category: String(op.raw?.service_type || op.category || "general"),
         location_text: op.locationText,
+        city: typeof op.raw?.property_city === "string" ? op.raw.property_city : null,
+        state: typeof op.raw?.property_state === "string" ? op.raw.property_state : null,
+        zip: typeof op.raw?.property_postal_code === "string" ? op.raw.property_postal_code : null,
+        territory: typeof op.raw?.territory === "string" ? op.raw.territory : typeof op.raw?.service_area_label === "string" ? op.raw.service_area_label : null,
         lat: op.lat,
         lon: op.lon,
         intent_score: op.intentScore,
         confidence: op.confidence,
+        urgency_score: Number(op.raw?.urgency_score || 0),
         tags: op.tags,
         suggested_action: op.nextAction,
+        recommended_action: op.nextAction,
+        source_event_ids: sourceEventIds[index] ? [sourceEventIds[index]] : [],
         status: "new",
         raw: {
           ...op.raw,

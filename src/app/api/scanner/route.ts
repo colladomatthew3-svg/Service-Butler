@@ -5,6 +5,7 @@ import {
   runScanner,
   opportunityToLeadPayload
 } from "@/lib/services/scanner";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 const CAMPAIGNS: CampaignMode[] = ["Storm Response", "Roofing", "Water Damage", "HVAC Emergency"];
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
             : "general";
 
   const scan = await runScanner({
-    mode: "demo",
+    mode: isDemoMode() ? "demo" : "live",
     location,
     categories: [category],
     limit: 16,
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
       intentScore: op.intentScore,
       priorityLabel: op.priorityLabel,
       reason: op.reasonSummary,
-      sourceMode: op.source === "google_places" ? "google_places" : "synthetic",
+      sourceMode: op.source,
       signals: []
     };
   });

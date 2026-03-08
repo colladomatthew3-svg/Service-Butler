@@ -6,17 +6,18 @@ test("scanner demo flow shows deterministic opportunities", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "Opportunity Scanner" })).toBeVisible();
 
   await page.getByTestId("scanner-location").fill("11717");
-  await page.getByRole("button", { name: "Plumbing" }).click();
+  await page.getByRole("combobox").nth(0).selectOption("Water Damage");
+  await page.getByText("More scan options").click();
   await page.getByTestId("scanner-trigger-freeze").click();
   await page.getByTestId("scanner-radius").selectOption("50");
   await page.getByTestId("scanner-run").click();
 
   const cards = page.getByTestId("scanner-result-card");
   await expect(cards.first()).toBeVisible({ timeout: 15000 });
-  await expect(cards.first()).toContainText("Intent score");
-  await expect(cards.first()).toContainText("Confidence score");
-  await expect(cards.first()).toContainText("Why this opportunity exists");
-  await expect(cards.first()).toContainText("Suggested next action");
+  await expect(cards.first()).toContainText("Job score");
+  await expect(cards.first()).toContainText("Confidence");
+  await expect(cards.first()).toContainText("Why this job is showing up");
+  await expect(cards.first()).toContainText("Next step");
   await expect(cards.first()).toContainText(/storm restoration|abatement|inspection|mitigation|demolition/i);
   await expect(cards.first()).toContainText(/\d+\s+[A-Za-z].*,\s*[A-Za-z ]+,\s*[A-Z]{2}\s+\d{5}/);
   await expect(cards.first()).not.toContainText(/-?\d+\.\d+\s*,\s*-?\d+\.\d+/);

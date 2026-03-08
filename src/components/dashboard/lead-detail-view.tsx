@@ -40,6 +40,8 @@ type Lead = {
     postalCode: string;
     neighborhood: string;
     propertyImageLabel: string;
+    propertyImageUrl?: string | null;
+    propertyImageSource?: string | null;
     propertyValueEstimate: string | null;
     propertyValueVerification: string;
     ownerContact: {
@@ -339,23 +341,43 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
             <CardBody className="space-y-4">
               <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(33,43,38,0.96),rgba(91,108,100,0.86))] p-4 text-white">
                 <div className="relative h-44 overflow-hidden rounded-[1.1rem]">
-                  <Image
-                    src="/marketing/property-preview.svg"
-                    alt="Property preview"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 1024px) 100vw, 420px"
-                  />
+                  {lead.enrichment.propertyImageUrl ? (
+                    <Image
+                      src={lead.enrichment.propertyImageUrl}
+                      alt={lead.enrichment.propertyImageSource || "Property aerial image"}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 1024px) 100vw, 420px"
+                      unoptimized
+                    />
+                  ) : (
+                    <Image
+                      src="/marketing/property-preview.svg"
+                      alt="Property preview"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 1024px) 100vw, 420px"
+                    />
+                  )}
                   <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(22,29,26,0.04),rgba(22,29,26,0.26))]" />
                   <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/88">
                     {lead.enrichment.propertyImageLabel}
                   </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/88">
+                    {lead.enrichment.simulated ? "Demo record" : "Public record"}
+                  </span>
+                  <span className="rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/88">
+                    {lead.enrichment.propertyAddress === lead.address ? "Exact address" : "Normalized address"}
+                  </span>
                 </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailCard label="Address" value={lead.enrichment.propertyAddress} />
                 <DetailCard label="Neighborhood" value={lead.enrichment.neighborhood} />
+                <DetailCard label="Image source" value={lead.enrichment.propertyImageSource || "Placeholder"} />
                 <DetailCard label="Property value" value={lead.enrichment.propertyValueEstimate || "Unavailable"} />
                 <DetailCard label="Value status" value={formatVerification(lead.enrichment.propertyValueVerification)} />
               </div>
@@ -375,14 +397,17 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                     {lead.enrichment.provider}
                   </span>
                   <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-semantic-muted">
-                    {lead.enrichment.simulated ? "Simulated demo data" : "Production enrichment"}
+                    {lead.enrichment.simulated ? "Demo placeholder, not verified" : "Production enrichment"}
+                  </span>
+                  <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-semantic-muted">
+                    Lead source: {lead.source || "manual"}
                   </span>
                 </div>
               </div>
 
               {lead.enrichment.ownerContact ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <DetailCard label="Owner / contact" value={lead.enrichment.ownerContact.name} />
+                  <DetailCard label={lead.enrichment.simulated ? "Owner / contact (demo)" : "Owner / contact"} value={lead.enrichment.ownerContact.name} />
                   <DetailCard label="Verification" value={formatVerification(lead.enrichment.ownerContact.verification)} />
                   <DetailCard label="Phone" value={lead.enrichment.ownerContact.phone || "Unavailable"} />
                   <DetailCard label="Email" value={lead.enrichment.ownerContact.email || "Unavailable"} />

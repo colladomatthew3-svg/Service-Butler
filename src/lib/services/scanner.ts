@@ -1,6 +1,6 @@
 import { generateSignals } from "@/lib/services/intent-engine";
-import { getEnrichmentProvider } from "@/lib/services/enrichment";
-import { distanceToMarketMiles, getTriStateMarketsForSignal } from "@/lib/services/tri-state-markets";
+import { enrichOpportunityLive, getEnrichmentProvider } from "@/lib/services/enrichment";
+import { distanceToMarketMiles, floodProneTriStateMarkets, getTriStateMarketsForSignal } from "@/lib/services/tri-state-markets";
 import { geocodeLocation, getForecastByLatLng, type ForecastSummary } from "@/lib/services/weather";
 
 export type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
@@ -907,6 +907,18 @@ type EonetResponse = {
   }>;
 };
 
+type NycFireIncidentRow = {
+  starfire_incident_id?: string;
+  incident_datetime?: string;
+  alarm_box_location?: string;
+  incident_borough?: string;
+  zipcode?: string;
+  incident_classification?: string;
+  incident_classification_group?: string;
+  highest_alarm_level?: string;
+  dispatch_response_seconds_qy?: string;
+};
+
 function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const R = 3958.8;
@@ -1179,6 +1191,150 @@ async function fetchEonetOpportunities({
   return out;
 }
 
+function normalizeNycBorough(value?: string | null) {
+  const borough = String(value || "").trim().toUpperCase();
+  if (borough.includes("BRONX")) return { city: "Bronx", county: "Bronx County", state: "NY" };
+  if (borough.includes("BROOKLYN")) return { city: "Brooklyn", county: "Kings County", state: "NY" };
+  if (borough.includes("MANHATTAN")) return { city: "Manhattan", county: "New York County", state: "NY" };
+  if (borough.includes("QUEENS")) return { city: "Queens", county: "Queens County", state: "NY" };
+  if (borough.includes("RICHMOND") || borough.includes("STATEN")) return { city: "Staten Island", county: "Richmond County", state: "NY" };
+  return { city: "New York City", county: "New York City", state: "NY" };
+}
+
+async function fetchNycFireOpportunities({
+  lat,
+  lon,
+  serviceAreaLabel,
+  categories,
+  forecast,
+  limit
+}: {
+  lat: number;
+  lon: number;
+  serviceAreaLabel: string;
+  categories: ScannerCategory[];
+  forecast?: ForecastSummary | null;
+  limit: number;
+}): Promise<ScannerOpportunity[]> {
+  if (!categories.includes("restoration") && !categories.includes("demolition")) return [];
+
+  const sinceIso = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+  const url = new URL("https://data.cityofnewyork.us/resource/8m42-w767.json");
+  url.searchParams.set("$select", [
+    "starfire_incident_id",
+    "incident_datetime",
+    "alarm_box_location",
+    "incident_borough",
+    "zipcode",
+    "incident_classification",
+    "incident_classification_group",
+    "highest_alarm_level",
+    "dispatch_response_seconds_qy"
+  ].join(","));
+  url.searchParams.set("$where", `incident_datetime >= '${sinceIso}' AND incident_classification_group = 'Structural Fires'`);
+  url.searchParams.set("$order", "incident_datetime DESC");
+  url.searchParams.set("$limit", String(Math.max(limit * 4, 20)));
+
+  const rows = await fetchJsonWithTimeout<NycFireIncidentRow[]>(url.toString(), 9500);
+  if (!rows?.length) return [];
+
+  const out: ScannerOpportunity[] = [];
+  for (const row of rows) {
+    const location = String(row.alarm_box_location || "").trim();
+    const zip = String(row.zipcode || "").trim();
+    const borough = normalizeNycBorough(row.incident_borough);
+    const displayAddress = [location || "Fire response location", borough.city, borough.state, zip].filter(Boolean).join(", ").replace(/, NY, (\d{5})$/, ", NY $1");
+    const category = String(row.incident_classification || "").toLowerCase().includes("demolition") ? "demolition" : "restoration";
+    if (!categories.includes(category)) continue;
+
+    const markets = getTriStateMarketsForSignal({
+      areaDesc: `${row.incident_borough || ""} ${row.zipcode || ""} ${row.alarm_box_location || ""}`,
+      serviceAreaLabel,
+      serviceLat: lat,
+      serviceLon: lon,
+      limit: 1
+    });
+    const market = markets[0];
+    const distanceMiles = market ? Math.max(1, Math.round(distanceToMarketMiles(lat, lon, market))) : Math.max(3, Math.round(haversineMiles(lat, lon, lat, lon)));
+    const responseSeconds = Number(row.dispatch_response_seconds_qy || 0);
+    const tags = ["fdny", "structural-fire", responseSeconds > 300 ? "extended-response" : "active-response"];
+    const scored = scoreOpportunity(category, tags, forecast, 70);
+    const intent = clamp(scored.intentScore + 12 + (responseSeconds > 300 ? 6 : 0));
+    const classification = String(row.incident_classification || "Structural fire").trim();
+    const reasonSummary = `${classification} was dispatched in ${borough.city}. Fire-damage, board-up, and strip-out demand usually follows immediately after these incidents.`;
+
+    out.push({
+      id: mkId(["fdny", row.starfire_incident_id || row.incident_datetime || displayAddress]),
+      source: "public_feed",
+      category,
+      title: `${classification} near ${borough.city}`,
+      description: `FDNY dispatch data shows a recent structural fire incident at ${displayAddress}.`,
+      locationText: displayAddress,
+      lat: market?.lat ?? null,
+      lon: market?.lon ?? null,
+      intentScore: intent,
+      priorityLabel: priorityLabelForOpportunity({
+        intentScore: intent,
+        tags,
+        title: `${classification} near ${borough.city}`,
+        description: `FDNY dispatch data shows a recent structural fire incident at ${displayAddress}.`,
+        reasonSummary,
+        raw: {
+          provider: "FDNY_OPEN_DATA",
+          incident_type: classification,
+          signal_source: "FDNY fire dispatch",
+          property_address: location || "Fire response location",
+          property_city: borough.city,
+          property_state: borough.state,
+          property_postal_code: zip,
+          county: borough.county,
+          neighborhood: market?.neighborhood || borough.city,
+          address_quality: "approximate",
+          service_area_label: serviceAreaLabel,
+          service_type: category === "demolition" ? "Emergency Board-Up" : "Fire Damage Restoration",
+          urgency_window: "Immediate",
+          distance_miles: distanceMiles,
+          dispatch_response_seconds: responseSeconds || null,
+          highest_alarm_level: row.highest_alarm_level || null,
+          demand_signal: "Recent structural fire dispatch",
+          demand_explanation: "Structural fire incidents create immediate board-up, mitigation, and reconstruction demand once the scene clears."
+        }
+      }),
+      confidence: clamp(scored.confidence + 8),
+      tags,
+      nextAction: suggestedNextAction(category, intent, displayAddress),
+      reasonSummary,
+      recommendedCreateMode: "job",
+      recommendedScheduleIso: suggestedSchedule(intent, 30),
+      raw: {
+        provider: "FDNY_OPEN_DATA",
+        incident_type: classification,
+        signal_source: "FDNY fire dispatch",
+        property_address: location || "Fire response location",
+        property_city: borough.city,
+        property_state: borough.state,
+        property_postal_code: zip,
+        county: borough.county,
+        neighborhood: market?.neighborhood || borough.city,
+        address_quality: "approximate",
+        service_area_label: serviceAreaLabel,
+        service_type: category === "demolition" ? "Emergency Board-Up" : "Fire Damage Restoration",
+        urgency_window: "Immediate",
+        distance_miles: distanceMiles,
+        dispatch_response_seconds: responseSeconds || null,
+        highest_alarm_level: row.highest_alarm_level || null,
+        demand_signal: "Recent structural fire dispatch",
+        demand_explanation: "Structural fire incidents create immediate board-up, mitigation, and reconstruction demand once the scene clears."
+      },
+      createdAtIso: row.incident_datetime || new Date().toISOString()
+    });
+
+    if (out.length >= limit) break;
+  }
+
+  return out;
+}
+
 async function fetchForecastDrivenOpportunities({
   lat,
   lon,
@@ -1314,6 +1470,110 @@ async function fetchForecastDrivenOpportunities({
   return out.sort((a, b) => b.intentScore - a.intentScore).slice(0, limit);
 }
 
+async function fetchFloodClusterOpportunities({
+  lat,
+  lon,
+  serviceAreaLabel,
+  categories,
+  forecast,
+  limit
+}: {
+  lat: number;
+  lon: number;
+  serviceAreaLabel: string;
+  categories: ScannerCategory[];
+  forecast?: ForecastSummary | null;
+  limit: number;
+}): Promise<ScannerOpportunity[]> {
+  if (!forecast || !categories.includes("restoration")) return [];
+
+  const precipNow = forecast.current.precipitationChance ?? 0;
+  const wetHours = forecast.next6Hours.filter((hour) => hour.precipChance >= 55).length;
+  const thresholdActive = precipNow >= 60 || wetHours >= 2;
+  if (!thresholdActive) return [];
+
+  const markets = floodProneTriStateMarkets(lat, lon, Math.min(3, limit));
+  const out: ScannerOpportunity[] = [];
+
+  for (const market of markets) {
+    const distanceMiles = Math.max(1, Math.round(distanceToMarketMiles(lat, lon, market)));
+    const tags = ["flood-cluster", "forecast", "restoration", "water-damage"];
+    const scored = scoreOpportunity("restoration", tags, forecast, 68);
+    const intent = clamp(scored.intentScore + 10 + wetHours * 2);
+    const locationText = `${market.address}, ${market.city}, ${market.state} ${market.postalCode}`;
+    const rainWindow = wetHours >= 3 ? "Next 6 hours" : "Today";
+    const reasonSummary = `Heavy rain pressure is clustering around ${market.neighborhood} in ${market.county}, where ${market.floodProfile.toLowerCase()} can drive water loss and mitigation calls.`;
+
+    out.push({
+      id: mkId(["flood-cluster", market.id, String(precipNow), String(wetHours)]),
+      source: "weather",
+      category: "restoration",
+      title: `Flood-risk cluster near ${market.city}`,
+      description: `Live rainfall pressure is building in ${market.neighborhood}, a ${market.floodProfile.toLowerCase()} area.`,
+      locationText,
+      lat: market.lat,
+      lon: market.lon,
+      intentScore: intent,
+      priorityLabel: priorityLabelForOpportunity({
+        intentScore: intent,
+        tags,
+        title: `Flood-risk cluster near ${market.city}`,
+        description: `Live rainfall pressure is building in ${market.neighborhood}.`,
+        reasonSummary,
+        raw: {
+          provider: "OPEN_METEO_CLUSTER",
+          incident_type: "Flood-risk cluster",
+          signal_source: "Forecast + flood-prone market cluster",
+          property_address: market.address,
+          property_city: market.city,
+          property_state: market.state,
+          property_postal_code: market.postalCode,
+          county: market.county,
+          neighborhood: market.neighborhood,
+          flood_profile: market.floodProfile,
+          address_quality: "approximate",
+          service_area_label: serviceAreaLabel,
+          service_type: "Water Mitigation",
+          urgency_window: rainWindow,
+          distance_miles: distanceMiles,
+          weather_signal: "Heavy rainfall pressure",
+          demand_signal: "Flood-risk cluster",
+          demand_explanation: `${market.floodProfile} plus ${precipNow}% rain probability is creating realistic water intrusion demand.`
+        }
+      }),
+      confidence: clamp(scored.confidence + 6),
+      tags,
+      nextAction: suggestedNextAction("restoration", intent, `${market.city}, ${market.state}`),
+      reasonSummary,
+      recommendedCreateMode: intent >= 78 ? "job" : "lead",
+      recommendedScheduleIso: intent >= 72 ? suggestedSchedule(intent, 45) : null,
+      raw: {
+        provider: "OPEN_METEO_CLUSTER",
+        incident_type: "Flood-risk cluster",
+        signal_source: "Forecast + flood-prone market cluster",
+        property_address: market.address,
+        property_city: market.city,
+        property_state: market.state,
+        property_postal_code: market.postalCode,
+        county: market.county,
+        neighborhood: market.neighborhood,
+        flood_profile: market.floodProfile,
+        address_quality: "approximate",
+        service_area_label: serviceAreaLabel,
+        service_type: "Water Mitigation",
+        urgency_window: rainWindow,
+        distance_miles: distanceMiles,
+        weather_signal: "Heavy rainfall pressure",
+        demand_signal: "Flood-risk cluster",
+        demand_explanation: `${market.floodProfile} plus ${precipNow}% rain probability is creating realistic water intrusion demand.`
+      },
+      createdAtIso: new Date().toISOString()
+    });
+  }
+
+  return out.sort((a, b) => b.intentScore - a.intentScore).slice(0, limit);
+}
+
 export async function runScanner({
   mode,
   location,
@@ -1353,7 +1613,7 @@ export async function runScanner({
   }
 
   if (mode === "live" && resolved) {
-    const [nws, forecastDriven, usgs, eonet] = await Promise.all([
+    const [nws, forecastDriven, floodClusters, fdnyFire, usgs, eonet] = await Promise.all([
       fetchNwsOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
@@ -1363,6 +1623,22 @@ export async function runScanner({
         limit: safeLimit
       }),
       fetchForecastDrivenOpportunities({
+        lat: resolved.lat,
+        lon: resolved.lon,
+        serviceAreaLabel: resolved.label,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
+      }),
+      fetchFloodClusterOpportunities({
+        lat: resolved.lat,
+        lon: resolved.lon,
+        serviceAreaLabel: resolved.label,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
+      }),
+      fetchNycFireOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
         serviceAreaLabel: resolved.label,
@@ -1390,15 +1666,45 @@ export async function runScanner({
       })
     ]);
 
-    const merged = [...nws, ...forecastDriven, ...usgs, ...eonet]
+    const merged = [...nws, ...forecastDriven, ...floodClusters, ...fdnyFire, ...usgs, ...eonet]
       .sort((a, b) => b.intentScore - a.intentScore)
       .slice(0, safeLimit);
 
     if (merged.length > 0) {
+      const enriched = await Promise.all(
+        merged.map(async (opportunity, index) => {
+          if (index >= 8) return opportunity;
+
+          const propertyAddress = String(opportunity.raw?.property_address || "").trim();
+          const propertyCity = String(opportunity.raw?.property_city || "").trim();
+          const propertyState = String(opportunity.raw?.property_state || "").trim();
+          const propertyPostalCode = String(opportunity.raw?.property_postal_code || "").trim();
+          if (!propertyAddress || !propertyCity || !propertyState) return opportunity;
+
+          const enrichment = await enrichOpportunityLive({
+            address: propertyAddress,
+            city: propertyCity,
+            state: propertyState,
+            postalCode: propertyPostalCode,
+            serviceType: String(opportunity.raw?.service_type || displayCampaignService(opportunity.category, campaignMode))
+          }).catch(() => null);
+
+          if (!enrichment) return opportunity;
+
+          return {
+            ...opportunity,
+            raw: {
+              ...opportunity.raw,
+              enrichment
+            }
+          };
+        })
+      );
+
       return {
         mode,
         weatherRisk: weatherRisk(forecast),
-        opportunities: merged,
+        opportunities: enriched,
         locationResolved: resolved
       };
     }

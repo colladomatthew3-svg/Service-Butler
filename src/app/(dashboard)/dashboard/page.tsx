@@ -1,17 +1,9 @@
 import Link from "next/link";
 import {
-  CalendarCheck,
-  Gauge,
-  PhoneCall,
-  MessageSquare,
-  ClipboardCheck,
   ChevronRight,
-  DollarSign,
-  KanbanSquare,
   TriangleAlert
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatTile } from "@/components/ui/stat-tile";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +12,6 @@ import { WeatherTicker } from "@/components/dashboard/weather-ticker";
 import { getForecastByLatLng } from "@/lib/services/weather";
 import { getDemoDashboardSnapshot, getDemoWeatherSettings } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
-
-const pipelineColumns = ["NEW", "CONTACTED", "SCHEDULED", "IN_PROGRESS", "COMPLETED", "WON", "LOST"] as const;
 
 type DashboardLeadRow = {
   id: string;
@@ -59,11 +49,21 @@ type DashboardOpportunityRow = {
   created_at: string;
 };
 
+type DashboardOutboundRow = {
+  id: string;
+  name?: string | null;
+  list_type?: string | null;
+  export_status?: string | null;
+};
+
 export default async function DashboardOverviewPage() {
   const demoMode = isDemoMode();
   let leadRows: DashboardLeadRow[] = [];
   let jobRows: DashboardJobRow[] = [];
   let opportunities: DashboardOpportunityRow[] = [];
+  let prospects: Array<{ id: string }> = [];
+  let referralPartners: Array<{ id: string }> = [];
+  let outboundLists: DashboardOutboundRow[] = [];
   let enrichedLeads: Array<DashboardLeadRow & { intent: number }> = [];
   let settings:
     | {
@@ -82,6 +82,9 @@ export default async function DashboardOverviewPage() {
     leadRows = snapshot.leads;
     jobRows = snapshot.jobs;
     opportunities = snapshot.opportunities;
+    prospects = snapshot.prospects;
+    referralPartners = snapshot.referralPartners;
+    outboundLists = snapshot.outboundLists;
     enrichedLeads = snapshot.leads.map((lead) => ({
       ...lead,
       intent: Number(lead.intentScore || 0)
@@ -96,7 +99,8 @@ export default async function DashboardOverviewPage() {
   } else {
     const { accountId, supabase } = await getCurrentUserContext();
 
-    const [{ data: leads }, { data: loadedSettings }, { data: jobs }] = await Promise.all([
+    const [{ data: leads }, { data: loadedSettings }, { data: jobs }, { data: loadedProspects }, { data: loadedPartners }, { data: loadedLists }] =
+      await Promise.all([
       supabase
         .from("leads")
         .select("id,name,service_type,city,state,status,requested_timeframe,created_at,scheduled_for")
@@ -112,6 +116,10 @@ export default async function DashboardOverviewPage() {
         .select("id,pipeline_status,scheduled_for,estimated_value,service_type,customer_name,city,state,intent_score")
         .eq("account_id", accountId)
         .order("scheduled_for", { ascending: true, nullsFirst: false })
+        ,
+      supabase.from("prospects").select("id").eq("account_id", accountId).limit(300),
+      supabase.from("referral_partners").select("id").eq("account_id", accountId).limit(300),
+      supabase.from("outbound_lists").select("id,name,list_type,export_status").eq("account_id", accountId).order("created_at", { ascending: false }).limit(12)
     ]);
 
     const { data: loadedOpportunities } = await supabase
@@ -124,6 +132,9 @@ export default async function DashboardOverviewPage() {
     leadRows = leads || [];
     jobRows = jobs || [];
     opportunities = loadedOpportunities || [];
+    prospects = loadedProspects || [];
+    referralPartners = loadedPartners || [];
+    outboundLists = loadedLists || [];
     settings = loadedSettings;
 
     const leadIds = leadRows.map((l) => String(l.id));
@@ -150,7 +161,6 @@ export default async function DashboardOverviewPage() {
   const nextWeek = new Date();
   nextWeek.setDate(nextWeek.getDate() + 7);
 
-  const newToday = enrichedLeads.filter((l) => new Date(l.created_at as string) >= startOfDay).length;
   const highIntent = enrichedLeads.filter((l) => l.intent >= 75 && l.status !== "won" && l.status !== "lost").length;
   const scheduledToday = jobRows.filter((j) => j.scheduled_for && new Date(j.scheduled_for as string) >= startOfDay).length;
   const jobsNextSeven = jobRows.filter(
@@ -160,10 +170,6 @@ export default async function DashboardOverviewPage() {
   const weeklyRevenue = jobRows
     .filter((j) => j.scheduled_for && new Date(j.scheduled_for as string) >= new Date() && new Date(j.scheduled_for as string) <= nextWeek)
     .reduce((sum, j) => sum + Number(j.estimated_value || 0), 0);
-
-  const won = jobRows.filter((j) => j.pipeline_status === "WON").length;
-  const lost = jobRows.filter((j) => j.pipeline_status === "LOST").length;
-  const winRate = won + lost > 0 ? Math.round((won / (won + lost)) * 100) : 0;
 
   const nextUp = jobRows
     .filter((j) => j.scheduled_for && new Date(j.scheduled_for as string) >= new Date())
@@ -193,27 +199,8 @@ export default async function DashboardOverviewPage() {
     }
   }
 
-  const pipelineCounts = pipelineColumns.reduce<Record<string, number>>((acc, col) => {
-    acc[col] = jobRows.filter((job) => job.pipeline_status === col).length;
-    return acc;
-  }, {});
-
-  const zipDemand = (opportunities || []).reduce<Record<string, { count: number; avgIntent: number }>>((acc, row) => {
-    const match = String(row.location_text || "").match(/\b\d{5}\b/);
-    const zip = match?.[0] || "Unknown";
-    if (!acc[zip]) acc[zip] = { count: 0, avgIntent: 0 };
-    acc[zip].count += 1;
-    acc[zip].avgIntent += Number(row.intent_score || 0);
-    return acc;
-  }, {});
-  const heatRows = Object.entries(zipDemand)
-    .map(([zip, value]) => ({
-      zip,
-      count: value.count,
-      avgIntent: Math.round(value.avgIntent / Math.max(1, value.count))
-    }))
-    .sort((a, b) => b.count - a.count || b.avgIntent - a.avgIntent)
-    .slice(0, 6);
+  const openJobs = jobRows.filter((j) => !["WON", "LOST", "COMPLETED"].includes(String(j.pipeline_status))).length;
+  const syncedLists = outboundLists.filter((item) => String(item.export_status) === "synced").length;
 
   return (
     <div className="space-y-8">
@@ -242,79 +229,54 @@ export default async function DashboardOverviewPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_400px] lg:items-start">
         <PageHeader
           title="Dispatch Dashboard"
-          subtitle="Where are the jobs, what to do next, and who to contact first."
-          actions={<Badge variant="brand">Live ops view</Badge>}
+          subtitle="See the jobs, know the pressure, and move the next call forward."
+          actions={<Badge variant="brand">Scanner first</Badge>}
         />
         <div className="lg:pt-1">
           <WeatherTicker lat={lat} lng={lng} compact locationLabel={weatherLabel} />
         </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Open Jobs" value={jobRows.filter((j) => !["WON", "LOST", "COMPLETED"].includes(String(j.pipeline_status))).length} icon={<KanbanSquare className="h-5 w-5" />} tone="brand" />
-        <StatTile label="Scheduled Today" value={scheduledToday} icon={<CalendarCheck className="h-5 w-5" />} tone="success" />
-        <StatTile label="Revenue This Week" value={`$${Math.round(weeklyRevenue).toLocaleString()}`} icon={<DollarSign className="h-5 w-5" />} tone="warning" />
-        <StatTile label="Win Rate" value={`${winRate}%`} icon={<Gauge className="h-5 w-5" />} />
-      </section>
-
-      <Card>
-        <CardHeader>
-          <h2 className="dashboard-section-title text-semantic-text">Quick Actions</h2>
-        </CardHeader>
-        <CardBody className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <Link href="/dashboard/scanner">
-            <Button size="lg" fullWidth>Run Opportunity Scan</Button>
-          </Link>
-          <Link href="/dashboard/leads">
-            <Button size="lg" variant="secondary" fullWidth>Call New Leads</Button>
-          </Link>
-          <Link href="/dashboard/pipeline">
-            <Button size="lg" variant="secondary" fullWidth>Assign Follow-up</Button>
-          </Link>
-          <Link href="/dashboard/schedule">
-            <Button size="lg" variant="secondary" fullWidth>Schedule Inspection</Button>
-          </Link>
-        </CardBody>
-      </Card>
-
       <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         <Card>
           <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">Pipeline Snapshot</h2>
+            <h2 className="dashboard-section-title text-semantic-text">Today At A Glance</h2>
           </CardHeader>
-          <CardBody>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {pipelineColumns.map((col) => (
-                <Link key={col} href="/dashboard/pipeline" className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3 transition hover:border-brand-300">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-semantic-muted">{col === "IN_PROGRESS" ? "In Progress" : col.toLowerCase()}</p>
-                  <p className="mt-1 text-xl font-semibold text-semantic-text">{pipelineCounts[col]}</p>
-                </Link>
-              ))}
-            </div>
-            <div className="mt-4">
-              <Link href="/dashboard/pipeline">
-                <Button variant="secondary">Open full pipeline</Button>
-              </Link>
-            </div>
+          <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SnapshotStat label="Open jobs" value={String(openJobs)} helper="Jobs still in play" />
+            <SnapshotStat label="Scheduled today" value={String(scheduledToday)} helper="Visits on the board" />
+            <SnapshotStat label="High intent" value={String(highIntent)} helper="Leads to call first" />
+            <SnapshotStat label="Week revenue" value={`$${Math.round(weeklyRevenue).toLocaleString()}`} helper="Booked this week" />
+            <SnapshotStat label="Next 7 days" value={String(jobsNextSeven)} helper="Jobs scheduled ahead" />
+            <SnapshotStat label="Prospects" value={String(prospects.length)} helper="Outbound-ready records" />
+            <SnapshotStat label="Partners" value={String(referralPartners.length)} helper="Referral relationships" />
+            <SnapshotStat label="Lists" value={String(outboundLists.length)} helper="Target lists built" />
+            <SnapshotStat label="Smartlead synced" value={String(syncedLists)} helper="Lists pushed out" />
           </CardBody>
         </Card>
 
         <Card className={weatherHighRisk ? "border-warning-500/30" : ""}>
           <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">Weather Impact</h2>
+            <h2 className="dashboard-section-title text-semantic-text">What To Do Next</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-semantic-text">
               <TriangleAlert className={`h-4 w-4 ${weatherHighRisk ? "text-warning-500" : "text-brand-600"}`} />
-              {weatherHighRisk ? "High weather pressure" : "Normal pressure"}
+              {weatherHighRisk ? "Weather pressure is building" : "Normal operating window"}
             </p>
             <p className="text-sm text-semantic-muted">{weatherActionText}</p>
             <div className="flex flex-wrap gap-2">
               <Link href={`/dashboard/scanner${weatherLabel ? `?location=${encodeURIComponent(weatherLabel)}` : ""}`}>
-                <Button size="sm">Generate Leads</Button>
+                <Button size="sm">Run scanner now</Button>
               </Link>
-              <Link href="/campaigns">
-                <Button size="sm" variant="secondary">Storm Response Campaign</Button>
+              <Link href="/dashboard/leads">
+                <Button size="sm" variant="secondary">Work new leads</Button>
+              </Link>
+              <Link href="/dashboard/schedule">
+                <Button size="sm" variant="secondary">Open schedule</Button>
+              </Link>
+              <Link href="/dashboard/outbound">
+                <Button size="sm" variant="secondary">Open outbound</Button>
               </Link>
             </div>
           </CardBody>
@@ -357,61 +319,6 @@ export default async function DashboardOverviewPage() {
             )}
           </CardBody>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">Demand Heat Map</h2>
-          </CardHeader>
-          <CardBody className="space-y-3">
-            {heatRows.map((row) => (
-              <div key={row.zip} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-semibold text-semantic-text">ZIP {row.zip}</p>
-                  <span className="text-sm font-semibold text-semantic-text">{row.count} signals</span>
-                </div>
-                <div className="mt-2 h-2 rounded-full bg-semantic-border">
-                  <div
-                    className="h-2 rounded-full bg-semantic-brand"
-                    style={{ width: `${Math.max(12, Math.min(100, row.avgIntent))}%` }}
-                  />
-                </div>
-                <p className="mt-1 text-xs text-semantic-muted">Avg intent {row.avgIntent}</p>
-              </div>
-            ))}
-            {heatRows.length === 0 && (
-              <p className="text-sm text-semantic-muted">Heat map will populate after opportunities are captured.</p>
-            )}
-          </CardBody>
-        </Card>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-[1.05fr_1fr]">
-        <Card>
-          <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">Next Actions</h2>
-          </CardHeader>
-          <CardBody className="grid gap-3 sm:grid-cols-2">
-            <Button size="lg" className="justify-start">
-              <PhoneCall className="h-5 w-5" />
-              Return missed calls
-            </Button>
-            <Button size="lg" variant="secondary" className="justify-start">
-              <MessageSquare className="h-5 w-5" />
-              Send follow-ups
-            </Button>
-            <Link href="/dashboard/schedule">
-              <Button size="lg" variant="secondary" className="w-full justify-start">
-                <CalendarCheck className="h-5 w-5" />
-                Confirm tomorrow jobs
-              </Button>
-            </Link>
-            <Button size="lg" variant="secondary" className="justify-start">
-              <ClipboardCheck className="h-5 w-5" />
-              Request reviews
-            </Button>
-          </CardBody>
-        </Card>
-
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -452,27 +359,6 @@ export default async function DashboardOverviewPage() {
           </CardBody>
         </Card>
       </section>
-
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardBody>
-            <p className="text-xs uppercase tracking-wide text-semantic-muted">New leads today</p>
-            <p className="mt-1 text-2xl font-semibold text-semantic-text">{newToday}</p>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <p className="text-xs uppercase tracking-wide text-semantic-muted">High intent leads</p>
-            <p className="mt-1 text-2xl font-semibold text-semantic-text">{highIntent}</p>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody>
-            <p className="text-xs uppercase tracking-wide text-semantic-muted">Jobs next 7 days</p>
-            <p className="mt-1 text-2xl font-semibold text-semantic-text">{jobsNextSeven}</p>
-          </CardBody>
-        </Card>
-      </section>
     </div>
   );
 }
@@ -485,4 +371,14 @@ function formatScheduled(date: string) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function SnapshotStat({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return (
+    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-semantic-text">{value}</p>
+      <p className="mt-1 text-sm text-semantic-muted">{helper}</p>
+    </div>
+  );
 }

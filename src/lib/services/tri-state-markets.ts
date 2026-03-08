@@ -6,6 +6,7 @@ export type TriStateMarket = {
   postalCode: string;
   county: string;
   neighborhood: string;
+  floodProfile: string;
   lat: number;
   lon: number;
   aliases: string[];
@@ -20,6 +21,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11717",
     county: "Suffolk County",
     neighborhood: "North Brentwood",
+    floodProfile: "Low-lying inland drainage",
     lat: 40.7812,
     lon: -73.2462,
     aliases: ["brentwood", "suffolk", "western suffolk", "north brentwood", "11717"]
@@ -32,6 +34,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11706",
     county: "Suffolk County",
     neighborhood: "Bay Shore Marina District",
+    floodProfile: "South shore coastal runoff",
     lat: 40.7251,
     lon: -73.2454,
     aliases: ["bay shore", "suffolk", "south shore", "11706"]
@@ -44,6 +47,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11772",
     county: "Suffolk County",
     neighborhood: "Patchogue Village",
+    floodProfile: "Coastal and tidal drainage",
     lat: 40.7657,
     lon: -73.0151,
     aliases: ["patchogue", "patchogue village", "suffolk", "11772"]
@@ -56,6 +60,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11788",
     county: "Suffolk County",
     neighborhood: "Hauppauge Industrial Corridor",
+    floodProfile: "Industrial lot drainage",
     lat: 40.8257,
     lon: -73.2026,
     aliases: ["hauppauge", "smithtown", "suffolk", "11788"]
@@ -68,6 +73,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11550",
     county: "Nassau County",
     neighborhood: "Central Hempstead",
+    floodProfile: "Urban runoff and basement risk",
     lat: 40.7062,
     lon: -73.6187,
     aliases: ["hempstead", "nassau", "central nassau", "11550"]
@@ -80,6 +86,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11520",
     county: "Nassau County",
     neighborhood: "Nautical Mile",
+    floodProfile: "Coastal surge and marina flooding",
     lat: 40.6576,
     lon: -73.5832,
     aliases: ["freeport", "nassau", "south shore", "11520"]
@@ -92,6 +99,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11561",
     county: "Nassau County",
     neighborhood: "West End",
+    floodProfile: "Barrier island flood exposure",
     lat: 40.5884,
     lon: -73.6579,
     aliases: ["long beach", "nassau", "barrier island", "11561"]
@@ -104,6 +112,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11354",
     county: "Queens County",
     neighborhood: "Downtown Flushing",
+    floodProfile: "Urban flash flooding",
     lat: 40.759,
     lon: -73.8303,
     aliases: ["flushing", "queens", "11354", "northeast queens"]
@@ -116,6 +125,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11102",
     county: "Queens County",
     neighborhood: "Ditmars",
+    floodProfile: "Urban runoff near the waterfront",
     lat: 40.772,
     lon: -73.9301,
     aliases: ["astoria", "queens", "11102", "ditmars"]
@@ -128,6 +138,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "11201",
     county: "Kings County",
     neighborhood: "Brooklyn Heights",
+    floodProfile: "Dense urban drainage pressure",
     lat: 40.6959,
     lon: -73.9956,
     aliases: ["brooklyn", "kings", "11201", "brooklyn heights", "downtown brooklyn"]
@@ -140,6 +151,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "10301",
     county: "Richmond County",
     neighborhood: "St. George",
+    floodProfile: "Coastal and hillside runoff",
     lat: 40.6443,
     lon: -74.0775,
     aliases: ["staten island", "richmond", "10301", "st. george"]
@@ -152,6 +164,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "10701",
     county: "Westchester County",
     neighborhood: "Downtown Yonkers",
+    floodProfile: "Hudson-side runoff corridors",
     lat: 40.9312,
     lon: -73.8988,
     aliases: ["yonkers", "westchester", "10701", "lower hudson"]
@@ -164,6 +177,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "10801",
     county: "Westchester County",
     neighborhood: "Downtown New Rochelle",
+    floodProfile: "Sound-shore flood exposure",
     lat: 40.9115,
     lon: -73.7824,
     aliases: ["new rochelle", "westchester", "10801", "sound shore"]
@@ -176,6 +190,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "07302",
     county: "Hudson County",
     neighborhood: "Paulus Hook",
+    floodProfile: "Waterfront and combined-sewer overflow risk",
     lat: 40.7178,
     lon: -74.0431,
     aliases: ["jersey city", "hudson", "07302", "paulus hook"]
@@ -188,6 +203,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "07102",
     county: "Essex County",
     neighborhood: "Downtown Newark",
+    floodProfile: "Urban runoff and basement flooding",
     lat: 40.7357,
     lon: -74.1724,
     aliases: ["newark", "essex", "07102", "downtown newark"]
@@ -200,6 +216,7 @@ const TRI_STATE_MARKETS: TriStateMarket[] = [
     postalCode: "06902",
     county: "Fairfield County",
     neighborhood: "Harbor Point",
+    floodProfile: "Harbor and coastal inundation",
     lat: 41.047,
     lon: -73.542,
     aliases: ["stamford", "fairfield", "06902", "harbor point", "southwestern connecticut"]
@@ -269,4 +286,14 @@ export function getTriStateMarketsForSignal({
 
 export function distanceToMarketMiles(lat: number, lon: number, market: TriStateMarket) {
   return haversineMiles(lat, lon, market.lat, market.lon);
+}
+
+export function floodProneTriStateMarkets(lat: number, lon: number, limit = 3) {
+  return nearestTriStateMarkets(lat, lon, Math.max(limit, 6))
+    .sort((a, b) => {
+      const coastalBoost = (market: TriStateMarket) =>
+        /coastal|flood|surge|waterfront|harbor|tidal|runoff/i.test(market.floodProfile) ? 1 : 0;
+      return coastalBoost(b) - coastalBoost(a) || haversineMiles(lat, lon, a.lat, a.lon) - haversineMiles(lat, lon, b.lat, b.lon);
+    })
+    .slice(0, limit);
 }

@@ -1,24 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Play,
-  Square,
-  Radar,
-  MapPin,
-  Eye,
-  Download,
-  Route,
-  Plus,
-  BriefcaseBusiness,
-  Loader2,
-  Wrench,
-  X,
-  Settings2,
-  TestTube2
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Play, Radar, MapPin, Eye, Plus, BriefcaseBusiness, Loader2, Wrench, X, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +17,7 @@ import type { EnrichmentRecord } from "@/lib/services/enrichment";
 
 type Mode = "demo" | "live";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
-type Tab = "feed" | "rules" | "harness";
+type Tab = "feed" | "rules";
 type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
 type Trigger = "storm" | "heavy-rain" | "freeze" | "high-wind";
 
@@ -127,7 +111,7 @@ const marketPresets = [
 ] as const;
 
 export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
-  const [mode, setMode] = useState<Mode>(isDemoMode() ? "demo" : "live");
+  const [mode] = useState<Mode>(isDemoMode() ? "demo" : "live");
   const [tab, setTab] = useState<Tab>(initialTab);
   const [location, setLocation] = useState("Hauppauge, NY 11788");
   const [campaignMode, setCampaignMode] = useState<CampaignMode>("Storm Response");
@@ -155,13 +139,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     enabled: true
   });
 
-  const [harnessDuration, setHarnessDuration] = useState("30");
-  const [harnessInterval, setHarnessInterval] = useState("20");
-  const [harnessRunning, setHarnessRunning] = useState(false);
-  const [captured, setCaptured] = useState<ScannerEvent[]>([]);
-
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startRef = useRef<number>(0);
+  const [, setCaptured] = useState<ScannerEvent[]>([]);
 
   const { showToast } = useToast();
 
@@ -175,40 +153,9 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     return rules.find((rule) => rule.category === pick && rule.enabled) || null;
   }, [rules, selectedCategories]);
 
-  const intakeSummary = useMemo(() => {
-    const summary = sortedEvents.reduce(
-      (acc, event) => {
-        acc.total += 1;
-        acc.bySource[event.source] = (acc.bySource[event.source] || 0) + 1;
-        if (event.intent_score >= 78) acc.highUrgency += 1;
-        if (String(event.raw?.weather_signal || "").trim()) acc.weatherDriven += 1;
-        return acc;
-      },
-      {
-        total: 0,
-        highUrgency: 0,
-        weatherDriven: 0,
-        bySource: {} as Record<string, number>
-      }
-    );
-
-    const topSource = Object.entries(summary.bySource).sort((a, b) => b[1] - a[1])[0]?.[0] || "demo";
-
-    return {
-      ...summary,
-      topSource
-    };
-  }, [sortedEvents]);
-
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
 
   const loadEvents = useCallback(async () => {
     const res = await fetch("/api/scanner/events?limit=100");
@@ -346,35 +293,6 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     }
   }
 
-  function startHarness() {
-    if (harnessRunning) return;
-    const durationMs = Math.max(1, Number(harnessDuration) || 30) * 60_000;
-    const intervalMs = Math.max(10, Number(harnessInterval) || 20) * 1000;
-
-    setHarnessRunning(true);
-    startRef.current = Date.now();
-    setCaptured([]);
-
-    runScan(false);
-    timerRef.current = setInterval(async () => {
-      const elapsed = Date.now() - startRef.current;
-      if (elapsed >= durationMs) {
-        stopHarness();
-        showToast("Live test finished");
-        return;
-      }
-      await runScan(false);
-    }, intervalMs);
-  }
-
-  function stopHarness() {
-    setHarnessRunning(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }
-
   async function dispatchEvent(event: ScannerEvent, createMode?: "lead" | "job", assignee?: string) {
     setDispatchingId(event.id);
     const res = await fetch(`/api/scanner/events/${event.id}/dispatch`, {
@@ -481,77 +399,16 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     });
   }
 
-  function exportCsv() {
-    const source = captured.length > 0 ? captured : sortedEvents;
-    if (source.length === 0) {
-      showToast("No opportunities to export");
-      return;
-    }
-
-    const columns = [
-      "id",
-      "source",
-      "category",
-      "title",
-      "description",
-      "location",
-      "intent_score",
-      "confidence",
-      "tags",
-      "created_at"
-    ];
-
-    const rows = source.map((event) => [
-      event.id,
-      event.source,
-      event.category,
-      event.title,
-      event.description,
-      event.location_text,
-      String(event.intent_score),
-      String(event.confidence),
-      event.tags.join("|"),
-      event.created_at
-    ]);
-
-    const csv = [columns, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell || "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `scanner-opportunities-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   const tabs: Array<{ id: Tab; label: string; icon: typeof Radar }> = [
-    { id: "feed", label: "Scanner Feed", icon: Radar },
-    { id: "rules", label: "Routing Rules", icon: Route },
-    { id: "harness", label: "Live Test Harness", icon: TestTube2 }
+    { id: "feed", label: "Leads", icon: Radar },
+    { id: "rules", label: "Routing", icon: Settings2 }
   ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-      title="Opportunity Scanner"
-      subtitle="Find weather-driven jobs, explain why they matter, and route the best ones into leads or scheduled work."
-        actions={
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/scanner/harness">
-              <Button variant="secondary" size="sm">
-                <TestTube2 className="h-4 w-4" />
-                Open Harness
-              </Button>
-            </Link>
-            <Button variant="secondary" size="sm" onClick={exportCsv}>
-              <Download className="h-4 w-4" />
-              Export captured opportunities
-            </Button>
-          </div>
-        }
+        title="Opportunity Scanner"
+        subtitle="Pick your market, scan for jobs, and work the best calls first."
       />
 
       <Card>
@@ -562,27 +419,19 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </div>
           )}
 
-          <div className="grid gap-3 lg:grid-cols-[140px_1fr_180px_120px_120px]">
+          <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr_120px_160px]">
             <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Mode</p>
-              <Select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
-                <option value="demo">DEMO</option>
-                <option value="live">LIVE</option>
-              </Select>
-            </div>
-
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Service Area</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Market</p>
               <Input
                 data-testid="scanner-location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="ZIP or city (11788, 11705, 10019)"
+                placeholder="City, state, or ZIP"
               />
             </div>
 
             <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Campaign</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Job Type</p>
               <Select
                 value={campaignMode}
                 onChange={(e) => {
@@ -612,15 +461,6 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               </Select>
             </div>
 
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Limit</p>
-              <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
-                {["8", "12", "20", "30", "50"].map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </Select>
-            </div>
-
             <div className="self-end">
               <Button data-testid="scanner-run" onClick={() => runScan(true)} disabled={loading} fullWidth>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
@@ -643,135 +483,100 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
           </div>
 
           <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Campaign focus</p>
-            <p className="mt-2 text-sm font-medium text-semantic-text">
+            <p className="text-sm font-semibold text-semantic-text">
               {campaignOptions.find((option) => option.value === campaignMode)?.helper}
             </p>
-            <p className="mt-1 text-sm text-semantic-muted">
-              Saved weather service area fills the scanner by default, so your demo always starts from the contractor’s real market.
-            </p>
+            <p className="mt-1 text-sm text-semantic-muted">We use your saved service area first so the jobs stay close to where your crews actually work.</p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Services</p>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((category) => {
-                  const active = selectedCategories.includes(category);
-                  return (
-                    <button
-                      key={category}
-                      onClick={() =>
-                        setSelectedCategories((prev) =>
-                          prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
-                        )
-                      }
-                      className={cn(
-                        "min-h-11 rounded-full px-4 text-sm font-semibold",
-                        active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
-                      )}
-                    >
-                      {categoryLabel[category]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <details className="rounded-xl border border-semantic-border bg-semantic-surface p-4 md:min-w-[280px]">
-              <summary className="cursor-pointer text-sm font-semibold text-semantic-text">Advanced map pin</summary>
+          <details className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-semantic-text">More scan options</summary>
               <p className="mt-2 text-sm text-semantic-muted">
-                Optional only. Use coordinates if you need to target a specific metro or coastal service zone.
+                Use these only if you need to fine-tune the scan.
               </p>
-              <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_120px]">
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Signals</span>
+                  <div className="flex flex-wrap gap-2">
+                    {triggerOptions.map((trigger) => {
+                      const active = selectedTriggers.includes(trigger.id);
+                      return (
+                        <button
+                          key={trigger.id}
+                          type="button"
+                          data-testid={`scanner-trigger-${trigger.id}`}
+                          onClick={() =>
+                            setSelectedTriggers((prev) =>
+                              prev.includes(trigger.id) ? prev.filter((item) => item !== trigger.id) : [...prev, trigger.id]
+                            )
+                          }
+                          className={cn(
+                            "min-h-10 rounded-full px-4 text-sm font-semibold",
+                            active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
+                          )}
+                        >
+                          {trigger.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat (optional)</p>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat</p>
                   <Input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="40.7812" />
                 </div>
                 <div>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lon (optional)</p>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lon</p>
                   <Input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="-73.2462" />
                 </div>
               </div>
+                <label>
+                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Results</span>
+                  <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
+                    {["8", "12", "20", "30", "50"].map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </Select>
+                </label>
+              </div>
             </details>
-          </div>
-
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Triggers</p>
-            <div className="flex flex-wrap gap-2">
-              {triggerOptions.map((trigger) => {
-                const active = selectedTriggers.includes(trigger.id);
-                return (
-                  <button
-                    key={trigger.id}
-                    type="button"
-                    data-testid={`scanner-trigger-${trigger.id}`}
-                    onClick={() =>
-                      setSelectedTriggers((prev) =>
-                        prev.includes(trigger.id) ? prev.filter((item) => item !== trigger.id) : [...prev, trigger.id]
-                      )
-                    }
-                    className={cn(
-                      "min-h-11 rounded-full px-4 text-sm font-semibold",
-                      active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
-                    )}
-                  >
-                    {trigger.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </CardBody>
       </Card>
 
-      <div className="flex flex-wrap gap-2">
-        {tabs.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setTab(item.id)}
-              className={cn(
-                "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold",
-                tab === item.id ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
+      {tabs.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setTab(item.id)}
+                className={cn(
+                  "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold",
+                  tab === item.id ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {tab === "feed" && (
         <section className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-4">
-            <SummaryStat
-              label="Signals captured"
-              value={String(intakeSummary.total)}
-              helper="Scanner, weather, and demo opportunity intake."
-            />
-            <SummaryStat
-              label="High urgency"
-              value={String(intakeSummary.highUrgency)}
-              helper="Opportunities that should be called or booked first."
-            />
-            <SummaryStat
-              label="Weather driven"
-              value={String(intakeSummary.weatherDriven)}
-              helper="Records with an active weather explanation."
-            />
-            <SummaryStat
-              label="Top source"
-              value={sourceLabel(intakeSummary.topSource)}
-              helper="Most active intake channel in the current feed."
-            />
-          </div>
+          {!loading && sortedEvents.length > 0 && (
+            <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-4 py-3 text-sm text-semantic-text">
+              <span className="font-semibold">{sortedEvents.length} jobs found.</span> Start with the closest high-urgency calls and book the inspection.
+            </div>
+          )}
 
           {loading && (
             <Card>
               <CardBody className="space-y-3">
-                <p className="text-sm font-semibold text-semantic-text">Scanning neighborhood signals and contractor boards...</p>
+                <p className="text-sm font-semibold text-semantic-text">Scanning live signals and local incident pressure...</p>
                 <Skeleton className="h-16 w-full" />
                 <Skeleton className="h-24 w-full" />
                 <Skeleton className="h-24 w-full" />
@@ -802,16 +607,19 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
             return (
               <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
-                <CardBody className="grid gap-5 xl:grid-cols-[280px_1fr_220px] xl:items-start">
+                <CardBody className="grid gap-5 xl:grid-cols-[240px_1fr_210px] xl:items-start">
                   <OpportunityPropertyVisual event={event} address={displayAddress} addressLine={addressParts.streetLine} enrichment={enrichment} />
 
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="default">{reasonDetails.serviceType}</Badge>
-                        <Badge variant={event.intent_score >= 78 ? "warning" : event.intent_score >= 62 ? "brand" : "default"}>
-                          {urgencyLabel(event.intent_score)}
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={sourceBadgeVariant(event)}>
+                          {reasonDetails.signalSource}
                         </Badge>
+                        <Badge variant={addressQualityVariant(event)}>
+                          {addressQualityLabel(event)}
+                        </Badge>
+                        <Badge variant="default">{freshnessLabel(event.created_at)}</Badge>
                       </div>
                       <p className="text-xl font-semibold text-semantic-text">{event.title}</p>
                       <p className="inline-flex items-center gap-2 text-base font-medium text-semantic-text">
@@ -825,37 +633,19 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                         <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
                         <span>{reasonDetails.distance}</span>
                         <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
-                        <span>{reasonDetails.incidentType}</span>
+                        <span>{reasonDetails.signalSource}</span>
                       </div>
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                      <MetricStat label="Intent score" value={String(event.intent_score)} emphasize />
-                      <MetricStat label="Confidence score" value={String(event.confidence)} emphasize />
-                      <MetricStat label="Service category" value={reasonDetails.serviceType} />
+                      <MetricStat label="Job Type" value={reasonDetails.serviceType} />
                       <MetricStat label="Urgency" value={reasonDetails.urgencyWindow} />
-                    </div>
-
-                    {enrichment && (
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        <MetricStat label="Lead source" value={reasonDetails.signalSource} />
-                        <MetricStat label="Neighborhood" value={enrichment.neighborhood} />
-                        <MetricStat label="Property value" value={enrichment.propertyValueEstimate || "Unavailable"} />
-                        <MetricStat
-                          label="Owner contact"
-                          value={enrichment.ownerContact ? `${enrichment.ownerContact.name} · ${enrichment.ownerContact.confidenceLabel}` : "Unavailable"}
-                        />
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="default">{reasonDetails.signalSource}</Badge>
-                      <Badge variant="default">{priorityFromScore(event.intent_score)}</Badge>
-                      <Badge variant="default">Detected {relativeAge(event.created_at)}</Badge>
+                      <MetricStat label="Confidence" value={`${event.confidence}`} emphasize />
+                      <MetricStat label="Job score" value={`${event.intent_score}`} emphasize />
                     </div>
 
                     <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this opportunity exists</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this job is showing up</p>
                       <ul className="mt-3 grid gap-2 text-sm text-semantic-text">
                         {bullets.map((bullet, index) => (
                           <li key={`${event.id}-reason-${index}`} className="flex items-start gap-2">
@@ -866,21 +656,36 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       </ul>
                     </div>
 
-                    <div className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Suggested next action</p>
-                      <p className="mt-2 text-sm text-semantic-text">{nextAction}</p>
-                    </div>
+                    {enrichment && (
+                      <details className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
+                        <summary className="cursor-pointer text-sm font-semibold text-semantic-text">Property details</summary>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          <MetricStat label="Neighborhood" value={enrichment.neighborhood} />
+                          <MetricStat label="Lead source" value={reasonDetails.signalSource} />
+                          <MetricStat label="Property value" value={enrichment.propertyValueEstimate || "Unavailable"} />
+                          <MetricStat
+                            label={enrichment.simulated ? "Contact status" : "Owner contact"}
+                            value={
+                              enrichment.ownerContact
+                                ? `${enrichment.ownerContact.name} · ${enrichment.ownerContact.confidenceLabel}`
+                                : enrichment.simulated
+                                  ? "Demo only"
+                                  : "Not available"
+                            }
+                          />
+                        </div>
+                      </details>
+                    )}
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                    <div className="rounded-xl border border-brand-500/20 bg-brand-50 px-4 py-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Next action</p>
-                      <p className="mt-2 text-sm font-semibold text-semantic-text">Schedule inspection first, then claim the lead.</p>
-                    </div>
+                  <div className="grid gap-2">
                     <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
                       Schedule Inspection
                     </Button>
+                    <p className="rounded-xl border border-semantic-border bg-semantic-surface2 px-4 py-3 text-sm text-semantic-text">
+                      <span className="font-semibold">Next step:</span> {nextAction}
+                    </p>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                       Create Lead
@@ -895,12 +700,12 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       Assign Technician
                     </Button>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
-                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Route className="h-4 w-4" />}
+                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
                       {recommendedActionLabel(event.intent_score)}
                     </Button>
                     <Button size="lg" variant="ghost" onClick={() => setPreview(event)}>
                       <Eye className="h-4 w-4" />
-                      Preview
+                      View details
                     </Button>
                   </div>
                 </CardBody>
@@ -1049,63 +854,6 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         </section>
       )}
 
-      {tab === "harness" && (
-        <section className="space-y-4">
-          <Card>
-            <CardHeader>
-              <h2 className="dashboard-section-title text-semantic-text">Live Test Harness</h2>
-            </CardHeader>
-            <CardBody className="grid gap-3 md:grid-cols-[1fr_180px_180px_auto]">
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Service Area</p>
-                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="City, ST or ZIP" />
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Duration (minutes)</p>
-                <Input type="number" value={harnessDuration} onChange={(e) => setHarnessDuration(e.target.value)} />
-              </div>
-              <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Every (seconds)</p>
-                <Input type="number" value={harnessInterval} onChange={(e) => setHarnessInterval(e.target.value)} />
-              </div>
-              <div className="self-end">
-                {harnessRunning ? (
-                  <Button variant="danger" onClick={stopHarness} fullWidth>
-                    <Square className="h-4 w-4" />
-                    Stop
-                  </Button>
-                ) : (
-                  <Button onClick={startHarness} fullWidth>
-                    <Play className="h-4 w-4" />
-                    Start Live Test
-                  </Button>
-                )}
-              </div>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <h2 className="dashboard-section-title text-semantic-text">Captured Opportunities ({captured.length})</h2>
-            </CardHeader>
-            <CardBody className="space-y-3">
-              {captured.length === 0 && (
-                <p className="text-sm text-semantic-muted">Run the harness to append opportunities every interval and export to CSV.</p>
-              )}
-              {captured.slice(0, 40).map((event) => (
-                <article key={`${event.id}-${event.created_at}`} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-semantic-text">{event.title}</p>
-                    <Badge variant={event.intent_score >= 75 ? "warning" : "default"}>{event.intent_score}</Badge>
-                  </div>
-                  <p className="text-sm text-semantic-muted">{event.location_text}</p>
-                </article>
-              ))}
-            </CardBody>
-          </Card>
-        </section>
-      )}
-
       {preview && (
         <div className="fixed inset-0 z-[80] flex justify-end bg-neutral-900/45">
           <button className="h-full w-full" aria-label="Close preview" onClick={() => setPreview(null)} />
@@ -1182,6 +930,13 @@ function sourceLabel(source: string) {
   return "Referral Feed";
 }
 
+function sourceBadgeVariant(event: ScannerEvent): "brand" | "success" | "warning" | "default" {
+  if (event.source === "weather") return "brand";
+  if (event.source === "public_feed") return "success";
+  if (event.source === "demo") return "warning";
+  return "default";
+}
+
 function getOpportunityReasonDetails(event: ScannerEvent) {
   const incidentType = String(event.raw?.incident_type || event.raw?.event || "Incident signal");
   const weatherEvent = String(event.raw?.weather_signal || "Local weather pressure");
@@ -1230,16 +985,21 @@ function opportunityBullets(details: ReturnType<typeof getOpportunityReasonDetai
   ];
 }
 
-function SummaryStat({ label, value, helper }: { label: string; value: string; helper: string }) {
-  return (
-    <Card>
-      <CardBody className="space-y-1 py-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
-        <p className="text-2xl font-semibold text-semantic-text">{value}</p>
-        <p className="text-sm text-semantic-muted">{helper}</p>
-      </CardBody>
-    </Card>
-  );
+function addressQualityLabel(event: ScannerEvent) {
+  return String(event.raw?.address_quality || "").toLowerCase() === "exact" ? "Exact address" : "Dispatch area";
+}
+
+function addressQualityVariant(event: ScannerEvent): "success" | "warning" {
+  return String(event.raw?.address_quality || "").toLowerCase() === "exact" ? "success" : "warning";
+}
+
+function freshnessLabel(iso: string) {
+  const deltaMinutes = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (deltaMinutes < 60) return `Fresh ${deltaMinutes}m`;
+  const deltaHours = Math.round(deltaMinutes / 60);
+  if (deltaHours < 24) return `Fresh ${deltaHours}h`;
+  const deltaDays = Math.round(deltaHours / 24);
+  return `Fresh ${deltaDays}d`;
 }
 
 function MetricStat({ label, value, emphasize }: { label: string; value: string; emphasize?: boolean }) {
@@ -1277,13 +1037,24 @@ function OpportunityPropertyVisual({
       </div>
       <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))] p-4">
         <div className="relative h-40 overflow-hidden rounded-[1rem]">
-          <Image
-            src="/marketing/property-preview.svg"
-            alt="Property preview"
-            fill
-            className="object-cover"
-            sizes="(max-width: 1280px) 280px, 320px"
-          />
+          {enrichment?.propertyImageUrl ? (
+            <Image
+              src={enrichment.propertyImageUrl}
+              alt={enrichment.propertyImageSource || "Property aerial image"}
+              fill
+              className="object-cover"
+              sizes="(max-width: 1280px) 280px, 320px"
+              unoptimized
+            />
+          ) : (
+            <Image
+              src="/marketing/property-preview.svg"
+              alt="Property preview"
+              fill
+              className="object-cover"
+              sizes="(max-width: 1280px) 280px, 320px"
+            />
+          )}
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(22,29,26,0.04),rgba(22,29,26,0.28))]" />
           <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85">
             {enrichment?.propertyImageLabel || "Property image"}
@@ -1308,6 +1079,9 @@ function OpportunityPropertyVisual({
           <p>
             <span className="font-semibold text-white">Owner:</span> {enrichment.ownerContact?.name || "Unavailable"}
           </p>
+          <p>
+            <span className="font-semibold text-white">Image source:</span> {enrichment.propertyImageSource || "Placeholder"}
+          </p>
         </div>
       )}
     </div>
@@ -1329,18 +1103,6 @@ function splitDisplayAddress(address: string) {
   };
 }
 
-function urgencyLabel(intentScore: number) {
-  if (intentScore >= 85) return "Emergency response";
-  if (intentScore >= 72) return "Same-day follow-up";
-  return "Monitor and qualify";
-}
-
-function priorityFromScore(intentScore: number) {
-  if (intentScore >= 85) return "Call now";
-  if (intentScore >= 72) return "Follow up";
-  return "Schedule later";
-}
-
 function recommendedActionLabel(intentScore: number) {
   if (intentScore >= 82) return "Convert to Job";
   if (intentScore >= 68) return "Assign Follow-up";
@@ -1350,14 +1112,6 @@ function recommendedActionLabel(intentScore: number) {
 function suggestedAssigneeForEvent(event: ScannerEvent, rules: RoutingRule[]) {
   const rule = rules.find((item) => item.category === event.category && item.enabled);
   return rule?.default_assignee || (event.category === "demolition" ? "Mitigation Crew" : event.category === "restoration" ? "Storm Desk" : "Dispatch Queue");
-}
-
-function relativeAge(iso: string) {
-  const delta = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (delta < 60) return `${delta}s ago`;
-  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
-  if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
-  return `${Math.floor(delta / 86400)}d ago`;
 }
 
 function conversationStylePost(event: ScannerEvent) {

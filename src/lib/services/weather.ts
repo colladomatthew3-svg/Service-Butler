@@ -105,6 +105,19 @@ function dayLabel(iso: string) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 }
 
+function forecastStartIndex(hourlyTimes: string[], currentTime?: string) {
+  if (!currentTime) return 0;
+
+  const exactIndex = hourlyTimes.findIndex((time) => time === currentTime);
+  if (exactIndex >= 0) return exactIndex;
+
+  const currentMs = new Date(currentTime).getTime();
+  if (!Number.isFinite(currentMs)) return 0;
+
+  const nextIndex = hourlyTimes.findIndex((time) => new Date(time).getTime() >= currentMs);
+  return nextIndex >= 0 ? nextIndex : 0;
+}
+
 function deterministicUnit(seed: number) {
   const x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
@@ -173,6 +186,7 @@ export async function getForecastByLatLng(lat: number, lng: number): Promise<For
   url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max");
   url.searchParams.set("forecast_days", "6");
   url.searchParams.set("timezone", "auto");
+  url.searchParams.set("temperature_unit", "fahrenheit");
 
   const response = await fetch(url.toString(), { cache: "no-store" });
   if (!response.ok) throw new Error("Failed to fetch weather forecast");
@@ -184,12 +198,17 @@ export async function getForecastByLatLng(lat: number, lng: number): Promise<For
     temperature_2m: json.hourly.temperature_2m[0]
   };
 
-  const next6Hours = json.hourly.time.slice(0, 6).map((time, index) => ({
+  const hourlyStart = forecastStartIndex(json.hourly.time, current.time);
+
+  const next6Hours = json.hourly.time.slice(hourlyStart, hourlyStart + 6).map((time, offset) => {
+    const index = hourlyStart + offset;
+    return {
     time: hourLabel(time),
     temp: Math.round(json.hourly.temperature_2m[index]),
     precipChance: Math.round(json.hourly.precipitation_probability[index] ?? 0),
     condition: conditionLabel(json.hourly.weather_code[index])
-  }));
+    };
+  });
 
   const next5Days = json.daily.time.slice(0, 5).map((date, index) => ({
     date: dayLabel(date),

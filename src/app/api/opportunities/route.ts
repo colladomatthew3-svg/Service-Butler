@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from("opportunities")
-    .select("id,category,title,description,location_text,lat,lon,intent_score,confidence,tags,suggested_action,status,raw,created_at")
+    .select("id,category,title,description,location_text,city,state,zip,territory,lat,lon,intent_score,confidence,urgency_score,tags,suggested_action,recommended_action,status,raw,created_at")
     .eq("account_id", accountId)
     .order("created_at", { ascending: false })
     .limit(limit);

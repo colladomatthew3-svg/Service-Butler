@@ -2,6 +2,13 @@ import { cookies } from "next/headers";
 import type { EnrichmentRecord } from "@/lib/services/enrichment";
 import { generateSignals } from "@/lib/services/intent-engine";
 import { opportunityToLeadPayload, type ScannerOpportunity } from "@/lib/services/scanner";
+import {
+  buildCsv,
+  buildTerritory,
+  buildTriggeredListName,
+  deriveOpportunityTerritory,
+  getIncidentTriggeredSegments
+} from "@/lib/services/outbound";
 
 const DEMO_ACCOUNT_ID = "11111111-1111-1111-1111-111111111111";
 const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
@@ -89,6 +96,90 @@ type DemoOpportunity = {
   confidence: number;
   created_at: string;
   status: string;
+  raw?: Record<string, unknown>;
+};
+
+type DemoProspect = {
+  id: string;
+  company_name: string;
+  contact_name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  territory: string | null;
+  prospect_type: string;
+  property_type: string | null;
+  building_count: number | null;
+  priority_tier: string;
+  strategic_value: number;
+  near_active_incident: boolean;
+  last_outbound_at: string | null;
+  notes: string | null;
+  tags: string[];
+  source: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type DemoReferralPartner = {
+  id: string;
+  company_name: string;
+  contact_name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  territory: string | null;
+  partner_type: string;
+  priority_tier: string;
+  strategic_value: number;
+  near_active_incident: boolean;
+  last_outbound_at: string | null;
+  notes: string | null;
+  tags: string[];
+  source: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type DemoOutboundListMember = {
+  id: string;
+  outbound_list_id: string;
+  record_type: "prospect" | "referral_partner";
+  record_id: string;
+  created_at: string;
+};
+
+type DemoOutboundList = {
+  id: string;
+  name: string;
+  list_type: string;
+  segment_definition_json: Record<string, unknown>;
+  territory: string | null;
+  source_trigger: string | null;
+  campaign_name: string | null;
+  smartlead_campaign_id: string | null;
+  export_status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type DemoSmartleadSyncLog = {
+  id: string;
+  outbound_list_id: string | null;
+  smartlead_campaign_id: string | null;
+  action_type: string;
+  status: string;
+  request_payload_json: Record<string, unknown>;
+  response_payload_json: Record<string, unknown>;
+  created_at: string;
 };
 
 type DemoStore = {
@@ -97,6 +188,11 @@ type DemoStore = {
   opportunities: DemoOpportunity[];
   leads: DemoLead[];
   jobs: DemoJob[];
+  prospects: DemoProspect[];
+  referralPartners: DemoReferralPartner[];
+  outboundLists: DemoOutboundList[];
+  outboundListMembers: DemoOutboundListMember[];
+  smartleadSyncLogs: DemoSmartleadSyncLog[];
 };
 
 const DEFAULT_WEATHER: DemoWeatherSettings = {
@@ -228,13 +324,174 @@ function initialJobs(): DemoJob[] {
   ];
 }
 
+function initialProspects(): DemoProspect[] {
+  const createdAt = nowIso();
+  return [
+    {
+      id: "prospect-demo-1",
+      company_name: "Harbor Point Property Management",
+      contact_name: "Dana Reeves",
+      title: "Regional Property Manager",
+      email: "dana@harborpointpm.example",
+      phone: "+1 631-555-1101",
+      website: "https://harborpointpm.example",
+      city: "Hauppauge",
+      state: "NY",
+      zip: "11788",
+      territory: "Suffolk County, NY",
+      prospect_type: "property_manager",
+      property_type: "multifamily",
+      building_count: 18,
+      priority_tier: "tier_1",
+      strategic_value: 87,
+      near_active_incident: true,
+      last_outbound_at: null,
+      notes: "Manages multifamily and condo properties across central Suffolk.",
+      tags: ["multifamily", "storm-response"],
+      source: "seed",
+      created_at: createdAt,
+      updated_at: createdAt
+    },
+    {
+      id: "prospect-demo-2",
+      company_name: "North Shore Facilities Group",
+      contact_name: "Julian Marks",
+      title: "Facilities Director",
+      email: "julian@northshorefg.example",
+      phone: "+1 516-555-2230",
+      website: "https://northshorefg.example",
+      city: "Mineola",
+      state: "NY",
+      zip: "11501",
+      territory: "Nassau County, NY",
+      prospect_type: "facilities_manager",
+      property_type: "commercial",
+      building_count: 9,
+      priority_tier: "tier_1",
+      strategic_value: 82,
+      near_active_incident: true,
+      last_outbound_at: null,
+      notes: "Operates commercial sites that need emergency vendors on call.",
+      tags: ["commercial", "emergency"],
+      source: "seed",
+      created_at: createdAt,
+      updated_at: createdAt
+    },
+    {
+      id: "prospect-demo-3",
+      company_name: "Queens Warehouse Portfolio",
+      contact_name: "Mina Patel",
+      title: "Asset Manager",
+      email: "mina@queenswarehouse.example",
+      phone: "+1 718-555-0044",
+      website: "https://queenswarehouse.example",
+      city: "Long Island City",
+      state: "NY",
+      zip: "11101",
+      territory: "Queens, NY",
+      prospect_type: "commercial_owner",
+      property_type: "industrial",
+      building_count: 4,
+      priority_tier: "tier_2",
+      strategic_value: 74,
+      near_active_incident: false,
+      last_outbound_at: null,
+      notes: "Warehouse owner with regional vendor turnover.",
+      tags: ["industrial"],
+      source: "seed",
+      created_at: createdAt,
+      updated_at: createdAt
+    }
+  ];
+}
+
+function initialReferralPartners(): DemoReferralPartner[] {
+  const createdAt = nowIso();
+  return [
+    {
+      id: "partner-demo-1",
+      company_name: "Mason Public Adjusting",
+      contact_name: "Eric Mason",
+      title: "Principal Adjuster",
+      email: "eric@masonpa.example",
+      phone: "+1 631-555-4400",
+      website: "https://masonpa.example",
+      city: "Patchogue",
+      state: "NY",
+      zip: "11772",
+      territory: "Suffolk County, NY",
+      partner_type: "public_adjuster",
+      priority_tier: "tier_1",
+      strategic_value: 90,
+      near_active_incident: true,
+      last_outbound_at: null,
+      notes: "Good fit for water-loss and fire-loss referrals.",
+      tags: ["claims", "restoration"],
+      source: "seed",
+      created_at: createdAt,
+      updated_at: createdAt
+    },
+    {
+      id: "partner-demo-2",
+      company_name: "Boro Plumbing Response",
+      contact_name: "Kenny Torres",
+      title: "Owner",
+      email: "kenny@boroplumbing.example",
+      phone: "+1 718-555-8420",
+      website: "https://boroplumbing.example",
+      city: "Brooklyn",
+      state: "NY",
+      zip: "11211",
+      territory: "Brooklyn, NY",
+      partner_type: "plumber",
+      priority_tier: "tier_1",
+      strategic_value: 78,
+      near_active_incident: true,
+      last_outbound_at: null,
+      notes: "Emergency water-loss and burst-pipe referral partner.",
+      tags: ["burst-pipe", "after-hours"],
+      source: "seed",
+      created_at: createdAt,
+      updated_at: createdAt
+    },
+    {
+      id: "partner-demo-3",
+      company_name: "Tri-State Roofing Alliance",
+      contact_name: "Nina Doyle",
+      title: "Business Development",
+      email: "nina@tristateroof.example",
+      phone: "+1 201-555-7781",
+      website: "https://tristateroof.example",
+      city: "Jersey City",
+      state: "NJ",
+      zip: "07302",
+      territory: "Hudson County, NJ",
+      partner_type: "roofer",
+      priority_tier: "tier_2",
+      strategic_value: 73,
+      near_active_incident: false,
+      last_outbound_at: null,
+      notes: "Storm-damage and tarp referrals across North Jersey.",
+      tags: ["storm-response"],
+      source: "seed",
+      created_at: createdAt,
+      updated_at: createdAt
+    }
+  ];
+}
+
 function initialStore(): DemoStore {
   return {
     routingRules: initialRoutingRules(),
     scannerEvents: [],
     opportunities: [],
     leads: initialLeads(),
-    jobs: initialJobs()
+    jobs: initialJobs(),
+    prospects: initialProspects(),
+    referralPartners: initialReferralPartners(),
+    outboundLists: [],
+    outboundListMembers: [],
+    smartleadSyncLogs: []
   };
 }
 
@@ -360,7 +617,8 @@ export function addDemoScannerEvents(opportunities: ScannerOpportunity[]) {
         intent_score: opportunity.intentScore,
         confidence: opportunity.confidence,
         created_at: opportunity.createdAtIso || createdAt,
-        status: "new"
+        status: "new",
+        raw: opportunity.raw
       });
     }
   }
@@ -395,7 +653,10 @@ export function getDemoDashboardSnapshot() {
   const leads = [...store.leads];
   const jobs = [...store.jobs];
   const opportunities = [...store.opportunities];
-  return { leads, jobs, opportunities };
+  const prospects = [...store.prospects];
+  const referralPartners = [...store.referralPartners];
+  const outboundLists = [...store.outboundLists];
+  return { leads, jobs, opportunities, prospects, referralPartners, outboundLists };
 }
 
 export function listDemoLeads({
@@ -662,4 +923,269 @@ export function dispatchDemoScannerEvent(id: string, createMode?: "lead" | "job"
         ? "Signal detected, opportunity converted, and inspection scheduled in the demo flow."
         : "Signal detected, opportunity surfaced, and lead created in the demo inbox."
   };
+}
+
+export function listDemoProspects({
+  territory,
+  segment,
+  search,
+  nearIncident
+}: {
+  territory?: string | null;
+  segment?: string | null;
+  search?: string | null;
+  nearIncident?: boolean | null;
+}) {
+  const q = String(search || "").trim().toLowerCase();
+  return [...getStore().prospects]
+    .filter((item) => {
+      if (territory && territory !== "all" && item.territory !== territory) return false;
+      if (segment && segment !== "all" && item.prospect_type !== segment) return false;
+      if (nearIncident != null && item.near_active_incident !== nearIncident) return false;
+      if (!q) return true;
+      const haystack = `${item.company_name} ${item.contact_name || ""} ${item.city || ""} ${item.state || ""}`.toLowerCase();
+      return haystack.includes(q);
+    })
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
+export function createDemoProspect(input: Partial<DemoProspect>) {
+  const createdAt = nowIso();
+  const prospect: DemoProspect = {
+    id: generateId("prospect", `${input.company_name}:${input.email}:${createdAt}`),
+    company_name: String(input.company_name || "New Prospect").trim(),
+    contact_name: input.contact_name || null,
+    title: input.title || null,
+    email: input.email || null,
+    phone: input.phone || null,
+    website: input.website || null,
+    city: input.city || null,
+    state: input.state || null,
+    zip: input.zip || null,
+    territory: input.territory || buildTerritory([input.city, input.state]),
+    prospect_type: String(input.prospect_type || "property_manager"),
+    property_type: input.property_type || null,
+    building_count: input.building_count ?? null,
+    priority_tier: String(input.priority_tier || "standard"),
+    strategic_value: Number(input.strategic_value || 50),
+    near_active_incident: Boolean(input.near_active_incident),
+    last_outbound_at: input.last_outbound_at || null,
+    notes: input.notes || null,
+    tags: Array.isArray(input.tags) ? input.tags : [],
+    source: String(input.source || "manual"),
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  getStore().prospects.unshift(prospect);
+  return prospect;
+}
+
+export function listDemoReferralPartners({
+  territory,
+  partnerType,
+  search,
+  nearIncident
+}: {
+  territory?: string | null;
+  partnerType?: string | null;
+  search?: string | null;
+  nearIncident?: boolean | null;
+}) {
+  const q = String(search || "").trim().toLowerCase();
+  return [...getStore().referralPartners]
+    .filter((item) => {
+      if (territory && territory !== "all" && item.territory !== territory) return false;
+      if (partnerType && partnerType !== "all" && item.partner_type !== partnerType) return false;
+      if (nearIncident != null && item.near_active_incident !== nearIncident) return false;
+      if (!q) return true;
+      const haystack = `${item.company_name} ${item.contact_name || ""} ${item.city || ""} ${item.state || ""}`.toLowerCase();
+      return haystack.includes(q);
+    })
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
+export function createDemoReferralPartner(input: Partial<DemoReferralPartner>) {
+  const createdAt = nowIso();
+  const partner: DemoReferralPartner = {
+    id: generateId("partner", `${input.company_name}:${input.email}:${createdAt}`),
+    company_name: String(input.company_name || "New Referral Partner").trim(),
+    contact_name: input.contact_name || null,
+    title: input.title || null,
+    email: input.email || null,
+    phone: input.phone || null,
+    website: input.website || null,
+    city: input.city || null,
+    state: input.state || null,
+    zip: input.zip || null,
+    territory: input.territory || buildTerritory([input.city, input.state]),
+    partner_type: String(input.partner_type || "insurance_agent"),
+    priority_tier: String(input.priority_tier || "standard"),
+    strategic_value: Number(input.strategic_value || 50),
+    near_active_incident: Boolean(input.near_active_incident),
+    last_outbound_at: input.last_outbound_at || null,
+    notes: input.notes || null,
+    tags: Array.isArray(input.tags) ? input.tags : [],
+    source: String(input.source || "manual"),
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  getStore().referralPartners.unshift(partner);
+  return partner;
+}
+
+function demoMembersForSegments(territory: string | null, segments: string[]) {
+  const store = getStore();
+  const normalized = segments.map((segment) => String(segment).toLowerCase());
+  const prospects = store.prospects
+    .filter((item) => normalized.includes(item.prospect_type.toLowerCase()))
+    .filter((item) => !territory || item.territory === territory || buildTerritory([item.city, item.state]) === territory)
+    .map((item) => ({ record_type: "prospect" as const, record_id: item.id }));
+  const partners = store.referralPartners
+    .filter((item) => normalized.includes(item.partner_type.toLowerCase()))
+    .filter((item) => !territory || item.territory === territory || buildTerritory([item.city, item.state]) === territory)
+    .map((item) => ({ record_type: "referral_partner" as const, record_id: item.id }));
+  return [...prospects, ...partners];
+}
+
+export function listDemoOutboundLists() {
+  const store = getStore();
+  return [...store.outboundLists]
+    .map((list) => ({
+      ...list,
+      member_count: store.outboundListMembers.filter((member) => member.outbound_list_id === list.id).length
+    }))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+}
+
+export function createDemoOutboundList(input: {
+  name: string;
+  listType: string;
+  territory?: string | null;
+  sourceTrigger?: string | null;
+  campaignName?: string | null;
+  smartleadCampaignId?: string | null;
+  segmentDefinition?: Record<string, unknown>;
+  members?: Array<{ record_type: "prospect" | "referral_partner"; record_id: string }>;
+}) {
+  const store = getStore();
+  const createdAt = nowIso();
+  const listId = generateId("olist", `${input.name}:${createdAt}`);
+  const list: DemoOutboundList = {
+    id: listId,
+    name: input.name,
+    list_type: input.listType,
+    segment_definition_json: input.segmentDefinition || {},
+    territory: input.territory || null,
+    source_trigger: input.sourceTrigger || null,
+    campaign_name: input.campaignName || null,
+    smartlead_campaign_id: input.smartleadCampaignId || null,
+    export_status: "draft",
+    created_at: createdAt,
+    updated_at: createdAt
+  };
+  store.outboundLists.unshift(list);
+
+  for (const member of input.members || []) {
+    store.outboundListMembers.push({
+      id: generateId("member", `${listId}:${member.record_type}:${member.record_id}`),
+      outbound_list_id: listId,
+      record_type: member.record_type,
+      record_id: member.record_id,
+      created_at: createdAt
+    });
+  }
+
+  return {
+    ...list,
+    member_count: (input.members || []).length
+  };
+}
+
+export function createDemoIncidentTriggeredList(opportunityId: string) {
+  const store = getStore();
+  const opportunity = store.opportunities.find((item) => item.id === opportunityId);
+  if (!opportunity) return null;
+  const territory = deriveOpportunityTerritory(opportunity);
+  const segments = getIncidentTriggeredSegments(opportunity);
+  const members = demoMembersForSegments(territory, segments);
+  return createDemoOutboundList({
+    name: buildTriggeredListName(opportunity),
+    listType: "incident_triggered",
+    territory,
+    sourceTrigger: opportunity.title,
+    segmentDefinition: {
+      segments,
+      territory,
+      near_incident: true,
+      opportunity_id: opportunity.id
+    },
+    members
+  });
+}
+
+export function syncDemoOutboundList(listId: string, campaignId?: string | null) {
+  const store = getStore();
+  const list = store.outboundLists.find((item) => item.id === listId);
+  if (!list) return null;
+  list.smartlead_campaign_id = campaignId || list.smartlead_campaign_id;
+  list.export_status = "synced";
+  list.updated_at = nowIso();
+  store.smartleadSyncLogs.unshift({
+    id: generateId("sync", `${listId}:${list.updated_at}`),
+    outbound_list_id: listId,
+    smartlead_campaign_id: list.smartlead_campaign_id,
+    action_type: "push_leads",
+    status: "simulated",
+    request_payload_json: { campaign_id: list.smartlead_campaign_id },
+    response_payload_json: { accepted: true },
+    created_at: list.updated_at
+  });
+  return list;
+}
+
+export function getDemoOutboundListCsv(listId: string) {
+  const store = getStore();
+  const list = store.outboundLists.find((item) => item.id === listId);
+  if (!list) return null;
+  const members = store.outboundListMembers.filter((item) => item.outbound_list_id === listId);
+  const rows = members
+    .map((member) => {
+      if (member.record_type === "prospect") {
+        const record = store.prospects.find((item) => item.id === member.record_id);
+        if (!record) return null;
+        return {
+          record_type: "prospect",
+          company_name: record.company_name,
+          contact_name: record.contact_name || "",
+          email: record.email || "",
+          phone: record.phone || "",
+          segment: record.prospect_type,
+          territory: record.territory || "",
+          city: record.city || "",
+          state: record.state || "",
+          source: record.source
+        };
+      }
+
+      const record = store.referralPartners.find((item) => item.id === member.record_id);
+      if (!record) return null;
+      return {
+        record_type: "referral_partner",
+        company_name: record.company_name,
+        contact_name: record.contact_name || "",
+        email: record.email || "",
+        phone: record.phone || "",
+        segment: record.partner_type,
+        territory: record.territory || "",
+        city: record.city || "",
+        state: record.state || "",
+        source: record.source
+      };
+    })
+    .filter(Boolean) as Array<Record<string, unknown>>;
+
+  return buildCsv(
+    ["record_type", "company_name", "contact_name", "email", "phone", "segment", "territory", "city", "state", "source"],
+    rows
+  );
 }

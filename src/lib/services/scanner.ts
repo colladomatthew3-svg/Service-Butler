@@ -907,6 +907,7 @@ type EonetResponse = {
   }>;
 };
 
+<<<<<<< ours
 type NycFireIncidentRow = {
   starfire_incident_id?: string;
   incident_datetime?: string;
@@ -918,6 +919,8 @@ type NycFireIncidentRow = {
   highest_alarm_level?: string;
   dispatch_response_seconds_qy?: string;
 };
+=======
+>>>>>>> theirs
 function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const R = 3958.8;
@@ -1064,7 +1067,10 @@ function categoryFromEonet(categoryTitle: string): ScannerCategory {
 async function fetchEonetOpportunities({
   lat,
   lon,
+<<<<<<< ours
   serviceAreaLabel,
+=======
+>>>>>>> theirs
   radiusMiles,
   categories,
   forecast,
@@ -1072,7 +1078,10 @@ async function fetchEonetOpportunities({
 }: {
   lat: number;
   lon: number;
+<<<<<<< ours
   serviceAreaLabel: string;
+=======
+>>>>>>> theirs
   radiusMiles: number;
   categories: ScannerCategory[];
   forecast?: ForecastSummary | null;
@@ -1109,6 +1118,7 @@ async function fetchEonetOpportunities({
     const proximityBoost = dist <= 30 ? 10 : dist <= 75 ? 6 : 3;
     const intent = clamp(scored.intentScore + recencyBoost + proximityBoost);
 
+<<<<<<< ours
     const addressInfo = resolveOpportunityAddress({
       locationText: event.title || "",
       lat: eLat,
@@ -1116,6 +1126,8 @@ async function fetchEonetOpportunities({
       serviceAreaLabel,
       seed: event.id || event.title || String(geo?.date || `${eLat},${eLon}`)
     });
+=======
+>>>>>>> theirs
     out.push({
       id: mkId(["eonet", event.id || event.title || String(geo?.date || Date.now())]),
       source: "public_feed",
@@ -1123,7 +1135,11 @@ async function fetchEonetOpportunities({
       title: event.title || "Environmental incident",
       description:
         event.description || `NASA EONET reported an active environmental event about ${Math.round(dist)} mi from your service area.`,
+<<<<<<< ours
       locationText: addressInfo.display,
+=======
+      locationText: `${eLat.toFixed(3)}, ${eLon.toFixed(3)}`,
+>>>>>>> theirs
       lat: eLat,
       lon: eLon,
       intentScore: intent,
@@ -1136,6 +1152,7 @@ async function fetchEonetOpportunities({
         raw: {
           provider: "NASA_EONET",
           id: event.id,
+<<<<<<< ours
           incident_type: String(event.categories?.[0]?.title || "environmental incident"),
           signal_source: "Environmental incident feed",
           categories: event.categories,
@@ -1152,6 +1169,12 @@ async function fetchEonetOpportunities({
           urgency_window: recencyBoost >= 8 ? "Today" : "This week",
           demand_signal: "Active incident near service area",
           demand_explanation: "Recent environmental incidents often trigger urgent cleanup, inspection, or demolition demand."
+=======
+          categories: event.categories,
+          geometry_date: geo?.date,
+          distance_miles: Math.round(dist),
+          source_url: event.sources?.[0]?.url
+>>>>>>> theirs
         }
       }),
       confidence: scored.confidence,
@@ -1163,6 +1186,7 @@ async function fetchEonetOpportunities({
       raw: {
         provider: "NASA_EONET",
         id: event.id,
+<<<<<<< ours
         incident_type: String(event.categories?.[0]?.title || "environmental incident"),
         signal_source: "Environmental incident feed",
         categories: event.categories,
@@ -1179,6 +1203,12 @@ async function fetchEonetOpportunities({
         urgency_window: recencyBoost >= 8 ? "Today" : "This week",
         demand_signal: "Active incident near service area",
         demand_explanation: "Recent environmental incidents often trigger urgent cleanup, inspection, or demolition demand."
+=======
+        categories: event.categories,
+        geometry_date: geo?.date,
+        distance_miles: Math.round(dist),
+        source_url: event.sources?.[0]?.url
+>>>>>>> theirs
       },
       createdAtIso: new Date().toISOString()
     });
@@ -1189,6 +1219,7 @@ async function fetchEonetOpportunities({
   return out;
 }
 
+<<<<<<< ours
 function normalizeNycBorough(value?: string | null) {
   const borough = String(value || "").trim().toUpperCase();
   if (borough.includes("BRONX")) return { city: "Bronx", county: "Bronx County", state: "NY" };
@@ -1571,6 +1602,8 @@ async function fetchFloodClusterOpportunities({
 
   return out.sort((a, b) => b.intentScore - a.intentScore).slice(0, limit);
 }
+=======
+>>>>>>> theirs
 export async function runScanner({
   mode,
   location,
@@ -1610,7 +1643,11 @@ export async function runScanner({
   }
 
   if (mode === "live" && resolved) {
+<<<<<<< ours
     const [nws, forecastDriven, floodClusters, fdnyFire, usgs, eonet] = await Promise.all([
+=======
+    const [nws, usgs, eonet] = await Promise.all([
+>>>>>>> theirs
       fetchNwsOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
@@ -1660,10 +1697,22 @@ export async function runScanner({
         categories: pickedCategories,
         forecast,
         limit: safeLimit
+      }),
+      fetchEonetOpportunities({
+        lat: resolved.lat,
+        lon: resolved.lon,
+        radiusMiles,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
       })
     ]);
 
+<<<<<<< ours
     const merged = [...nws, ...forecastDriven, ...floodClusters, ...fdnyFire, ...usgs, ...eonet]
+=======
+    const merged = [...nws, ...usgs, ...eonet]
+>>>>>>> theirs
       .sort((a, b) => b.intentScore - a.intentScore)
       .slice(0, safeLimit);
 

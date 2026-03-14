@@ -80,6 +80,7 @@ Use this checklist before deploying Service Butler to a hosted environment.
 
 ## Release verification
 
+- Run `npm run check:production`.
 - Run `npm run typecheck`.
 - Run `npm run build`.
 - Smoke test `/`, `/login`, `/dashboard`, `/dashboard/scanner`, and `/api/weather`.

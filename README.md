@@ -38,6 +38,7 @@ Demoability contract references:
 - `docs/AGENTS.md` defines branch ownership, scope boundaries, and no-direct-main policy.
 - `docs/PRODUCTION_CHECKLIST.md` lists the environment, enrichment, and release checks for hosted deployments.
 - `/api/health/production` returns a production-readiness summary without exposing secrets.
+- `npm run check:production` prints an env-based go-live summary and exits nonzero on required failures.
 
 Troubleshooting:
 - Twilio trial can only send to verified destination numbers (verify your phone in Twilio Console).

@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   const body = await readScannerRunBody(req);
 
-  const mode = body.mode ? (body.mode === "live" ? "live" : "demo") : "live";
+  const mode = "live";
   const location = String(body.location || "").trim();
 
   let lat = Number(body.lat);

@@ -7,12 +7,17 @@ function flagEnabled(value: string | undefined) {
   return typeof value === "string" && ["1", "true", "on", "yes"].includes(value.toLowerCase());
 }
 
+function allowNonDevDemoMode() {
+  return flagEnabled(process.env.ALLOW_NON_DEV_DEMO_MODE);
+}
+
 export function isReviewMode(): boolean {
   return process.env.NODE_ENV === "development" && flagEnabled(process.env.REVIEW_MODE);
 }
 
 export function isDemoMode(): boolean {
-  return flagEnabled(process.env.DEMO_MODE);
+  if (!flagEnabled(process.env.DEMO_MODE)) return false;
+  return process.env.NODE_ENV === "development" || allowNonDevDemoMode();
 }
 
 export function isLocalBypassMode(): boolean {

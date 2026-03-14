@@ -24,6 +24,7 @@
 
 ## Demo Mode
 - Demo Mode is contractor-demo focused and bypasses login only in local development.
+- Production safety: `DEMO_MODE` is ignored outside development unless `ALLOW_NON_DEV_DEMO_MODE=on` is also set deliberately.
 - Run:
   ```bash
   npm run demo

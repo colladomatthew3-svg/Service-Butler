@@ -36,6 +36,7 @@
 Demoability contract references:
 - `docs/DEMO_MODE.md` defines the exact local demo contract and verification steps.
 - `docs/AGENTS.md` defines branch ownership, scope boundaries, and no-direct-main policy.
+- `docs/PRODUCTION_CHECKLIST.md` lists the environment, enrichment, and release checks for hosted deployments.
 
 Troubleshooting:
 - Twilio trial can only send to verified destination numbers (verify your phone in Twilio Console).

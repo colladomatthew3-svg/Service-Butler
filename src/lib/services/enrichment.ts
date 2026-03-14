@@ -61,6 +61,14 @@ type PremiumEnrichmentResponse = Partial<EnrichmentRecord> & {
   ownerContact?: Partial<EnrichmentContact> | null;
 };
 
+type PremiumEnrichmentRequest = {
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  serviceType: string;
+};
+
 const neighborhoods = ["Downtown", "Harbor District", "North Ridge", "Maple Estates", "Bayview", "West End"];
 
 function hash(str: string) {
@@ -267,23 +275,81 @@ async function fetchPremiumEnrichment(input: {
   const endpoint = process.env.SERVICE_BUTLER_ENRICHMENT_URL;
   if (!endpoint) return null;
 
+  const timeoutMs = normalizeTimeoutMs(process.env.SERVICE_BUTLER_ENRICHMENT_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        "x-service-butler-source": "scanner",
+        ...(process.env.SERVICE_BUTLER_ENRICHMENT_PROVIDER
+          ? { "x-service-butler-provider": process.env.SERVICE_BUTLER_ENRICHMENT_PROVIDER }
+          : {}),
         ...(process.env.SERVICE_BUTLER_ENRICHMENT_TOKEN
           ? { authorization: `Bearer ${process.env.SERVICE_BUTLER_ENRICHMENT_TOKEN}` }
           : {})
       },
       body: JSON.stringify(input),
-      cache: "no-store"
+      cache: "no-store",
+      signal: controller.signal
     });
     if (!res.ok) return null;
-    return (await res.json()) as PremiumEnrichmentResponse;
+    return normalizePremiumEnrichmentResponse((await res.json()) as PremiumEnrichmentResponse, input);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
+}
+
+function normalizeTimeoutMs(value?: string) {
+  const parsed = Number(value || "4500");
+  if (!Number.isFinite(parsed)) return 4500;
+  return Math.max(500, Math.min(15000, Math.round(parsed)));
+}
+
+function cleanString(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizePremiumEnrichmentResponse(
+  payload: PremiumEnrichmentResponse,
+  input: PremiumEnrichmentRequest
+): PremiumEnrichmentResponse | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const ownerContact = payload.ownerContact
+    ? {
+        name: cleanString(payload.ownerContact.name) || "Verified contact",
+        phone: cleanString(payload.ownerContact.phone),
+        email: cleanString(payload.ownerContact.email),
+        verification: payload.ownerContact.verification || "verified",
+        confidenceLabel: cleanString(payload.ownerContact.confidenceLabel) || "Vendor verified"
+      }
+    : null;
+
+  return {
+    provider: cleanString(payload.provider) || "Premium enrichment",
+    propertyAddress: cleanString(payload.propertyAddress) || input.address,
+    city: cleanString(payload.city) || input.city,
+    state: cleanString(payload.state) || input.state,
+    postalCode: cleanString(payload.postalCode) || input.postalCode,
+    neighborhood: cleanString(payload.neighborhood) || undefined,
+    propertyImageLabel: cleanString(payload.propertyImageLabel) || undefined,
+    propertyImageUrl: cleanString(payload.propertyImageUrl),
+    propertyImageSource: cleanString(payload.propertyImageSource),
+    propertyValueEstimate: cleanString(payload.propertyValueEstimate),
+    propertyValueVerification: payload.propertyValueVerification || undefined,
+    ownerContact,
+    notes: Array.isArray(payload.notes)
+      ? payload.notes.map((note) => cleanString(note)).filter((note): note is string => Boolean(note))
+      : []
+  };
 }
 
 function mergeEnrichment(base: EnrichmentRecord, premium: PremiumEnrichmentResponse): EnrichmentRecord {

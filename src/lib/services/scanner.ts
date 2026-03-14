@@ -918,7 +918,6 @@ type NycFireIncidentRow = {
   highest_alarm_level?: string;
   dispatch_response_seconds_qy?: string;
 };
-
 function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const R = 3958.8;

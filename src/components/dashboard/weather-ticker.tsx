@@ -103,6 +103,14 @@ export function WeatherTicker({
 
   const impact = weatherImpact(forecast);
   const signals = buildWeatherSignals(forecast).slice(0, compact ? 2 : 3);
+  const tickerItems = buildTickerItems({
+    locationLabel,
+    currentCondition: forecast.current.condition,
+    currentTemp: forecast.current.temp,
+    precipitationChance: forecast.current.precipitationChance,
+    windKph: forecast.current.windKph,
+    impact: impact.title
+  });
 
   return (
     <Card className="overflow-hidden">
@@ -140,6 +148,18 @@ export function WeatherTicker({
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">What this means for dispatch</p>
           <p className="mt-2 text-sm text-semantic-text">{impact.detail}</p>
         </div>
+
+        {compact && tickerItems.length > 0 && (
+          <div className="weather-ticker-strip" aria-label="Weather ticker updates">
+            <div className="weather-ticker-track">
+              {[...tickerItems, ...tickerItems].map((item, index) => (
+                <span key={`${item}-${index}`} className="weather-ticker-item">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className={`grid gap-3 ${compact ? "sm:grid-cols-2" : "md:grid-cols-3"}`}>
           {signals.map((signal) => (
@@ -187,6 +207,32 @@ export function WeatherTicker({
       </CardBody>
     </Card>
   );
+}
+
+function buildTickerItems({
+  locationLabel,
+  currentCondition,
+  currentTemp,
+  precipitationChance,
+  windKph,
+  impact
+}: {
+  locationLabel?: string | null;
+  currentCondition: string;
+  currentTemp: number;
+  precipitationChance?: number;
+  windKph?: number;
+  impact: string;
+}) {
+  const items = [
+    locationLabel ? `Location: ${locationLabel}` : "Location: Service area",
+    `Now: ${currentTemp}° and ${currentCondition}`,
+    precipitationChance != null ? `Rain chance: ${precipitationChance}%` : null,
+    windKph != null ? `Wind: ${windKph} kph` : null,
+    `Demand signal: ${impact}`
+  ].filter(Boolean);
+
+  return items as string[];
 }
 
 function BadgeStat({ icon, label }: { icon: ReactNode; label: string }) {

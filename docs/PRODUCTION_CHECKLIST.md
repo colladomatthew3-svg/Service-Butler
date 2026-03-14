@@ -83,4 +83,5 @@ Use this checklist before deploying Service Butler to a hosted environment.
 - Run `npm run typecheck`.
 - Run `npm run build`.
 - Smoke test `/`, `/login`, `/dashboard`, `/dashboard/scanner`, and `/api/weather`.
+- Check `/api/health/production` and confirm required checks return `pass`.
 - Perform one real scanner run with a saved service area and verify opportunities persist.

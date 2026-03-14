@@ -102,10 +102,7 @@ export function WeatherTicker({
   }
 
   const impact = weatherImpact(forecast);
-<<<<<<< ours
   const signals = buildWeatherSignals(forecast).slice(0, compact ? 2 : 3);
-=======
->>>>>>> theirs
   const tickerItems = buildTickerItems({
     locationLabel,
     currentCondition: forecast.current.condition,
@@ -147,14 +144,10 @@ export function WeatherTicker({
           )}
         </div>
 
-<<<<<<< ours
         <div className="rounded-xl border border-semantic-border bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">What this means for dispatch</p>
           <p className="mt-2 text-sm text-semantic-text">{impact.detail}</p>
         </div>
-
-=======
->>>>>>> theirs
         {compact && tickerItems.length > 0 && (
           <div className="weather-ticker-strip" aria-label="Weather ticker updates">
             <div className="weather-ticker-track">
@@ -167,7 +160,6 @@ export function WeatherTicker({
           </div>
         )}
 
-<<<<<<< ours
         <div className={`grid gap-3 ${compact ? "sm:grid-cols-2" : "md:grid-cols-3"}`}>
           {signals.map((signal) => (
             <div key={signal.title} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
@@ -180,9 +172,6 @@ export function WeatherTicker({
             </div>
           ))}
         </div>
-
-=======
->>>>>>> theirs
         <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Short-term outlook</p>
           <div className="mt-2 grid grid-cols-3 gap-2">

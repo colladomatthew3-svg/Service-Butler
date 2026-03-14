@@ -1116,7 +1116,6 @@ async function fetchEonetOpportunities({
       serviceAreaLabel,
       seed: event.id || event.title || String(geo?.date || `${eLat},${eLon}`)
     });
-
     out.push({
       id: mkId(["eonet", event.id || event.title || String(geo?.date || Date.now())]),
       source: "public_feed",
@@ -1572,7 +1571,6 @@ async function fetchFloodClusterOpportunities({
 
   return out.sort((a, b) => b.intentScore - a.intentScore).slice(0, limit);
 }
-
 export async function runScanner({
   mode,
   location,

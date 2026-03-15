@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   if (body.sourceId) {
     const { data, error } = await context.supabase
       .from("v2_data_sources")
-      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags")
+      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags,terms_status,provenance")
       .eq("tenant_id", context.franchiseTenantId)
       .eq("id", body.sourceId)
       .maybeSingle();
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   } else {
     const { data, error } = await context.supabase
       .from("v2_data_sources")
-      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags")
+      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags,terms_status,provenance")
       .eq("tenant_id", context.franchiseTenantId)
       .eq("status", "active")
       .limit(20);
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
       (String(source.source_type || "").toLowerCase().includes("weather")
         ? "weather.noaa"
         : String(source.source_type || "").toLowerCase().includes("permit")
-          ? "permits.placeholder"
+          ? "permits.production"
           : String(source.source_type || "").toLowerCase().includes("social")
             ? "social.intent.placeholder"
             : "incidents.generic");
@@ -106,7 +106,9 @@ export async function POST(req: NextRequest) {
         connector_name: source.name,
         rate_limit_policy: source.rate_limit_policy,
         compliance_flags: source.compliance_flags,
-        config_encrypted: source.config_encrypted
+        config_encrypted: source.config_encrypted,
+        terms_status: source.terms_status,
+        source_provenance: source.provenance
       }
     });
 
@@ -128,7 +130,9 @@ export async function POST(req: NextRequest) {
         connector_name: source.name,
         rate_limit_policy: source.rate_limit_policy,
         compliance_flags: source.compliance_flags,
-        config_encrypted: source.config_encrypted
+        config_encrypted: source.config_encrypted,
+        terms_status: source.terms_status,
+        source_provenance: source.provenance
       },
       actorUserId: context.userId,
       connector

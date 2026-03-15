@@ -58,6 +58,7 @@ export const incidentConnector: ConnectorAdapter = {
     const enabled = citizenEnabled();
     return {
       termsStatus: enabled ? "pending_review" : "restricted",
+      ingestionAllowed: enabled,
       outboundAllowed: false,
       requiresLegalReview: true,
       notes: enabled

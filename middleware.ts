@@ -20,7 +20,8 @@ function isReviewMode() {
 }
 
 function isDemoMode() {
-  return process.env.NODE_ENV === "development" && flagEnabled(process.env.DEMO_MODE);
+  if (!flagEnabled(process.env.DEMO_MODE)) return false;
+  return process.env.NODE_ENV === "development" || flagEnabled(process.env.ALLOW_NON_DEV_DEMO_MODE);
 }
 
 export async function middleware(req: NextRequest) {

@@ -55,6 +55,7 @@ export const socialIntentConnector: ConnectorAdapter = {
   compliancePolicy(): ConnectorCompliancePolicy {
     return {
       termsStatus: "pending_review",
+      ingestionAllowed: true,
       outboundAllowed: false,
       requiresLegalReview: true,
       notes: "Social sources require source-specific terms and consent checks"

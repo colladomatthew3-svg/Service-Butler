@@ -19,6 +19,79 @@ function pickFirstStringArray(input: unknown): string[] {
   return input.map((value) => String(value || "").trim()).filter(Boolean);
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parsePointText(pointText: string) {
+  const match = pointText.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/i);
+  if (!match) return null;
+  const lng = toFiniteNumber(match[1]);
+  const lat = toFiniteNumber(match[2]);
+  if (lat == null || lng == null) return null;
+  return { lat, lng };
+}
+
+function parseLatLng(location: unknown) {
+  if (!location) return null;
+
+  if (typeof location === "string") {
+    return parsePointText(location) || parsePointText(location.replace(/^SRID=\d+;/i, ""));
+  }
+
+  if (typeof location === "object") {
+    const shape = location as Record<string, unknown>;
+    const coordinates = shape.coordinates;
+    if (Array.isArray(coordinates) && coordinates.length >= 2) {
+      const lng = toFiniteNumber(coordinates[0]);
+      const lat = toFiniteNumber(coordinates[1]);
+      if (lat != null && lng != null) return { lat, lng };
+    }
+  }
+
+  return null;
+}
+
+export const routingInternals = {
+  parseLatLng
+};
+
+async function findTerritoryByPolygon({
+  supabase,
+  tenantId,
+  serviceLine,
+  latitude,
+  longitude
+}: {
+  supabase: SupabaseClient;
+  tenantId: string;
+  serviceLine: string;
+  latitude: number;
+  longitude: number;
+}) {
+  const { data, error } = await supabase.rpc("match_territory_by_point", {
+    p_tenant_id: tenantId,
+    p_lat: latitude,
+    p_lng: longitude,
+    p_service_line: serviceLine
+  });
+
+  if (error) throw new Error(error.message || "Polygon territory lookup failed");
+  const first = Array.isArray(data) ? (data[0] as Record<string, unknown> | undefined) : undefined;
+  if (!first?.territory_id) return null;
+
+  const { data: territory, error: territoryError } = await supabase
+    .from("v2_territories")
+    .select("id,tenant_id,zip_codes,service_lines,capacity_json,hours_json")
+    .eq("id", String(first.territory_id))
+    .eq("active", true)
+    .maybeSingle();
+
+  if (territoryError) throw new Error(territoryError.message || "Failed to resolve matched territory");
+  return (territory as Record<string, unknown> | null) || null;
+}
+
 async function estimateCapacityPressure({
   supabase,
   assignedTenantId
@@ -60,17 +133,32 @@ function selectCatastropheOverrideRule({
   );
 }
 
-async function findTerritory({
+export async function findTerritoryForOpportunity({
   supabase,
   tenantId,
   postalCode,
-  serviceLine
+  serviceLine,
+  latitude,
+  longitude
 }: {
   supabase: SupabaseClient;
   tenantId: string;
   postalCode: string | null;
   serviceLine: string;
+  latitude: number | null;
+  longitude: number | null;
 }) {
+  if (featureFlags.usePolygonRouting && latitude != null && longitude != null) {
+    const polygonTerritory = await findTerritoryByPolygon({
+      supabase,
+      tenantId,
+      serviceLine,
+      latitude,
+      longitude
+    });
+    if (polygonTerritory) return polygonTerritory;
+  }
+
   let query = supabase
     .from("v2_territories")
     .select("id,tenant_id,zip_codes,service_lines,capacity_json,hours_json")
@@ -92,11 +180,6 @@ async function findTerritory({
   });
 
   if (matched) return matched;
-
-  // Polygon routing flag is ready for future SQL/RPC spatial matching. Zip routing remains primary baseline.
-  if (featureFlags.usePolygonRouting) {
-    return rows[0] || null;
-  }
 
   return rows[0] || null;
 }
@@ -135,6 +218,7 @@ async function computeDecision({
   const serviceLine = String(opportunity.service_line || opportunity.opportunity_type || "general");
   const catastrophe = Number(opportunity.catastrophe_linkage_score || 0);
   const postalCode = String(opportunity.postal_code || parsePostalCode(String(opportunity.location_text || "")) || "") || null;
+  const latLng = parseLatLng(opportunity.location);
 
   const { data: candidateRules } = await supabase
     .from("v2_routing_rules")
@@ -169,11 +253,13 @@ async function computeDecision({
     };
   }
 
-  const territory = await findTerritory({
+  const territory = await findTerritoryForOpportunity({
     supabase,
     tenantId,
     postalCode,
-    serviceLine
+    serviceLine,
+    latitude: latLng?.lat || null,
+    longitude: latLng?.lng || null
   });
 
   if (territory) {
@@ -238,7 +324,7 @@ export async function routeOpportunityV2({
 }) {
   const { data: opportunity, error: oppError } = await supabase
     .from("v2_opportunities")
-    .select("id,tenant_id,service_line,opportunity_type,postal_code,location_text,catastrophe_linkage_score,routing_status")
+    .select("id,tenant_id,service_line,opportunity_type,postal_code,location_text,location,catastrophe_linkage_score,routing_status")
     .eq("id", opportunityId)
     .eq("tenant_id", tenantId)
     .single();

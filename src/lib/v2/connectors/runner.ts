@@ -29,6 +29,47 @@ function scoreInputsForEvent(event: ConnectorNormalizedEvent) {
   };
 }
 
+function toBoundedScore(value: unknown, fallback = 50) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function deriveFreshnessScore(occurredAt: string) {
+  const ts = new Date(occurredAt).getTime();
+  if (!Number.isFinite(ts)) return 0;
+  const ageHours = Math.max(0, (Date.now() - ts) / 3_600_000);
+  return Math.max(0, Math.min(100, Math.round(100 - ageHours * 5)));
+}
+
+function ensureSourceMetadata({
+  event,
+  connectorKey,
+  complianceTermsStatus
+}: {
+  event: ConnectorNormalizedEvent;
+  connectorKey: string;
+  complianceTermsStatus: string;
+}) {
+  const normalized = { ...(event.normalizedPayload || {}) } as Record<string, unknown>;
+  const sourceProvenance = String(normalized.source_provenance || connectorKey);
+  const termsStatus = String(normalized.terms_status || complianceTermsStatus);
+  const dataFreshnessScore = toBoundedScore(normalized.data_freshness_score, deriveFreshnessScore(event.occurredAt));
+  const connectorVersion = String(normalized.connector_version || "unknown");
+
+  return {
+    ...normalized,
+    source_provenance: sourceProvenance,
+    terms_status: termsStatus,
+    data_freshness_score: dataFreshnessScore,
+    connector_version: connectorVersion
+  };
+}
+
+export const connectorRunnerInternals = {
+  ensureSourceMetadata
+};
+
 async function upsertOpportunityFromEvent({
   supabase,
   tenantId,
@@ -183,13 +224,18 @@ export async function runConnectorForSource({
   };
 
   const compliance = connector.compliancePolicy(pullInput);
-  if (compliance.termsStatus === "blocked") {
+  if (compliance.termsStatus === "blocked" || !compliance.ingestionAllowed) {
+    const reason =
+      compliance.termsStatus === "blocked"
+        ? "Connector blocked by compliance policy"
+        : "Connector ingestion denied by compliance policy";
+
     await supabase
       .from("v2_connector_runs")
       .update({
         status: "failed",
         completed_at: new Date().toISOString(),
-        error_summary: "Connector blocked by compliance policy"
+        error_summary: reason
       })
       .eq("id", runId);
 
@@ -198,7 +244,7 @@ export async function runConnectorForSource({
       recordsSeen: 0,
       recordsCreated: 0,
       status: "failed",
-      errorSummary: "Connector blocked by compliance policy"
+      errorSummary: reason
     };
   }
 
@@ -207,10 +253,19 @@ export async function runConnectorForSource({
     const normalizedEvents = await connector.normalize(pulled, pullInput);
 
     let createdCount = 0;
+    let totalFreshness = 0;
+    let totalReliability = 0;
 
     for (const event of normalizedEvents) {
       const dedupe = connector.dedupeKey(event);
       const locationPoint = toPoint(event.latitude, event.longitude);
+      const normalizedPayload = ensureSourceMetadata({
+        event,
+        connectorKey: connector.key,
+        complianceTermsStatus: compliance.termsStatus
+      });
+      totalFreshness += Number(normalizedPayload.data_freshness_score || 0);
+      totalReliability += Number(event.sourceReliability ?? 50);
 
       const { data: sourceEvent, error: sourceEventError } = await supabase
         .from("v2_source_events")
@@ -222,7 +277,7 @@ export async function runConnectorForSource({
             occurred_at: event.occurredAt,
             ingested_at: new Date().toISOString(),
             raw_payload: event.rawPayload,
-            normalized_payload: event.normalizedPayload,
+            normalized_payload: normalizedPayload,
             location_text: event.locationText || null,
             location: locationPoint ? `SRID=4326;${locationPoint}` : null,
             confidence_score: Number(event.severity ?? 50),
@@ -258,7 +313,16 @@ export async function runConnectorForSource({
         status,
         completed_at: new Date().toISOString(),
         records_seen: normalizedEvents.length,
-        records_created: createdCount
+        records_created: createdCount,
+        metadata: {
+          connector_key: connector.key,
+          source_type: sourceType,
+          terms_status: compliance.termsStatus,
+          avg_data_freshness_score:
+            normalizedEvents.length > 0 ? Math.round(totalFreshness / normalizedEvents.length) : 0,
+          avg_source_reliability:
+            normalizedEvents.length > 0 ? Math.round(totalReliability / normalizedEvents.length) : 0
+        }
       })
       .eq("id", runId);
 

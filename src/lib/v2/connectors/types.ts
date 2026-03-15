@@ -1,5 +1,6 @@
 export type ConnectorCompliancePolicy = {
   termsStatus: "approved" | "restricted" | "pending_review" | "blocked";
+  ingestionAllowed: boolean;
   outboundAllowed: boolean;
   requiresLegalReview: boolean;
   notes?: string;

@@ -109,6 +109,7 @@ export const weatherConnector: ConnectorAdapter = {
   compliancePolicy(): ConnectorCompliancePolicy {
     return {
       termsStatus: "approved",
+      ingestionAllowed: true,
       outboundAllowed: true,
       requiresLegalReview: false,
       notes: "NOAA public weather alerts"

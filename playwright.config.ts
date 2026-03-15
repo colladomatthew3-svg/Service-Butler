@@ -12,7 +12,8 @@ export default defineConfig({
     trace: "on-first-retry"
   },
   webServer: {
-    command: "DEMO_MODE=true npm run build && DEMO_MODE=true npm run start -- --hostname 127.0.0.1 --port 3100",
+    command:
+      "DEMO_MODE=true ALLOW_NON_DEV_DEMO_MODE=true npm run build && DEMO_MODE=true ALLOW_NON_DEV_DEMO_MODE=true npm run start -- --hostname 127.0.0.1 --port 3100",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: false,
     timeout: 120000

@@ -22,6 +22,12 @@
 - In Review Mode, `/dashboard/*` routes are accessible for product review.
 - Production behavior is unchanged: Review Mode only activates when `NODE_ENV=development` and `REVIEW_MODE=on`.
 
+## Franchise V2 Flags
+- `SB_USE_V2_READS=true` enables tenant-first reads for opportunity/dashboard APIs.
+- `SB_USE_V2_WRITES=true` enables tenant-first dual writes for scanner + v2 APIs.
+- `SB_USE_POLYGON_ROUTING=true` enables polygon-aware routing behavior once territory geometry is ready.
+- `SB_ENABLE_CITIZEN_CONNECTOR=true` enables the incident connector compliance gate for Citizen-like sources (off by default).
+
 ## Demo Mode
 - Demo Mode is contractor-demo focused and bypasses login only in local development.
 - Production safety: `DEMO_MODE` is ignored outside development unless `ALLOW_NON_DEV_DEMO_MODE=on` is also set deliberately.

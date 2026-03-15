@@ -3,6 +3,8 @@ import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 import { addDemoScannerEvents, getDemoWeatherSettings } from "@/lib/demo/store";
 import { runScanner } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
+import { featureFlags } from "@/lib/config/feature-flags";
+import { computeOpportunityScores } from "@/lib/v2/scoring";
 
 type ScannerRunRequestBody = {
   mode?: "demo" | "live";
@@ -172,6 +174,133 @@ export async function POST(req: NextRequest) {
         }
       }))
     );
+
+    if (featureFlags.useV2Writes) {
+      const { data: map } = await supabase
+        .from("v2_account_tenant_map")
+        .select("franchise_tenant_id")
+        .eq("account_id", accountId)
+        .maybeSingle();
+
+      const franchiseTenantId = map?.franchise_tenant_id ? String(map.franchise_tenant_id) : null;
+
+      if (franchiseTenantId) {
+        let { data: sourceRow } = await supabase
+          .from("v2_data_sources")
+          .select("id")
+          .eq("tenant_id", franchiseTenantId)
+          .eq("source_type", "scanner_signal")
+          .limit(1)
+          .maybeSingle();
+
+        if (!sourceRow?.id) {
+          const { data: insertedSource } = await supabase
+            .from("v2_data_sources")
+            .insert({
+              tenant_id: franchiseTenantId,
+              source_type: "scanner_signal",
+              name: "Legacy Scanner Signals",
+              status: "active",
+              terms_status: "approved",
+              reliability_score: 72,
+              compliance_flags: { source: "scanner" },
+              provenance: "api/scanner/run",
+              freshness_timestamp: new Date().toISOString()
+            })
+            .select("id")
+            .single();
+          sourceRow = insertedSource || null;
+        }
+
+        if (sourceRow?.id) {
+          const sourceId = String(sourceRow.id);
+          for (const op of result.opportunities) {
+            const occurredAt = op.createdAtIso || new Date().toISOString();
+            const dedupeKey = `${op.id}|${occurredAt}`;
+
+            const { data: sourceEvent } = await supabase
+              .from("v2_source_events")
+              .upsert(
+                {
+                  source_id: sourceId,
+                  tenant_id: franchiseTenantId,
+                  occurred_at: occurredAt,
+                  ingested_at: new Date().toISOString(),
+                  raw_payload: {
+                    ...op.raw,
+                    scanner_opportunity_id: op.id
+                  },
+                  normalized_payload: {
+                    title: op.title,
+                    description: op.description,
+                    category: op.category,
+                    platform: op.source
+                  },
+                  location_text: op.locationText,
+                  confidence_score: op.confidence,
+                  source_reliability_score: op.confidence,
+                  compliance_status: "approved",
+                  dedupe_key: dedupeKey,
+                  event_type: String(op.category || "scanner_signal")
+                },
+                { onConflict: "source_id,dedupe_key" }
+              )
+              .select("id")
+              .single();
+
+            const score = computeOpportunityScores({
+              sourceType: String(op.source || "scanner_signal"),
+              eventRecencyMinutes: 5,
+              severity: Number(op.raw?.urgency_score || op.intentScore || 50),
+              geographyMatch: op.locationText ? 70 : 35,
+              propertyTypeFit: 55,
+              serviceLineFit: 78,
+              priorCustomerMatch: 40,
+              contactAvailability: 45,
+              supportingSignalsCount: Array.isArray(op.tags) ? op.tags.length : 1,
+              catastropheSignal: Array.isArray(op.tags) && op.tags.some((tag) => /storm|flood|fire/i.test(tag)) ? 80 : 30,
+              sourceReliability: op.confidence
+            });
+
+            const { data: opportunityRow } = await supabase
+              .from("v2_opportunities")
+              .insert({
+                tenant_id: franchiseTenantId,
+                source_event_id: sourceEvent?.id || null,
+                opportunity_type: String(op.raw?.service_type || op.category || "general"),
+                service_line: String(op.raw?.service_type || op.category || "general"),
+                title: op.title,
+                description: op.description,
+                urgency_score: score.urgencyScore,
+                job_likelihood_score: score.jobLikelihoodScore,
+                contactability_score: score.contactabilityScore,
+                source_reliability_score: score.sourceReliabilityScore,
+                revenue_band: score.revenueBand,
+                catastrophe_linkage_score: score.catastropheLinkageScore,
+                location_text: op.locationText,
+                postal_code: typeof op.raw?.property_postal_code === "string" ? op.raw.property_postal_code : null,
+                contact_status: "identified",
+                routing_status: "pending",
+                lifecycle_status: "new",
+                explainability_json: score.explainability
+              })
+              .select("id")
+              .single();
+
+            if (opportunityRow?.id) {
+              await supabase.from("v2_opportunity_signals").insert({
+                tenant_id: franchiseTenantId,
+                opportunity_id: opportunityRow.id,
+                signal_key: "job_likelihood_score",
+                signal_value: score.jobLikelihoodScore,
+                signal_weight: 1,
+                explanation: "v2 backfill score from scanner run"
+              });
+            }
+          }
+        }
+      }
+    }
   }
 
   return NextResponse.json({

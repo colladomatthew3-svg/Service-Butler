@@ -60,9 +60,18 @@ Use this checklist before deploying Service Butler to a hosted environment.
 ## Messaging and billing
 
 - Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` if SMS and voice should be active.
+- Set `HUBSPOT_ACCESS_TOKEN` if HubSpot CRM task sync should be active.
 - Set `POSTMARK_SERVER_TOKEN` or `SENDGRID_API_KEY`, plus `FROM_EMAIL`, for outbound email.
 - Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRICE_ID` when `BILLING_MODE=stripe`.
 - Set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` if Inngest workflows run in your deployment.
+
+## Franchise v2 rollout flags
+
+- Set `SB_USE_V2_WRITES=true` in staging first to dual-write tenant-first records.
+- Keep `SB_USE_V2_READS=false` until parity checks pass.
+- Enable `SB_USE_V2_READS=true` during pilot cutover.
+- Keep `SB_USE_POLYGON_ROUTING=false` until territory geometry validation is complete.
+- Keep `SB_ENABLE_CITIZEN_CONNECTOR=false` unless legal and compliance approvals are complete.
 
 ## Database and data
 

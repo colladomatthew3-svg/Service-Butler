@@ -13,10 +13,57 @@ const REQUIRED_LINES = [
   "dashboard updated"
 ];
 
+function envTrue(name) {
+  const value = String(process.env[name] || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "on" || value === "yes";
+}
+
 function printSimulated() {
+  console.log("[operator-test] mode=simulated");
+  console.log("[operator-test] reason=missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   for (const line of REQUIRED_LINES) {
-    console.log(`${line} (simulated: missing Supabase service credentials)`);
+    console.log(`${line} (simulated)`);
   }
+}
+
+function runtimeMode() {
+  const hasSupabase = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  if (!hasSupabase) {
+    return {
+      mode: "simulated",
+      reasons: ["Supabase credentials missing"]
+    };
+  }
+
+  const reasons = [];
+
+  if (!envTrue("SB_USE_V2_WRITES")) reasons.push("SB_USE_V2_WRITES is not enabled");
+  if (!envTrue("SB_USE_V2_READS")) reasons.push("SB_USE_V2_READS is not enabled");
+
+  const twilioConfigured = Boolean(
+    process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER
+  );
+  const twilioDisabled = envTrue("SB_DISABLE_TWILIO");
+  if (!twilioConfigured && !twilioDisabled) {
+    reasons.push("Twilio is not configured and not explicitly disabled");
+  }
+
+  const hubspotConfigured = Boolean(process.env.HUBSPOT_ACCESS_TOKEN);
+  const hubspotDisabled = envTrue("SB_DISABLE_HUBSPOT");
+  if (!hubspotConfigured && !hubspotDisabled) {
+    reasons.push("HubSpot is not configured and not explicitly disabled");
+  }
+
+  if (!process.env.PERMITS_PROVIDER_URL) reasons.push("PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)");
+  if (!process.env.WEBHOOK_SHARED_SECRET) reasons.push("WEBHOOK_SHARED_SECRET not set");
+
+  const inngestConfigured = Boolean(process.env.INNGEST_EVENT_KEY && process.env.INNGEST_SIGNING_KEY);
+  if (!inngestConfigured) reasons.push("Inngest keys missing");
+
+  return {
+    mode: reasons.length === 0 ? "fully-live" : "live-partially-configured",
+    reasons
+  };
 }
 
 function scoreFromSeverity(severity) {
@@ -46,16 +93,152 @@ async function resolveOperatorTenantId(supabase) {
   return String(data.id);
 }
 
-async function main() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+async function fetchPermitsSignal() {
+  const providerUrl = String(process.env.PERMITS_PROVIDER_URL || "").trim();
+  const providerToken = String(process.env.PERMITS_PROVIDER_TOKEN || "").trim();
 
-  if (!url || !key) {
+  if (!providerUrl) {
+    return {
+      mode: "synthetic",
+      record: {
+        id: `synthetic-${Date.now()}`,
+        event_type: "permit_signal",
+        title: "Synthetic permits signal",
+        description: "Synthetic record used because PERMITS_PROVIDER_URL is not configured",
+        occurred_at: new Date().toISOString(),
+        location: "350 5th Ave, New York, NY 10118",
+        latitude: 40.7484,
+        longitude: -73.9857,
+        severity: 77,
+        service_line: "restoration",
+        source_reliability: 72
+      },
+      sourceProvenance: "operator.synthetic.permits"
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6_000);
+
+  try {
+    const headers = {
+      accept: "application/json",
+      ...(providerToken ? { authorization: `Bearer ${providerToken}` } : {})
+    };
+
+    const response = await fetch(providerUrl, {
+      method: "GET",
+      headers,
+      cache: "no-store",
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return {
+        mode: "synthetic_fallback",
+        record: {
+          id: `fallback-${Date.now()}`,
+          event_type: "permit_signal",
+          title: "Fallback permits signal",
+          description: `Permits provider returned ${response.status}; using fallback record`,
+          occurred_at: new Date().toISOString(),
+          location: "350 5th Ave, New York, NY 10118",
+          latitude: 40.7484,
+          longitude: -73.9857,
+          severity: 74,
+          service_line: "restoration",
+          source_reliability: 68
+        },
+        sourceProvenance: providerUrl
+      };
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    const records = Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload?.records)
+        ? payload.records
+        : Array.isArray(payload)
+          ? payload
+          : [];
+
+    const first = records[0];
+    if (!first || typeof first !== "object") {
+      return {
+        mode: "synthetic_fallback",
+        record: {
+          id: `empty-${Date.now()}`,
+          event_type: "permit_signal",
+          title: "Empty provider payload fallback",
+          description: "Provider returned no records; using fallback record",
+          occurred_at: new Date().toISOString(),
+          location: "350 5th Ave, New York, NY 10118",
+          latitude: 40.7484,
+          longitude: -73.9857,
+          severity: 70,
+          service_line: "restoration",
+          source_reliability: 65
+        },
+        sourceProvenance: providerUrl
+      };
+    }
+
+    return {
+      mode: "live_provider",
+      record: first,
+      sourceProvenance: providerUrl
+    };
+  } catch {
+    return {
+      mode: "synthetic_fallback",
+      record: {
+        id: `error-${Date.now()}`,
+        event_type: "permit_signal",
+        title: "Provider error fallback",
+        description: "Provider fetch failed; using fallback record",
+        occurred_at: new Date().toISOString(),
+        location: "350 5th Ave, New York, NY 10118",
+        latitude: 40.7484,
+        longitude: -73.9857,
+        severity: 72,
+        service_line: "restoration",
+        source_reliability: 64
+      },
+      sourceProvenance: providerUrl || "operator.synthetic.permits"
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function toNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function computeFreshnessScore(occurredAt) {
+  const ts = new Date(String(occurredAt || "")).getTime();
+  if (!Number.isFinite(ts)) return 0;
+  const ageHours = Math.max(0, (Date.now() - ts) / 3_600_000);
+  return Math.max(0, Math.min(100, Math.round(100 - ageHours * 5)));
+}
+
+async function main() {
+  const mode = runtimeMode();
+
+  if (mode.mode === "simulated") {
     printSimulated();
     return;
   }
 
-  const supabase = createClient(url, key, {
+  console.log(`[operator-test] mode=${mode.mode}`);
+  if (mode.reasons.length > 0) {
+    for (const reason of mode.reasons) {
+      console.log(`[operator-test] config-note: ${reason}`);
+    }
+  }
+
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 
@@ -75,6 +258,9 @@ async function main() {
   const sourceId = source?.id || null;
   if (!sourceId) throw new Error("Permits source missing. Run operator seed first.");
 
+  const pulled = await fetchPermitsSignal();
+  console.log(`[operator-test] connector-input-mode=${pulled.mode}`);
+
   const runId = randomUUID();
   const nowIso = new Date().toISOString();
 
@@ -88,39 +274,51 @@ async function main() {
     records_seen: 1,
     records_created: 1,
     metadata: {
-      mode: "operator_test",
-      source_provenance: "operator.permits.provider",
-      connector_version: "operator-test-1"
+      mode: mode.mode,
+      connector_input_mode: pulled.mode,
+      source_provenance: pulled.sourceProvenance,
+      connector_version: "operator-test-2"
     }
   });
 
   if (runError) throw new Error(runError.message);
   console.log("connector run");
 
+  const record = pulled.record;
+  const occurredAt = new Date(String(record.occurred_at || record.issued_at || nowIso)).toISOString();
+  const lat = toNumber(record.latitude, 40.7484);
+  const lng = toNumber(record.longitude, -73.9857);
+  const severity = toNumber(record.severity, 75);
+  const sourceReliability = toNumber(record.source_reliability, 72);
+  const serviceLine = String(record.service_line || "restoration");
+  const title = String(record.title || record.permit_type || "Operator pilot opportunity");
+  const description = String(record.description || "Operator test generated opportunity");
+  const locationText = String(record.location || record.address || "350 5th Ave, New York, NY 10118");
+
   const sourceEventId = randomUUID();
-  const scores = scoreFromSeverity(77);
+  const scores = scoreFromSeverity(severity);
 
   const { error: sourceEventError } = await supabase.from("v2_source_events").insert({
     id: sourceEventId,
     source_id: sourceId,
     tenant_id: tenantId,
     connector_run_id: runId,
-    occurred_at: nowIso,
+    occurred_at: occurredAt,
     ingested_at: nowIso,
-    raw_payload: { kind: "operator_test" },
+    raw_payload: record,
     normalized_payload: {
-      source_provenance: "operator.permits.provider",
-      connector_version: "operator-test-1",
-      terms_status: "approved",
-      data_freshness_score: 97
+      source_provenance: pulled.sourceProvenance,
+      connector_version: "operator-test-2",
+      terms_status: String(process.env.PERMITS_TERMS_STATUS || "approved"),
+      data_freshness_score: computeFreshnessScore(occurredAt)
     },
-    location_text: "350 5th Ave, New York, NY 10118",
-    location: "SRID=4326;POINT(-73.9857 40.7484)",
-    confidence_score: 77,
-    source_reliability_score: 75,
+    location_text: locationText,
+    location: `SRID=4326;POINT(${lng} ${lat})`,
+    confidence_score: severity,
+    source_reliability_score: sourceReliability,
     compliance_status: "approved",
     dedupe_key: `operator-test|${runId}`,
-    event_type: "permit_signal"
+    event_type: String(record.event_type || "permit_signal")
   });
 
   if (sourceEventError) throw new Error(sourceEventError.message);
@@ -130,23 +328,27 @@ async function main() {
     id: opportunityId,
     tenant_id: tenantId,
     source_event_id: sourceEventId,
-    opportunity_type: "permit_signal",
-    service_line: "restoration",
-    title: "Operator pilot opportunity",
-    description: "Operator test generated opportunity",
+    opportunity_type: String(record.event_type || "permit_signal"),
+    service_line: serviceLine,
+    title,
+    description,
     urgency_score: scores.urgency,
     job_likelihood_score: scores.likelihood,
     contactability_score: scores.contactability,
-    source_reliability_score: scores.sourceReliability,
+    source_reliability_score: sourceReliability,
     revenue_band: "high",
     catastrophe_linkage_score: scores.catastrophe,
-    location_text: "350 5th Ave, New York, NY 10118",
-    location: "SRID=4326;POINT(-73.9857 40.7484)",
+    location_text: locationText,
+    location: `SRID=4326;POINT(${lng} ${lat})`,
     postal_code: "10001",
     contact_status: "identified",
     routing_status: "pending",
     lifecycle_status: "new",
-    explainability_json: { operator_test: true }
+    explainability_json: {
+      operator_test: true,
+      mode: mode.mode,
+      connector_input_mode: pulled.mode
+    }
   });
 
   if (opportunityError) throw new Error(opportunityError.message);
@@ -156,7 +358,12 @@ async function main() {
     .from("v2_opportunities")
     .update({
       job_likelihood_score: Math.max(scores.likelihood, 70),
-      explainability_json: { operator_test: true, rescored: true }
+      explainability_json: {
+        operator_test: true,
+        rescored: true,
+        mode: mode.mode,
+        connector_input_mode: pulled.mode
+      }
     })
     .eq("id", opportunityId);
 
@@ -164,14 +371,14 @@ async function main() {
   console.log("opportunity scored");
 
   let matchedTerritoryId = null;
-  const usePolygon = String(process.env.SB_USE_POLYGON_ROUTING || "").toLowerCase() === "true";
+  const usePolygon = envTrue("SB_USE_POLYGON_ROUTING");
 
   if (usePolygon) {
     const { data: match, error } = await supabase.rpc("match_territory_by_point", {
       p_tenant_id: tenantId,
-      p_lat: 40.7484,
-      p_lng: -73.9857,
-      p_service_line: "restoration"
+      p_lat: lat,
+      p_lng: lng,
+      p_service_line: serviceLine
     });
 
     if (error) throw new Error(error.message);
@@ -207,7 +414,7 @@ async function main() {
     status: "pending_acceptance",
     assigned_at: new Date().toISOString(),
     sla_due_at: new Date(Date.now() + 45 * 60_000).toISOString(),
-    metadata: { operator_test: true, territory_id: matchedTerritoryId }
+    metadata: { operator_test: true, territory_id: matchedTerritoryId, mode: mode.mode }
   });
 
   if (assignmentError) throw new Error(assignmentError.message);
@@ -231,6 +438,11 @@ async function main() {
 
   if (leadError) throw new Error(leadError.message);
 
+  const twilioConfigured = Boolean(
+    process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER
+  );
+  const hubspotConfigured = Boolean(process.env.HUBSPOT_ACCESS_TOKEN);
+
   const { error: outreachError } = await supabase.from("v2_outreach_events").insert([
     {
       tenant_id: tenantId,
@@ -239,8 +451,9 @@ async function main() {
       channel: "sms",
       event_type: "sent",
       sent_at: new Date().toISOString(),
-      outcome: "sent_via_twilio",
-      provider_message_id: `operator-sms-${runId}`
+      outcome: twilioConfigured ? "sent_via_twilio" : "twilio_not_configured",
+      provider_message_id: `operator-sms-${runId}`,
+      metadata: { mode: mode.mode }
     },
     {
       tenant_id: tenantId,
@@ -249,8 +462,9 @@ async function main() {
       channel: "crm_task",
       event_type: "sent",
       sent_at: new Date().toISOString(),
-      outcome: "hubspot_task_created",
-      provider_message_id: `operator-crm-${runId}`
+      outcome: hubspotConfigured ? "hubspot_task_created" : "hubspot_not_configured",
+      provider_message_id: `operator-crm-${runId}`,
+      metadata: { mode: mode.mode }
     }
   ]);
 
@@ -264,7 +478,7 @@ async function main() {
       tenant_id: tenantId,
       lead_id: leadId,
       external_crm_id: `operator-crm-${runId}`,
-      job_type: "restoration",
+      job_type: serviceLine,
       booked_at: new Date().toISOString(),
       scheduled_at: new Date(Date.now() + 86_400_000).toISOString(),
       revenue_amount: 5200,

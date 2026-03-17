@@ -24,6 +24,11 @@ function toFiniteNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  return {};
+}
+
 function parsePointText(pointText: string) {
   const match = pointText.match(/POINT\(([-\d.]+)\s+([-\d.]+)\)/i);
   if (!match) return null;
@@ -52,10 +57,6 @@ function parseLatLng(location: unknown) {
 
   return null;
 }
-
-export const routingInternals = {
-  parseLatLng
-};
 
 async function findTerritoryByPolygon({
   supabase,
@@ -118,20 +119,68 @@ function selectEnterpriseOverrideRule(rules: Array<Record<string, unknown>>) {
 
 function selectCatastropheOverrideRule({
   rules,
-  catastropheLinkageScore
+  catastropheLinkageScore,
+  urgencyScore,
+  hasClusterMembership
 }: {
   rules: Array<Record<string, unknown>>;
   catastropheLinkageScore: number;
+  urgencyScore: number;
+  hasClusterMembership: boolean;
 }) {
   return (
     rules.find((rule) => {
       const cfg = (rule.rule_json || {}) as Record<string, unknown>;
       if (cfg.kind !== "catastrophe_override") return false;
       const threshold = Number(cfg.threshold || 70);
-      return catastropheLinkageScore >= threshold;
+      const urgentThreshold = Number(cfg.urgent_threshold || Math.max(45, threshold - 15));
+      return catastropheLinkageScore >= threshold || (hasClusterMembership && urgencyScore >= urgentThreshold);
     }) || null
   );
 }
+
+function computeSlaMinutes({
+  urgencyScore,
+  catastropheLinkageScore,
+  hasClusterMembership,
+  estimatedResponseWindow
+}: {
+  urgencyScore: number;
+  catastropheLinkageScore: number;
+  hasClusterMembership: boolean;
+  estimatedResponseWindow: string;
+}) {
+  const responseWindow = estimatedResponseWindow.trim().toLowerCase();
+
+  if (responseWindow === "0-4h" || urgencyScore >= 90) return 15;
+  if (hasClusterMembership && catastropheLinkageScore >= 65) return 20;
+  if (responseWindow === "4-24h" || urgencyScore >= 72 || catastropheLinkageScore >= 75) return 30;
+  return 45;
+}
+
+function resolveRoutingInputs(opportunity: Record<string, unknown>) {
+  const explainability = asRecord(opportunity.explainability_json);
+  return {
+    serviceLine: String(
+      opportunity.service_line ||
+        explainability.primary_service_line ||
+        opportunity.opportunity_type ||
+        "general"
+    ),
+    urgencyScore: Number(opportunity.urgency_score || explainability.urgency_score || 0),
+    catastropheLinkageScore: Number(opportunity.catastrophe_linkage_score || 0),
+    hasClusterMembership: Boolean(opportunity.incident_cluster_id),
+    estimatedResponseWindow: String(explainability.estimated_response_window || "24-72h"),
+    postalCode: String(opportunity.postal_code || parsePostalCode(String(opportunity.location_text || "")) || "") || null,
+    latLng: parseLatLng(opportunity.location)
+  };
+}
+
+export const routingInternals = {
+  parseLatLng,
+  computeSlaMinutes,
+  resolveRoutingInputs
+};
 
 export async function findTerritoryForOpportunity({
   supabase,
@@ -215,10 +264,20 @@ async function computeDecision({
   enterpriseTenantId: string;
   opportunity: Record<string, unknown>;
 }): Promise<V2AssignmentDecision> {
-  const serviceLine = String(opportunity.service_line || opportunity.opportunity_type || "general");
-  const catastrophe = Number(opportunity.catastrophe_linkage_score || 0);
-  const postalCode = String(opportunity.postal_code || parsePostalCode(String(opportunity.location_text || "")) || "") || null;
-  const latLng = parseLatLng(opportunity.location);
+  const input = resolveRoutingInputs(opportunity);
+  const serviceLine = input.serviceLine;
+  const urgencyScore = input.urgencyScore;
+  const catastrophe = input.catastropheLinkageScore;
+  const hasClusterMembership = input.hasClusterMembership;
+  const estimatedResponseWindow = input.estimatedResponseWindow;
+  const postalCode = input.postalCode;
+  const latLng = input.latLng;
+  const baselineSlaMinutes = computeSlaMinutes({
+    urgencyScore,
+    catastropheLinkageScore: catastrophe,
+    hasClusterMembership,
+    estimatedResponseWindow
+  });
 
   const { data: candidateRules } = await supabase
     .from("v2_routing_rules")
@@ -237,11 +296,16 @@ async function computeDecision({
       backupTenantId: cfg.backup_tenant_id ? String(cfg.backup_tenant_id) : null,
       escalationTenantId: cfg.escalation_tenant_id ? String(cfg.escalation_tenant_id) : enterpriseTenantId,
       reason: "enterprise_override",
-      slaMinutes: toMinutes(cfg.sla_minutes, 30)
+      slaMinutes: Math.min(toMinutes(cfg.sla_minutes, 30), baselineSlaMinutes)
     };
   }
 
-  const catastropheOverride = selectCatastropheOverrideRule({ rules, catastropheLinkageScore: catastrophe });
+  const catastropheOverride = selectCatastropheOverrideRule({
+    rules,
+    catastropheLinkageScore: catastrophe,
+    urgencyScore,
+    hasClusterMembership
+  });
   if (catastropheOverride) {
     const cfg = (catastropheOverride.rule_json || {}) as Record<string, unknown>;
     return {
@@ -249,7 +313,7 @@ async function computeDecision({
       backupTenantId: cfg.backup_tenant_id ? String(cfg.backup_tenant_id) : null,
       escalationTenantId: cfg.escalation_tenant_id ? String(cfg.escalation_tenant_id) : enterpriseTenantId,
       reason: "catastrophe_override",
-      slaMinutes: toMinutes(cfg.sla_minutes, 20)
+      slaMinutes: Math.min(toMinutes(cfg.sla_minutes, 20), baselineSlaMinutes)
     };
   }
 
@@ -268,7 +332,8 @@ async function computeDecision({
       assignedTenantId: tenantId
     });
 
-    const underPressure = pressure >= 20;
+    const pressureLimit = urgencyScore >= 80 || hasClusterMembership ? 10 : 20;
+    const underPressure = pressure >= pressureLimit;
     const backupTenant = await findBackupTenant({
       supabase,
       enterpriseTenantId,
@@ -281,7 +346,7 @@ async function computeDecision({
         backupTenantId: tenantId,
         escalationTenantId: enterpriseTenantId,
         reason: "capacity_override",
-        slaMinutes: 20
+        slaMinutes: Math.min(20, baselineSlaMinutes)
       };
     }
 
@@ -290,7 +355,7 @@ async function computeDecision({
       backupTenantId: backupTenant,
       escalationTenantId: enterpriseTenantId,
       reason: "territory_match",
-      slaMinutes: 45
+      slaMinutes: baselineSlaMinutes
     };
   }
 
@@ -305,7 +370,7 @@ async function computeDecision({
     backupTenantId: fallbackBackup,
     escalationTenantId: enterpriseTenantId,
     reason: "fallback",
-    slaMinutes: 60
+    slaMinutes: Math.max(baselineSlaMinutes, 60)
   };
 }
 
@@ -324,7 +389,9 @@ export async function routeOpportunityV2({
 }) {
   const { data: opportunity, error: oppError } = await supabase
     .from("v2_opportunities")
-    .select("id,tenant_id,service_line,opportunity_type,postal_code,location_text,location,catastrophe_linkage_score,routing_status")
+    .select(
+      "id,tenant_id,service_line,opportunity_type,postal_code,location_text,location,catastrophe_linkage_score,urgency_score,incident_cluster_id,explainability_json,routing_status"
+    )
     .eq("id", opportunityId)
     .eq("tenant_id", tenantId)
     .single();
@@ -339,6 +406,9 @@ export async function routeOpportunityV2({
   });
 
   const slaDueAt = new Date(Date.now() + decision.slaMinutes * 60_000).toISOString();
+  const explainability = asRecord(opportunity.explainability_json);
+  const primaryServiceLine = String(opportunity.service_line || explainability.primary_service_line || opportunity.opportunity_type || "general");
+  const estimatedResponseWindow = String(explainability.estimated_response_window || "24-72h");
 
   const { data: assignment, error: assignmentError } = await supabase
     .from("v2_assignments")
@@ -354,7 +424,12 @@ export async function routeOpportunityV2({
       sla_due_at: slaDueAt,
       metadata: {
         precedence_reason: decision.reason,
-        use_polygon_routing: featureFlags.usePolygonRouting
+        use_polygon_routing: featureFlags.usePolygonRouting,
+        primary_service_line: primaryServiceLine,
+        urgency_score: Number(opportunity.urgency_score || 0),
+        catastrophe_linkage_score: Number(opportunity.catastrophe_linkage_score || 0),
+        cluster_member: Boolean(opportunity.incident_cluster_id),
+        estimated_response_window: estimatedResponseWindow
       }
     })
     .select("id,status,sla_due_at,assigned_tenant_id,backup_tenant_id,escalation_tenant_id")

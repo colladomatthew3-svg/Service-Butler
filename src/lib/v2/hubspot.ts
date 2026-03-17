@@ -4,6 +4,11 @@ export function isHubSpotConfigured() {
   return Boolean(process.env.HUBSPOT_ACCESS_TOKEN);
 }
 
+function hubspotSafeModeEnabled() {
+  const value = String(process.env.SB_HUBSPOT_SAFE_MODE || "").trim().toLowerCase();
+  return value === "1" || value === "true" || value === "on" || value === "yes";
+}
+
 async function hubspotRequest(path: string, init?: RequestInit) {
   const token = process.env.HUBSPOT_ACCESS_TOKEN;
   if (!token) throw new Error("HUBSPOT_ACCESS_TOKEN is not configured");
@@ -32,12 +37,27 @@ export async function createHubSpotTask(input: {
   ownerId?: string | null;
   contactId?: string | null;
   companyId?: string | null;
+  safeMode?: boolean;
 }) {
   if (!isHubSpotConfigured()) {
     return {
       skipped: true,
       providerId: null,
-      reason: "HUBSPOT_ACCESS_TOKEN missing"
+      reason: "HUBSPOT_ACCESS_TOKEN missing",
+      mode: "disabled" as const
+    };
+  }
+
+  const safeMode = input.safeMode ?? hubspotSafeModeEnabled();
+  if (safeMode) {
+    return {
+      skipped: false,
+      providerId: `hubspot-safe-${Date.now()}`,
+      mode: "safe" as const,
+      response: {
+        preview: true,
+        title: input.title
+      }
     };
   }
 
@@ -75,6 +95,33 @@ export async function createHubSpotTask(input: {
   return {
     skipped: false,
     providerId: String(response.id || "") || null,
+    mode: "live" as const,
     response
   };
+}
+
+export async function validateHubSpotAccess() {
+  if (!isHubSpotConfigured()) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "HUBSPOT_ACCESS_TOKEN missing"
+    };
+  }
+
+  try {
+    const payload = await hubspotRequest("/integrations/v1/me");
+    return {
+      ok: true,
+      skipped: false,
+      portalId: String(payload.portalId || ""),
+      payload
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      skipped: false,
+      reason: error instanceof Error ? error.message : "HubSpot validation failed"
+    };
+  }
 }

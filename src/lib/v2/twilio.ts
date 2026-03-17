@@ -2,20 +2,42 @@ function twilioConfig() {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   const fromNumber = process.env.TWILIO_PHONE_NUMBER;
-  return { accountSid, authToken, fromNumber, configured: Boolean(accountSid && authToken && fromNumber) };
+  const safeMode = String(process.env.SB_TWILIO_SAFE_MODE || "").trim().toLowerCase();
+  return {
+    accountSid,
+    authToken,
+    fromNumber,
+    configured: Boolean(accountSid && authToken && fromNumber),
+    safeModeByDefault: safeMode === "1" || safeMode === "true" || safeMode === "on" || safeMode === "yes"
+  };
 }
 
 function buildBasicAuth(username: string, password: string) {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 }
 
-export async function sendTwilioMessage(input: { to: string; body: string }) {
+export async function sendTwilioMessage(input: { to: string; body: string; safeMode?: boolean; testMode?: boolean }) {
   const cfg = twilioConfig();
   if (!cfg.configured || !cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
     return {
       skipped: true,
       providerId: null,
-      reason: "Twilio credentials missing"
+      reason: "Twilio credentials missing",
+      mode: "disabled" as const
+    };
+  }
+
+  const safeMode = input.safeMode ?? cfg.safeModeByDefault;
+  if (safeMode) {
+    return {
+      skipped: false,
+      providerId: `twilio-safe-${Date.now()}`,
+      mode: "safe" as const,
+      response: {
+        preview: true,
+        to: input.to,
+        body: input.body
+      }
     };
   }
 
@@ -41,23 +63,41 @@ export async function sendTwilioMessage(input: { to: string; body: string }) {
   return {
     skipped: false,
     providerId: String(payload.sid || "") || null,
+    mode: input.testMode ? ("test" as const) : ("live" as const),
     response: payload
   };
 }
 
-export async function queueTwilioVoiceTask(input: { to: string; note: string }) {
+export async function queueTwilioVoiceTask(input: { to: string; note: string; safeMode?: boolean }) {
   const cfg = twilioConfig();
   if (!cfg.configured) {
     return {
       skipped: true,
       providerId: null,
-      reason: "Twilio credentials missing"
+      reason: "Twilio credentials missing",
+      mode: "disabled" as const
+    };
+  }
+
+  const safeMode = input.safeMode ?? cfg.safeModeByDefault;
+  if (safeMode) {
+    return {
+      skipped: false,
+      providerId: `voice-safe-${Date.now()}`,
+      mode: "safe" as const,
+      response: {
+        queued: false,
+        preview: true,
+        to: input.to,
+        note: input.note
+      }
     };
   }
 
   return {
     skipped: false,
     providerId: `voice-task:${Date.now()}`,
+    mode: "live" as const,
     response: {
       queued: true,
       to: input.to,

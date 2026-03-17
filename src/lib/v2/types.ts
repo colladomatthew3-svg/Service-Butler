@@ -23,6 +23,7 @@ export type V2OpportunityScoreVector = {
   sourceReliabilityScore: number;
   revenueBand: V2RevenueBand;
   catastropheLinkageScore: number;
+  confidenceScore: number;
   explainability: Record<string, unknown>;
 };
 

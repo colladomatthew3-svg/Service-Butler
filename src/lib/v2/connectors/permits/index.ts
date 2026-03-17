@@ -7,7 +7,9 @@ import type {
 } from "@/lib/v2/connectors/types";
 import { resolvePermitsProvider } from "@/lib/v2/connectors/permits/providers";
 
-const CONNECTOR_VERSION = "v2.1.0";
+const CONNECTOR_VERSION = "v2.2.0";
+
+type PermitCategory = "roof" | "plumbing" | "hvac" | "electrical" | "remediation_repair" | "renovation";
 
 function toIso(value: unknown) {
   const raw = String(value || "").trim();
@@ -28,14 +30,79 @@ function computeFreshnessScore(occurredAtIso: string) {
   return Math.max(0, Math.min(100, Math.round(100 - ageHours * 4)));
 }
 
-function inferServiceLine(record: Record<string, unknown>) {
-  const text = `${record.permit_type || ""} ${record.description || ""} ${record.scope || ""}`.toLowerCase();
-  if (text.includes("roof")) return "roofing";
-  if (text.includes("plumb") || text.includes("sewer")) return "plumbing";
-  if (text.includes("hvac") || text.includes("furnace") || text.includes("boiler")) return "hvac";
-  if (text.includes("asbestos") || text.includes("abatement")) return "asbestos";
-  if (text.includes("fire") || text.includes("water") || text.includes("mitigation")) return "restoration";
-  return "general";
+function normalizeText(value: unknown) {
+  return String(value || "").toLowerCase();
+}
+
+function classifyPermitCategory(record: Record<string, unknown>): PermitCategory {
+  const text = `${record.permit_type || ""} ${record.work_class || ""} ${record.description || ""} ${record.scope || ""}`.toLowerCase();
+
+  if (text.includes("roof") || text.includes("shingle")) return "roof";
+  if (text.includes("plumb") || text.includes("sewer") || text.includes("pipe") || text.includes("drain")) return "plumbing";
+  if (text.includes("hvac") || text.includes("furnace") || text.includes("boiler") || text.includes("ac ") || text.includes("air condition")) return "hvac";
+  if (text.includes("electrical") || text.includes("panel") || text.includes("wiring")) return "electrical";
+  if (text.includes("remediation") || text.includes("repair") || text.includes("restoration") || text.includes("mitigation")) {
+    return "remediation_repair";
+  }
+  return "renovation";
+}
+
+function categoryToServiceLines(category: PermitCategory): string[] {
+  if (category === "roof") return ["roofing", "restoration"];
+  if (category === "plumbing") return ["plumbing", "restoration"];
+  if (category === "hvac") return ["hvac"];
+  if (category === "electrical") return ["electrical"];
+  if (category === "remediation_repair") return ["restoration", "general"];
+  return ["general"];
+}
+
+function inferDemandTiming(record: Record<string, unknown>, category: PermitCategory) {
+  const text = `${record.description || ""} ${record.scope || ""}`.toLowerCase();
+  const immediateKeywords = ["emergency", "damage", "leak", "burst", "fire", "flood", "mitigation", "unsafe"];
+  const immediate = immediateKeywords.some((keyword) => text.includes(keyword));
+
+  if (immediate) {
+    return {
+      demandTiming: "immediate_service_demand",
+      severityHint: 76,
+      urgencyHint: 80,
+      likelyJobType:
+        category === "roof"
+          ? "roof damage inspection"
+          : category === "plumbing"
+            ? "emergency plumbing"
+            : category === "remediation_repair"
+              ? "water mitigation"
+              : category === "hvac"
+                ? "HVAC outage"
+                : "repair dispatch"
+    };
+  }
+
+  return {
+    demandTiming: "downstream_upsell",
+    severityHint: category === "renovation" ? 38 : 52,
+    urgencyHint: category === "renovation" ? 35 : 48,
+    likelyJobType:
+      category === "roof"
+        ? "roof damage inspection"
+        : category === "plumbing"
+          ? "plumbing service"
+          : category === "hvac"
+            ? "HVAC replacement consult"
+            : category === "electrical"
+              ? "electrical safety inspection"
+              : "renovation follow-up"
+  };
+}
+
+function classifyOpportunityType(category: PermitCategory) {
+  if (category === "roof") return "roof_permit_signal";
+  if (category === "plumbing") return "plumbing_permit_signal";
+  if (category === "hvac") return "hvac_permit_signal";
+  if (category === "electrical") return "electrical_permit_signal";
+  if (category === "remediation_repair") return "restoration_permit_signal";
+  return "permit_signal";
 }
 
 export const permitsConnector: ConnectorAdapter = {
@@ -55,27 +122,46 @@ export const permitsConnector: ConnectorAdapter = {
       const title = String(record.title || record.permit_type || `Permit event ${index + 1}`);
       const occurredAt = toIso(record.occurred_at || record.issued_at || record.created_at);
       const freshnessScore = computeFreshnessScore(occurredAt);
-      const serviceLine = inferServiceLine(record);
+      const category = classifyPermitCategory(record);
+      const serviceLineCandidates = categoryToServiceLines(category);
+      const demand = inferDemandTiming(record, category);
+      const primaryServiceLine = serviceLineCandidates[0] || "general";
 
       return {
         occurredAt,
         dedupeKey: `${record.id || record.permit_number || title}|${occurredAt}`,
         eventType: String(record.event_type || "permit_signal"),
+        eventCategory: "permit",
         title,
         description: String(record.description || record.scope || ""),
         locationText: String(record.location || record.address || record.city || ""),
+        addressText: String(record.address || record.location || ""),
+        city: String(record.city || ""),
+        state: String(record.state || ""),
+        postalCode: String(record.postal_code || record.zip || ""),
         latitude: record.latitude != null ? toNumber(record.latitude, NaN) : null,
         longitude: record.longitude != null ? toNumber(record.longitude, NaN) : null,
-        serviceLine,
-        severity: toNumber(record.severity, 58),
+        serviceLine: primaryServiceLine,
+        serviceLineCandidates,
+        severity: toNumber(record.severity, demand.severityHint),
+        severityHint: demand.severityHint,
+        urgencyHint: demand.urgencyHint,
+        likelyJobType: demand.likelyJobType,
+        estimatedResponseWindow: demand.demandTiming === "immediate_service_demand" ? "0-4h" : "24-72h",
+        sourceName: String(input.config.connector_name || input.config.source_name || "Permits Provider"),
+        sourceProvenance,
         sourceReliability: toNumber(record.source_reliability, 74),
         supportingSignalsCount: toNumber(record.supporting_signals_count, 1),
-        catastropheSignal: toNumber(record.catastrophe_signal, 12),
+        catastropheSignal: toNumber(record.catastrophe_signal, category === "remediation_repair" ? 40 : 12),
         rawPayload: record,
         normalizedPayload: {
           permit_id: record.id || record.permit_number || null,
           permit_type: record.permit_type || null,
-          service_line: serviceLine,
+          work_class: record.work_class || record.scope || null,
+          permit_category: category,
+          demand_timing: demand.demandTiming,
+          service_line_candidates: serviceLineCandidates,
+          likely_job_type: demand.likelyJobType,
           source_provenance: sourceProvenance,
           terms_status: termsStatus,
           data_freshness_score: freshnessScore,
@@ -91,13 +177,13 @@ export const permitsConnector: ConnectorAdapter = {
   },
 
   classify(event) {
-    const serviceLine = String(event.serviceLine || "general");
-    if (serviceLine === "roofing") return { opportunityType: "roof_permit_signal", serviceLine };
-    if (serviceLine === "plumbing") return { opportunityType: "plumbing_permit_signal", serviceLine };
-    if (serviceLine === "hvac") return { opportunityType: "hvac_permit_signal", serviceLine };
-    if (serviceLine === "asbestos") return { opportunityType: "abatement_permit_signal", serviceLine };
-    if (serviceLine === "restoration") return { opportunityType: "restoration_permit_signal", serviceLine };
-    return { opportunityType: "permit_signal", serviceLine };
+    const category = normalizeText(event.normalizedPayload.permit_category);
+    if (category === "roof") return { opportunityType: "roof_permit_signal", serviceLine: "roofing" };
+    if (category === "plumbing") return { opportunityType: "plumbing_permit_signal", serviceLine: "plumbing" };
+    if (category === "hvac") return { opportunityType: "hvac_permit_signal", serviceLine: "hvac" };
+    if (category === "electrical") return { opportunityType: "electrical_permit_signal", serviceLine: "electrical" };
+    if (category === "remediation_repair") return { opportunityType: "restoration_permit_signal", serviceLine: "restoration" };
+    return { opportunityType: classifyOpportunityType("renovation"), serviceLine: event.serviceLine || "general" };
   },
 
   compliancePolicy(input: ConnectorPullInput): ConnectorCompliancePolicy {

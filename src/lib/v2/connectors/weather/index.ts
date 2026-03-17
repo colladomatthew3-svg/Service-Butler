@@ -19,12 +19,22 @@ type NwsAlert = {
   };
 };
 
+const CONNECTOR_VERSION = "v2.2.0";
+
 function severityWeight(value: string) {
   const normalized = value.toLowerCase();
   if (normalized === "extreme") return 95;
   if (normalized === "severe") return 82;
   if (normalized === "moderate") return 65;
   return 48;
+}
+
+function urgencyWeight(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("immediate")) return 92;
+  if (normalized.includes("expected")) return 75;
+  if (normalized.includes("future")) return 58;
+  return 52;
 }
 
 function timeoutFetch(url: string, timeoutMs = 9000) {
@@ -35,6 +45,42 @@ function timeoutFetch(url: string, timeoutMs = 9000) {
     headers: { "user-agent": "ServiceButler-V2-Connector/1.0" },
     cache: "no-store"
   }).finally(() => clearTimeout(timer));
+}
+
+function inferWeatherCategory(event: string) {
+  const text = event.toLowerCase();
+  if (text.includes("hail")) return "hail";
+  if (text.includes("wind") || text.includes("tornado")) return "wind";
+  if (text.includes("freeze") || text.includes("ice") || text.includes("cold")) return "freeze";
+  if (text.includes("flood") || text.includes("water")) return "flood";
+  if (text.includes("storm") || text.includes("thunder")) return "storm";
+  return "weather";
+}
+
+function categoryServiceLines(category: string) {
+  if (category === "hail") return ["roofing", "restoration"];
+  if (category === "wind") return ["roofing", "restoration"];
+  if (category === "freeze") return ["plumbing", "hvac"];
+  if (category === "flood") return ["restoration", "plumbing"];
+  if (category === "storm") return ["restoration", "roofing"];
+  return ["general"];
+}
+
+function likelyJobType(category: string) {
+  if (category === "hail" || category === "wind") return "roof damage inspection";
+  if (category === "freeze") return "emergency plumbing";
+  if (category === "flood") return "water mitigation";
+  if (category === "storm") return "storm restoration";
+  return "weather risk inspection";
+}
+
+function eventTypeFromCategory(category: string) {
+  if (category === "hail") return "weather_hail_alert";
+  if (category === "wind") return "weather_wind_alert";
+  if (category === "freeze") return "weather_freeze_alert";
+  if (category === "flood") return "weather_flood_alert";
+  if (category === "storm") return "weather_storm_alert";
+  return "weather_alert";
 }
 
 export const weatherConnector: ConnectorAdapter = {
@@ -53,37 +99,63 @@ export const weatherConnector: ConnectorAdapter = {
     return (payload.features || []) as unknown as Record<string, unknown>[];
   },
 
-  async normalize(records: Record<string, unknown>[]) {
+  async normalize(records: Record<string, unknown>[], input: ConnectorPullInput) {
     const normalized: ConnectorNormalizedEvent[] = [];
+
+    const lat = Number(input.config.latitude ?? input.config.lat);
+    const lon = Number(input.config.longitude ?? input.config.lon);
+    const city = String(input.config.city || "");
+    const state = String(input.config.state || "");
+    const postalCode = String(input.config.postal_code || input.config.zip || "");
+    const sourceName = String(input.config.connector_name || input.config.source_name || "NOAA Weather Alerts");
 
     for (const record of records) {
       const alert = record as unknown as NwsAlert;
       const props = alert.properties || {};
-      const title = props.headline || props.event || "NOAA alert";
-      const eventType = String(props.event || "weather_alert").toLowerCase().replace(/\s+/g, "_");
+      const event = String(props.event || "weather alert");
+      const category = inferWeatherCategory(event);
+      const lines = categoryServiceLines(category);
+      const severityHint = severityWeight(String(props.severity || "moderate"));
+      const urgencyHint = urgencyWeight(String(props.urgency || "future"));
       const occurredAt = props.sent || new Date().toISOString();
-      const severity = severityWeight(String(props.severity || "moderate"));
-      const urgencyWord = String(props.urgency || "future").toLowerCase();
+      const title = props.headline || event || "NOAA alert";
 
       normalized.push({
         occurredAt,
         dedupeKey: `${alert.id || title}|${occurredAt}`,
-        eventType,
+        eventType: eventTypeFromCategory(category),
+        eventCategory: category,
         title,
         description: props.description,
-        locationText: props.areaDesc,
-        serviceLine: eventType.includes("flood") || eventType.includes("wind") ? "restoration" : "general",
-        severity,
+        locationText: props.areaDesc || `${city}${city && state ? ", " : ""}${state}`,
+        addressText: String(props.areaDesc || ""),
+        city,
+        state,
+        postalCode,
+        latitude: Number.isFinite(lat) ? lat : null,
+        longitude: Number.isFinite(lon) ? lon : null,
+        serviceLine: lines[0] || "general",
+        serviceLineCandidates: lines,
+        severity: severityHint,
+        severityHint,
+        urgencyHint,
+        likelyJobType: likelyJobType(category),
+        estimatedResponseWindow: urgencyHint >= 80 ? "0-4h" : "4-24h",
+        sourceName,
+        sourceProvenance: "api.weather.gov",
         sourceReliability: 86,
         supportingSignalsCount: 1,
-        catastropheSignal: urgencyWord.includes("immediate") ? 90 : 60,
+        catastropheSignal: category === "storm" || category === "flood" ? urgencyHint : Math.max(25, Math.round(urgencyHint * 0.7)),
         rawPayload: record,
         normalizedPayload: {
           alert_id: alert.id,
           event: props.event,
+          weather_category: category,
           area_desc: props.areaDesc,
           severity: props.severity,
-          urgency: props.urgency
+          urgency: props.urgency,
+          source_provenance: "api.weather.gov",
+          connector_version: CONNECTOR_VERSION
         }
       });
     }
@@ -96,14 +168,15 @@ export const weatherConnector: ConnectorAdapter = {
   },
 
   classify(event) {
-    const eventType = event.eventType.toLowerCase();
-    if (eventType.includes("flood") || eventType.includes("storm") || eventType.includes("wind")) {
-      return { opportunityType: "storm_restoration", serviceLine: "restoration" };
-    }
-    if (eventType.includes("freeze")) {
-      return { opportunityType: "freeze_pipe_risk", serviceLine: "plumbing" };
-    }
-    return { opportunityType: "weather_risk", serviceLine: event.serviceLine || "general" };
+    const category = String(event.eventCategory || "weather");
+    const serviceLine = event.serviceLineCandidates?.[0] || event.serviceLine || "general";
+
+    if (category === "flood") return { opportunityType: "storm_restoration", serviceLine: "restoration" };
+    if (category === "freeze") return { opportunityType: "freeze_pipe_risk", serviceLine: "plumbing" };
+    if (category === "hail" || category === "wind") return { opportunityType: "roof_damage_risk", serviceLine: "roofing" };
+    if (category === "storm") return { opportunityType: "storm_restoration", serviceLine: "restoration" };
+
+    return { opportunityType: "weather_risk", serviceLine };
   },
 
   compliancePolicy(): ConnectorCompliancePolicy {

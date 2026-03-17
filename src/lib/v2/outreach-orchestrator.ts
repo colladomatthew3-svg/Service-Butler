@@ -187,11 +187,23 @@ export async function dispatchOutreach(input: DispatchInput) {
     if (input.channel === "sms") {
       const sent = await sendTwilioMessage({ to: input.to, body: input.body });
       providerMessageId = sent.providerId;
-      outcome = sent.skipped ? String(sent.reason || "skipped") : "sent_via_twilio";
+      if (sent.skipped) {
+        outcome = String(sent.reason || "skipped");
+      } else if (sent.mode === "safe") {
+        outcome = "sent_via_twilio_safe_mode";
+      } else {
+        outcome = "sent_via_twilio";
+      }
     } else if (input.channel === "voice") {
       const voice = await queueTwilioVoiceTask({ to: input.to, note: input.body });
       providerMessageId = voice.providerId;
-      outcome = voice.skipped ? String(voice.reason || "skipped") : "voice_task_created";
+      if (voice.skipped) {
+        outcome = String(voice.reason || "skipped");
+      } else if (voice.mode === "safe") {
+        outcome = "voice_task_safe_mode";
+      } else {
+        outcome = "voice_task_created";
+      }
     } else if (input.channel === "crm_task") {
       const task = await createHubSpotTask({
         title: input.subject || "Service Butler follow-up",
@@ -199,7 +211,13 @@ export async function dispatchOutreach(input: DispatchInput) {
         dueAtIso: new Date(Date.now() + 60 * 60 * 1000).toISOString()
       });
       providerMessageId = task.providerId;
-      outcome = task.skipped ? String(task.reason || "skipped") : "hubspot_task_created";
+      if (task.skipped) {
+        outcome = String(task.reason || "skipped");
+      } else if (task.mode === "safe") {
+        outcome = "hubspot_task_safe_mode";
+      } else {
+        outcome = "hubspot_task_created";
+      }
     } else if (input.channel === "email") {
       outcome = "email_template_queued";
     }

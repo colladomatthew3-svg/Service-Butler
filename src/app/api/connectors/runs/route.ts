@@ -7,6 +7,34 @@ import { getConnectorByKey } from "@/lib/v2/connectors/registry";
 import { runConnectorForSource } from "@/lib/v2/connectors/runner";
 import type { AccountRole } from "@/types/domain";
 
+function parseEncryptedConfig(raw: unknown) {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw as Record<string, unknown>;
+  if (typeof raw !== "string") return {};
+  const trimmed = raw.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function connectorRuntimeMode(sourceType: string, config: Record<string, unknown>) {
+  const normalizedType = String(sourceType || "").toLowerCase();
+  const terms = String(config.terms_status || "").toLowerCase();
+  const hasPermitsProvider = Boolean(config.provider_url || process.env.PERMITS_PROVIDER_URL);
+
+  if (normalizedType.includes("permit")) {
+    if (!hasPermitsProvider) return "simulated";
+    if (terms && terms !== "approved") return "live-partial";
+    return "fully-live";
+  }
+
+  return "fully-live";
+}
+
 export async function GET(req: NextRequest) {
   if (isDemoMode() || !featureFlags.useV2Reads) {
     return NextResponse.json({ connectorRuns: [], mode: "compat" });
@@ -78,6 +106,18 @@ export async function POST(req: NextRequest) {
   const results: Array<Record<string, unknown>> = [];
 
   for (const source of sources) {
+    const decryptedConfig = parseEncryptedConfig(source.config_encrypted);
+    const sourceConfig = {
+      connector_name: source.name,
+      rate_limit_policy: source.rate_limit_policy,
+      compliance_flags: source.compliance_flags,
+      config_encrypted: source.config_encrypted,
+      terms_status: source.terms_status,
+      source_provenance: source.provenance,
+      ...decryptedConfig
+    };
+    const runtimeMode = connectorRuntimeMode(String(source.source_type || "unknown"), sourceConfig);
+
     const key =
       String(body.connectorKey || "").trim() ||
       (String(source.source_type || "").toLowerCase().includes("weather")
@@ -102,20 +142,14 @@ export async function POST(req: NextRequest) {
       tenantId: context.franchiseTenantId,
       sourceId: String(source.id),
       sourceType: String(source.source_type || "unknown"),
-      config: {
-        connector_name: source.name,
-        rate_limit_policy: source.rate_limit_policy,
-        compliance_flags: source.compliance_flags,
-        config_encrypted: source.config_encrypted,
-        terms_status: source.terms_status,
-        source_provenance: source.provenance
-      }
+      config: sourceConfig
     });
 
     if (!health.ok) {
       results.push({
         sourceId: source.id,
         status: "failed",
+        runtimeMode,
         error: health.detail || "Connector healthcheck failed"
       });
       continue;
@@ -126,14 +160,7 @@ export async function POST(req: NextRequest) {
       tenantId: context.franchiseTenantId,
       sourceId: String(source.id),
       sourceType: String(source.source_type || "unknown"),
-      sourceConfig: {
-        connector_name: source.name,
-        rate_limit_policy: source.rate_limit_policy,
-        compliance_flags: source.compliance_flags,
-        config_encrypted: source.config_encrypted,
-        terms_status: source.terms_status,
-        source_provenance: source.provenance
-      },
+      sourceConfig,
       actorUserId: context.userId,
       connector
     });
@@ -141,6 +168,7 @@ export async function POST(req: NextRequest) {
     results.push({
       sourceId: source.id,
       connectorKey: connector.key,
+      runtimeMode,
       ...run
     });
   }

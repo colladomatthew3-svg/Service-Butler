@@ -160,3 +160,33 @@ test("routing parser extracts lat/lng from geography point text", () => {
   const parsed = routingInternals.parseLatLng("SRID=4326;POINT(-73.9857 40.7484)");
   expect(parsed).toEqual({ lat: 40.7484, lng: -73.9857 });
 });
+
+test("routing intelligence inputs prefer primary service line and tighten SLA for urgent clustered signals", () => {
+  const input = routingInternals.resolveRoutingInputs({
+    service_line: null,
+    opportunity_type: "incident_signal",
+    urgency_score: 88,
+    catastrophe_linkage_score: 74,
+    incident_cluster_id: "cluster-1",
+    explainability_json: {
+      primary_service_line: "plumbing",
+      estimated_response_window: "0-4h"
+    },
+    location_text: "Buffalo, NY 14201",
+    location: "SRID=4326;POINT(-78.8784 42.8864)"
+  });
+
+  expect(input.serviceLine).toBe("plumbing");
+  expect(input.hasClusterMembership).toBeTruthy();
+  expect(input.postalCode).toBe("14201");
+  expect(input.latLng).toEqual({ lat: 42.8864, lng: -78.8784 });
+
+  const slaMinutes = routingInternals.computeSlaMinutes({
+    urgencyScore: input.urgencyScore,
+    catastropheLinkageScore: input.catastropheLinkageScore,
+    hasClusterMembership: input.hasClusterMembership,
+    estimatedResponseWindow: input.estimatedResponseWindow
+  });
+
+  expect(slaMinutes).toBe(15);
+});

@@ -25,10 +25,10 @@ export function StatTile({
     <Card className="overflow-hidden">
       <CardBody className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-semantic-muted">{label}</p>
-          <p className="mt-1 font-heading text-3xl font-semibold tracking-tight text-semantic-text">{value}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-semantic-muted">{label}</p>
+          <p className="mt-2 font-heading text-3xl font-semibold tracking-tight text-semantic-text">{value}</p>
         </div>
-        {icon && <div className={`rounded-xl p-3 ${toneClass}`}>{icon}</div>}
+        {icon && <div className={`rounded-2xl p-3 ${toneClass}`}>{icon}</div>}
       </CardBody>
     </Card>
   );

@@ -1,7 +1,33 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const node_crypto_1 = require("node:crypto");
 const supabase_js_1 = require("@supabase/supabase-js");
+const node_fs_1 = __importDefault(require("node:fs"));
+const node_path_1 = __importDefault(require("node:path"));
+function loadEnvFromFile(filePath) {
+    if (!node_fs_1.default.existsSync(filePath))
+        return;
+    const content = node_fs_1.default.readFileSync(filePath, "utf8");
+    for (const rawLine of content.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith("#"))
+            continue;
+        const separator = line.indexOf("=");
+        if (separator <= 0)
+            continue;
+        const key = line.slice(0, separator).trim();
+        const value = line.slice(separator + 1).trim();
+        if (!(key in process.env)) {
+            process.env[key] = value;
+        }
+    }
+}
+const cwd = process.cwd();
+loadEnvFromFile(node_path_1.default.join(cwd, ".env.local"));
+loadEnvFromFile(node_path_1.default.join(cwd, ".env"));
 const twilio_1 = require("../src/lib/v2/twilio");
 const hubspot_1 = require("../src/lib/v2/hubspot");
 function envTrue(name) {

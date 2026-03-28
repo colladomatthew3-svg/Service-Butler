@@ -126,6 +126,15 @@ export const permitsConnector: ConnectorAdapter = {
       const serviceLineCandidates = categoryToServiceLines(category);
       const demand = inferDemandTiming(record, category);
       const primaryServiceLine = serviceLineCandidates[0] || "general";
+      const contactName = String(
+        record.owner_name || record.applicant_name || record.contractor_name || record.contact_name || record.business_name || ""
+      ).trim();
+      const contactPhone = String(
+        record.owner_phone || record.applicant_phone || record.contractor_phone || record.contact_phone || record.phone || ""
+      ).trim();
+      const contactEmail = String(
+        record.owner_email || record.applicant_email || record.contractor_email || record.contact_email || record.email || ""
+      ).trim();
 
       return {
         occurredAt,
@@ -158,6 +167,9 @@ export const permitsConnector: ConnectorAdapter = {
           permit_id: record.id || record.permit_number || null,
           permit_type: record.permit_type || null,
           work_class: record.work_class || record.scope || null,
+          contact_name: contactName || null,
+          contact_phone: contactPhone || null,
+          contact_email: contactEmail || null,
           permit_category: category,
           demand_timing: demand.demandTiming,
           service_line_candidates: serviceLineCandidates,

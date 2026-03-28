@@ -39,6 +39,13 @@ type ForecastResponse = {
 };
 
 export type ForecastSummary = {
+  meta: {
+    provider: "open-meteo" | "demo";
+    timezone?: string;
+    timezoneAbbreviation?: string;
+    updatedAt: string;
+    stale: boolean;
+  };
   location: { lat: number; lng: number };
   current: {
     temp: number;
@@ -64,6 +71,16 @@ export type ForecastSummary = {
 
 const cache = new Map<string, CachedEntry<ForecastSummary>>();
 const TEN_MINUTES = 10 * 60 * 1000;
+const WEATHER_TIMEOUT_MS = 8_000;
+
+function envTrue(value: string | undefined) {
+  if (!value) return false;
+  return ["1", "true", "on", "yes"].includes(value.trim().toLowerCase());
+}
+
+function shouldUseDemoWeatherMode() {
+  return isDemoMode() && !envTrue(process.env.SB_FORCE_LIVE_WEATHER_IN_DEMO);
+}
 const DEMO_LOCATION_MAP: Record<string, { label: string; lat: number; lng: number }> = {
   "11717": { label: "Brentwood, NY 11717", lat: 40.7812, lng: -73.2462 },
   "11705": { label: "Bayport, NY 11705", lat: 40.7384, lng: -73.0518 },
@@ -95,14 +112,48 @@ function conditionLabel(weatherCode?: number) {
   return "Cloudy";
 }
 
-function hourLabel(iso: string) {
+function hourLabel(iso: string, timezone?: string) {
   const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", { hour: "numeric" });
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    timeZone: timezone || undefined
+  });
 }
 
-function dayLabel(iso: string) {
+function dayLabel(iso: string, timezone?: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: timezone || undefined
+  });
+}
+
+async function fetchWithTimeout(url: string, timeoutMs = WEATHER_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { cache: "no-store", signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function boundedNumber(value: number | undefined, fallback = 0) {
+  return Number.isFinite(value) ? Number(value) : fallback;
+}
+
+function staleCachedForecast(lat: number, lng: number) {
+  const cached = cache.get(cacheKey(lat, lng));
+  if (!cached) return null;
+  return {
+    ...cached.value,
+    meta: {
+      ...cached.value.meta,
+      stale: true
+    }
+  } satisfies ForecastSummary;
 }
 
 function forecastStartIndex(hourlyTimes: string[], currentTime?: string) {
@@ -131,6 +182,13 @@ function buildDemoForecast(lat: number, lng: number): ForecastSummary {
   const condition = currentPrecip >= 60 ? "Rain showers" : currentWind >= 24 ? "Windy" : "Partly cloudy";
 
   return {
+    meta: {
+      provider: "demo",
+      timezone: "America/New_York",
+      timezoneAbbreviation: "ET",
+      updatedAt: new Date().toISOString(),
+      stale: false
+    },
     location: { lat, lng },
     current: {
       temp: currentTemp,
@@ -168,8 +226,12 @@ function hashQuery(query: string) {
   return Math.abs(hash);
 }
 
-export async function getForecastByLatLng(lat: number, lng: number): Promise<ForecastSummary> {
-  if (isDemoMode()) {
+export async function getForecastByLatLng(
+  lat: number,
+  lng: number,
+  options?: { forceLive?: boolean }
+): Promise<ForecastSummary> {
+  if (!options?.forceLive && shouldUseDemoWeatherMode()) {
     return buildDemoForecast(lat, lng);
   }
 
@@ -188,9 +250,24 @@ export async function getForecastByLatLng(lat: number, lng: number): Promise<For
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("temperature_unit", "fahrenheit");
 
-  const response = await fetch(url.toString(), { cache: "no-store" });
-  if (!response.ok) throw new Error("Failed to fetch weather forecast");
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(url.toString());
+  } catch {
+    const stale = staleCachedForecast(lat, lng);
+    if (stale) return stale;
+    throw new Error("Failed to fetch weather forecast");
+  }
+
+  if (!response.ok) {
+    const stale = staleCachedForecast(lat, lng);
+    if (stale) return stale;
+    throw new Error("Failed to fetch weather forecast");
+  }
+
   const json = (await response.json()) as ForecastResponse;
+  const timezone = String(json.timezone || "").trim() || undefined;
+  const timezoneAbbreviation = String(json.timezone_abbreviation || "").trim() || undefined;
 
   const current = json.current ?? {
     time: json.hourly.time[0],
@@ -203,25 +280,32 @@ export async function getForecastByLatLng(lat: number, lng: number): Promise<For
   const next6Hours = json.hourly.time.slice(hourlyStart, hourlyStart + 6).map((time, offset) => {
     const index = hourlyStart + offset;
     return {
-    time: hourLabel(time),
-    temp: Math.round(json.hourly.temperature_2m[index]),
-    precipChance: Math.round(json.hourly.precipitation_probability[index] ?? 0),
-    condition: conditionLabel(json.hourly.weather_code[index])
+      time: hourLabel(time, timezone),
+      temp: Math.round(boundedNumber(json.hourly.temperature_2m[index])),
+      precipChance: Math.round(boundedNumber(json.hourly.precipitation_probability[index])),
+      condition: conditionLabel(json.hourly.weather_code[index])
     };
   });
 
   const next5Days = json.daily.time.slice(0, 5).map((date, index) => ({
-    date: dayLabel(date),
-    min: Math.round(json.daily.temperature_2m_min[index]),
-    max: Math.round(json.daily.temperature_2m_max[index]),
-    precipChance: Math.round(json.daily.precipitation_probability_max[index] ?? 0),
+    date: dayLabel(date, timezone),
+    min: Math.round(boundedNumber(json.daily.temperature_2m_min[index])),
+    max: Math.round(boundedNumber(json.daily.temperature_2m_max[index])),
+    precipChance: Math.round(boundedNumber(json.daily.precipitation_probability_max[index])),
     condition: conditionLabel(json.daily.weather_code[index])
   }));
 
   const summary: ForecastSummary = {
+    meta: {
+      provider: "open-meteo",
+      timezone,
+      timezoneAbbreviation,
+      updatedAt: new Date().toISOString(),
+      stale: false
+    },
     location: { lat, lng },
     current: {
-      temp: Math.round(current.temperature_2m),
+      temp: Math.round(boundedNumber(current.temperature_2m)),
       feelsLike: current.apparent_temperature != null ? Math.round(current.apparent_temperature) : undefined,
       windKph: current.wind_speed_10m != null ? Math.round(current.wind_speed_10m) : undefined,
       precipitationChance: current.precipitation_probability != null ? Math.round(current.precipitation_probability) : undefined,
@@ -236,7 +320,7 @@ export async function getForecastByLatLng(lat: number, lng: number): Promise<For
 }
 
 export async function geocodeLocation(query: string) {
-  if (isDemoMode()) {
+  if (shouldUseDemoWeatherMode()) {
     const normalized = normalizeDemoQuery(query);
     const mapped = DEMO_LOCATION_MAP[normalized];
     if (mapped) return mapped;
@@ -260,7 +344,7 @@ export async function geocodeLocation(query: string) {
   url.searchParams.set("language", "en");
   url.searchParams.set("format", "json");
 
-  const response = await fetch(url.toString(), { cache: "no-store" });
+  const response = await fetchWithTimeout(url.toString());
   if (!response.ok) throw new Error("Failed to geocode location");
   const json = (await response.json()) as {
     results?: Array<{ name: string; admin1?: string; country?: string; latitude: number; longitude: number }>;

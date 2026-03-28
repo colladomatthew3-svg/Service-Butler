@@ -96,7 +96,7 @@ export function PipelineView() {
         }
       />
 
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="flex flex-wrap gap-3">
         <SummaryCard label="Active Jobs" value={summary.active.toString()} />
         <SummaryCard label="Scheduled" value={summary.scheduled.toString()} />
         <SummaryCard label="Pipeline Value" value={`$${summary.value.toLocaleString()}`} />
@@ -134,7 +134,7 @@ export function PipelineView() {
             />
           </div>
 
-          <div className="hidden gap-4 overflow-x-auto pb-2 lg:grid lg:grid-cols-7">
+          <div className="hidden gap-4 overflow-x-auto pb-2 lg:flex">
             {columns.map((col) => (
               <PipelineColumn key={col} title={col} items={grouped[col]} onMove={(job) => setSelectedJob(job)} />
             ))}
@@ -177,7 +177,7 @@ function PipelineColumn({
   onMove: (job: JobRow) => void;
 }) {
   return (
-    <Card className="min-w-[280px]">
+    <Card className="min-w-[290px] border-semantic-border/60 bg-white/70">
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold uppercase tracking-wide text-semantic-muted">{label(title)}</p>
@@ -186,13 +186,13 @@ function PipelineColumn({
       </CardHeader>
       <CardBody className="space-y-3">
         {items.length === 0 && (
-          <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2 p-4">
+          <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
             <p className="text-sm font-semibold text-semantic-text">{emptyStateTitle(title)}</p>
             <p className="mt-1 text-sm text-semantic-muted">{emptyStateDescription(title)}</p>
           </div>
         )}
         {items.map((job) => (
-          <article key={job.id} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+          <article key={job.id} className="rounded-[1rem] border border-semantic-border/70 bg-white/72 p-3 shadow-[0_10px_24px_rgba(31,42,36,0.07)]">
             <div className="flex items-start justify-between gap-2">
               <p className="font-semibold text-semantic-text">{job.customer_name || "Unknown customer"}</p>
               <Badge variant={job.intent_score >= 75 ? "warning" : "default"}>{job.intent_score}%</Badge>
@@ -251,7 +251,7 @@ function emptyStateDescription(title: Pipeline) {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <Card>
+    <Card className="min-w-[180px] flex-1 border-semantic-border/60 bg-white/72">
       <CardBody className="py-4">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-semantic-muted">{label}</p>
         <p className="mt-1 text-2xl font-semibold text-semantic-text">{value}</p>

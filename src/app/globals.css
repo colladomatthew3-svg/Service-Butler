@@ -3,18 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --sb-primary: 130 180 61;
-  --sb-primary-hover: 111 153 53;
-  --sb-bg: 246 248 247;
-  --sb-card: 255 255 255;
-  --sb-border: 216 224 219;
-  --sb-text: 30 42 36;
-  --sb-muted: 69 84 76;
-  --sb-primary-soft: 231 243 209;
-  --sb-surface-alt: 242 245 243;
-  --sb-surface-subtle: 234 239 236;
-  --sb-copper: 217 157 114;
-  --sb-copper-soft: 245 224 209;
+  --sb-primary: 18 133 111;
+  --sb-primary-hover: 13 102 85;
+  --sb-bg: 245 246 242;
+  --sb-card: 255 255 254;
+  --sb-border: 200 210 203;
+  --sb-text: 28 39 34;
+  --sb-muted: 82 94 87;
+  --sb-primary-soft: 211 238 228;
+  --sb-surface-alt: 237 241 236;
+  --sb-surface-subtle: 226 232 226;
+  --sb-copper: 193 118 77;
+  --sb-copper-soft: 244 222 205;
   --bg: var(--sb-bg);
   --surface: var(--sb-card);
   --surface2: var(--sb-surface-alt);
@@ -32,9 +32,9 @@
   --danger: 214 69 69;
   --radius-control: 12px;
   --radius-card: 16px;
-  --shadow-soft: 0 10px 30px rgba(30, 42, 36, 0.08);
-  --shadow-card: 0 18px 48px rgba(30, 42, 36, 0.14);
-  --shadow-lift: 0 28px 80px rgba(30, 42, 36, 0.16);
+  --shadow-soft: 0 16px 38px rgba(30, 42, 36, 0.08);
+  --shadow-card: 0 28px 72px rgba(30, 42, 36, 0.14);
+  --shadow-lift: 0 48px 120px rgba(30, 42, 36, 0.18);
   --space-1: 0.5rem;
   --space-2: 0.75rem;
   --space-3: 1rem;
@@ -101,9 +101,21 @@
 
 body {
   background:
-    linear-gradient(180deg, rgb(var(--brandSoft) / 0.4), transparent 18%),
-    rgb(var(--bg));
+    radial-gradient(1200px 520px at 4% -12%, rgb(var(--sb-primary-soft) / 0.95), transparent 62%),
+    radial-gradient(980px 440px at 98% 6%, rgb(var(--sb-copper-soft) / 0.8), transparent 58%),
+    linear-gradient(180deg, rgb(var(--bg) / 0.98), rgb(238 240 234));
   color: rgb(var(--text));
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image: radial-gradient(circle at center, rgb(var(--sb-border) / 0.18) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle at center, black 28%, transparent 84%);
 }
 
 @keyframes toast-in {
@@ -120,10 +132,10 @@ body {
 
 .panel {
   background: rgb(var(--sb-card));
-  border: 1px solid rgb(var(--sb-border));
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px rgba(30, 42, 36, 0.08);
-  padding: 1rem;
+  border: 1px solid rgb(var(--sb-border) / 0.72);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow-soft);
+  padding: 1.15rem;
 }
 
 .section-title {
@@ -208,10 +220,16 @@ body {
 }
 
 .section-shell {
-  border: 1px solid rgb(var(--border) / 0.92);
-  border-radius: 0.75rem;
-  background: rgb(var(--sb-card) / 0.92);
-  box-shadow: 0 1px 2px rgba(30, 42, 36, 0.08);
+  border: 1px solid rgb(var(--border) / 0.6);
+  border-radius: 1.5rem;
+  background: linear-gradient(170deg, rgb(var(--sb-card) / 0.93), rgb(var(--sb-surface-alt) / 0.82));
+  box-shadow: var(--shadow-soft);
+}
+
+.flow-divider {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, rgb(var(--border) / 0.75), transparent);
 }
 
 .brand-gradient {
@@ -231,10 +249,10 @@ body {
 
 .weather-ticker-strip {
   overflow: hidden;
-  border: 1px solid rgb(var(--border));
-  border-radius: 0.75rem;
-  background: rgb(var(--surface2));
-  padding: 0.5rem 0;
+  border: 1px solid rgb(var(--border) / 0.8);
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg, rgb(var(--surface2)), rgb(var(--sb-card)));
+  padding: 0.6rem 0;
 }
 
 .weather-ticker-track {
@@ -273,5 +291,48 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .weather-ticker-track {
     animation: none;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 0.45s ease-out both;
+}
+
+@media (max-width: 767px) {
+  body::before {
+    background-size: 28px 28px;
+    mask-image: radial-gradient(circle at center, black 22%, transparent 88%);
+  }
+
+  .dashboard-page-title {
+    font-size: 1.32rem;
+    line-height: 1.18;
+    letter-spacing: -0.02em;
+  }
+
+  .dashboard-section-title {
+    font-size: 1.08rem;
+  }
+
+  .dashboard-body {
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .weather-ticker-item {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.58rem;
   }
 }

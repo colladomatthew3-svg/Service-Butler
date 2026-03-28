@@ -1,0 +1,22 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const test_1 = require("@playwright/test");
+(0, test_1.test)("scanner demo flow shows deterministic opportunities", async ({ page }) => {
+    await page.goto("/dashboard/scanner");
+    await (0, test_1.expect)(page.getByRole("heading", { name: "Opportunity Scanner" })).toBeVisible();
+    await page.getByTestId("scanner-location").fill("11717");
+    await page.getByRole("combobox").nth(0).selectOption("Water Damage");
+    await page.getByText("More scan options").click();
+    await page.getByTestId("scanner-trigger-freeze").click();
+    await page.getByTestId("scanner-radius").selectOption("50");
+    await page.getByTestId("scanner-run").click();
+    const cards = page.getByTestId("scanner-result-card");
+    await (0, test_1.expect)(cards.first()).toBeVisible({ timeout: 15000 });
+    await (0, test_1.expect)(cards.first()).toContainText("Job score");
+    await (0, test_1.expect)(cards.first()).toContainText("Confidence");
+    await (0, test_1.expect)(cards.first()).toContainText("Why this job is showing up");
+    await (0, test_1.expect)(cards.first()).toContainText("Next step");
+    await (0, test_1.expect)(cards.first()).toContainText(/storm restoration|abatement|inspection|mitigation|demolition/i);
+    await (0, test_1.expect)(cards.first()).toContainText(/\d+\s+[A-Za-z].*,\s*[A-Za-z ]+,\s*[A-Z]{2}\s+\d{5}/);
+    await (0, test_1.expect)(cards.first()).not.toContainText(/-?\d+\.\d+\s*,\s*-?\d+\.\d+/);
+});

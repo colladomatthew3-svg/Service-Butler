@@ -129,6 +129,9 @@ export const socialIntentConnector: ConnectorAdapter = {
         normalizedPayload: {
           platform,
           author: record.author,
+          contact_name: record.author || record.contact_name || null,
+          contact_phone: record.contact_phone || null,
+          contact_email: record.contact_email || null,
           body,
           distress_summary: distress.summary,
           source_provenance: sourceProvenance,

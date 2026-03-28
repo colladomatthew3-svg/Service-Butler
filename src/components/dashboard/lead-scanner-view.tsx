@@ -411,6 +411,13 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         subtitle="Pick your market, scan for jobs, and work the best calls first."
       />
 
+      <div className="rounded-[1.7rem] border border-brand-500/30 bg-[linear-gradient(120deg,rgba(216,239,229,0.9),rgba(255,255,255,0.94))] px-5 py-5 shadow-[0_18px_54px_rgba(25,112,77,0.12)] sm:px-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Lead Engine Flow</p>
+        <p className="mt-2 text-sm text-semantic-text">
+          Scanner now prioritizes contactable opportunities first. Signals are ranked, verified, and routed so your team spends time on real bookable jobs.
+        </p>
+      </div>
+
       <Card>
         <CardBody className="space-y-4">
           {demoActionMessage && (
@@ -419,7 +426,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </div>
           )}
 
-          <div className="grid gap-3 lg:grid-cols-[1.3fr_1fr_120px_160px]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.3fr_1fr_120px_160px]">
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Market</p>
               <Input
@@ -461,7 +468,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               </Select>
             </div>
 
-            <div className="self-end">
+            <div className="self-end md:col-span-2 xl:col-span-1">
               <Button data-testid="scanner-run" onClick={() => runScan(true)} disabled={loading} fullWidth>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 Scan Now
@@ -469,12 +476,13 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {marketPresets.map((market) => (
               <Button
                 key={market.value}
                 size="sm"
                 variant={location === market.value ? "primary" : "secondary"}
+                className="shrink-0"
                 onClick={() => setLocation(market.value)}
               >
                 {market.label}
@@ -497,7 +505,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_120px]">
                 <label>
                   <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Signals</span>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0">
                     {triggerOptions.map((trigger) => {
                       const active = selectedTriggers.includes(trigger.id);
                       return (
@@ -511,7 +519,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                             )
                           }
                           className={cn(
-                            "min-h-10 rounded-full px-4 text-sm font-semibold",
+                            "min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold",
                             active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
                           )}
                         >
@@ -545,7 +553,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       </Card>
 
       {tabs.length > 1 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((item) => {
             const Icon = item.icon;
             return (
@@ -553,7 +561,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 key={item.id}
                 onClick={() => setTab(item.id)}
                 className={cn(
-                  "inline-flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold",
+                  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-semibold",
                   tab === item.id ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
                 )}
               >
@@ -568,7 +576,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       {tab === "feed" && (
         <section className="space-y-4">
           {!loading && sortedEvents.length > 0 && (
-            <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-4 py-3 text-sm text-semantic-text">
+            <div className="rounded-xl border border-semantic-border bg-semantic-surface2/70 px-4 py-3 text-sm text-semantic-text">
               <span className="font-semibold">{sortedEvents.length} jobs found.</span> Start with the closest high-urgency calls and book the inspection.
             </div>
           )}
@@ -607,7 +615,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
             return (
               <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
-                <CardBody className="grid gap-5 xl:grid-cols-[240px_1fr_210px] xl:items-start">
+                <CardBody className="grid gap-5 xl:grid-cols-[240px_1fr_240px] xl:items-start">
                   <OpportunityPropertyVisual event={event} address={displayAddress} addressLine={addressParts.streetLine} enrichment={enrichment} />
 
                   <div className="space-y-4">
@@ -644,7 +652,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       <MetricStat label="Job score" value={`${event.intent_score}`} emphasize />
                     </div>
 
-                    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+                    <div className="rounded-xl border border-semantic-border/70 bg-semantic-surface2/65 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this job is showing up</p>
                       <ul className="mt-3 grid gap-2 text-sm text-semantic-text">
                         {bullets.map((bullet, index) => (
@@ -678,12 +686,12 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     )}
                   </div>
 
-                  <div className="grid gap-2">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                     <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
                       Schedule Inspection
                     </Button>
-                    <p className="rounded-xl border border-semantic-border bg-semantic-surface2 px-4 py-3 text-sm text-semantic-text">
+                    <p className="rounded-xl border border-semantic-border/75 bg-semantic-surface2/75 px-4 py-3 text-sm text-semantic-text sm:col-span-2 xl:col-span-1">
                       <span className="font-semibold">Next step:</span> {nextAction}
                     </p>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
@@ -703,7 +711,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
                       {recommendedActionLabel(event.intent_score)}
                     </Button>
-                    <Button size="lg" variant="ghost" onClick={() => setPreview(event)}>
+                    <Button size="lg" variant="ghost" className="sm:col-span-2 xl:col-span-1" onClick={() => setPreview(event)}>
                       <Eye className="h-4 w-4" />
                       View details
                     </Button>

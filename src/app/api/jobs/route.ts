@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { getDemoDashboardSnapshot } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 
 type PipelineStatus = "NEW" | "CONTACTED" | "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "WON" | "LOST";
 
@@ -13,6 +15,16 @@ function toJobStatus(pipeline: PipelineStatus): "SCHEDULED" | "IN_PROGRESS" | "C
 }
 
 export async function GET(req: NextRequest) {
+  if (isDemoMode()) {
+    const pipeline = req.nextUrl.searchParams.get("pipeline");
+    const snapshot = getDemoDashboardSnapshot();
+    const jobs = (snapshot.jobs || []).filter((job) => {
+      if (!pipeline) return true;
+      return String(job.pipeline_status || "").toUpperCase() === String(pipeline).toUpperCase();
+    });
+    return NextResponse.json({ jobs });
+  }
+
   const { accountId, supabase } = await getCurrentUserContext();
   const pipeline = req.nextUrl.searchParams.get("pipeline");
 

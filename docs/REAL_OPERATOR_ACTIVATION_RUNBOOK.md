@@ -101,6 +101,24 @@ Minimum required for permits live path:
 export PERMITS_PROVIDER_URL="https://<permits-provider-endpoint>"
 export PERMITS_PROVIDER_TOKEN="<permits-provider-token>"
 export PERMITS_TERMS_STATUS="approved"
+export USGS_SITE_CODES="01358000,01371500"
+# Optional override (otherwise defaults to public endpoint)
+export USGS_WATER_ENDPOINT=""
+
+# Optional Open311 endpoint override (defaults to NYC 311 endpoint)
+export OPEN311_ENDPOINT=""
+
+# Optional OpenFEMA endpoint override
+export OPENFEMA_API_URL=""
+
+# Optional Census endpoint override (defaults to ACS county query for NY state code 36)
+export CENSUS_API_ENDPOINT=""
+export CENSUS_API_STATE="36"
+export CENSUS_API_KEY=""
+
+# Optional Overpass endpoint/query override (seed provides a default Manhattan-area query)
+export OVERPASS_ENDPOINT="https://overpass-api.de/api/interpreter"
+export OVERPASS_QUERY=""
 ```
 
 If provider endpoint is not available, operator test remains runnable in simulated connector mode while still writing real DB records.
@@ -111,19 +129,38 @@ Recommended source config for the high-value intelligence categories:
   - `source_type=weather`
   - connector key: `weather.noaa`
   - include `latitude`, `longitude`, optional `city/state/postal_code`
+- USGS water intelligence:
+  - `source_type=usgs_water`
+  - connector key: `water.usgs`
+  - include `site_codes` or explicit `endpoint`
 - Building permits:
   - `source_type=permits`
   - connector key: `permits.production`
   - set `terms_status=approved` before live ingestion
+- Open311 service requests:
+  - `source_type=open311`
+  - connector key: `open311.generic`
+  - include `endpoint` for your municipal feed
 - Public incidents:
   - `source_type=incident`
   - connector key: `incidents.generic`
   - keep Citizen-like feeds disabled by default unless explicitly approved:
     - `SB_ENABLE_CITIZEN_CONNECTOR=false` (default)
+- OpenFEMA catastrophe context:
+  - `source_type=openfema`
+  - connector key: `disaster.openfema`
 - Consumer distress (Reddit + Google reviews normalized path):
   - `source_type=social`
   - connector key: `social.intent.placeholder`
   - set `terms_status=approved` before live ingestion
+- Census enrichment:
+  - `source_type=census`
+  - connector key: `enrichment.census`
+  - use for propensity/risk enrichment signals
+- OpenStreetMap Overpass:
+  - `source_type=overpass`
+  - connector key: `property.overpass`
+  - include Overpass query for target geography/asset types
 
 Source event compliance guardrail:
 - If connector `compliancePolicy()` denies ingestion, events are logged but no opportunities are created.

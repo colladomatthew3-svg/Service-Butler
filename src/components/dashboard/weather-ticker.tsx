@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 
 type Forecast = {
+  meta?: {
+    provider?: string;
+    timezone?: string;
+    timezoneAbbreviation?: string;
+    updatedAt?: string;
+    stale?: boolean;
+  };
   current: {
     temp: number;
     feelsLike?: number;
@@ -33,6 +40,8 @@ export function WeatherTicker({
 }) {
   const [forecast, setForecast] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const query = useMemo(() => {
     if (lat == null || lng == null) return null;
@@ -47,13 +56,17 @@ export function WeatherTicker({
         return;
       }
       setLoading(true);
+      setError(null);
       try {
         const res = await fetch(query);
-        if (!res.ok) throw new Error("weather unavailable");
+        if (!res.ok) throw new Error("Weather feed unavailable");
         const data = (await res.json()) as Forecast;
         if (!cancelled) setForecast(data);
       } catch {
-        if (!cancelled) setForecast(null);
+        if (!cancelled) {
+          setForecast(null);
+          setError("Weather feed is temporarily unavailable.");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -62,7 +75,7 @@ export function WeatherTicker({
     return () => {
       cancelled = true;
     };
-  }, [query]);
+  }, [query, refreshTick]);
 
   if (!query) {
     return (
@@ -86,7 +99,7 @@ export function WeatherTicker({
     );
   }
 
-  if (loading || !forecast) {
+  if (loading) {
     return (
       <Card>
         <CardHeader>
@@ -96,6 +109,29 @@ export function WeatherTicker({
           <Skeleton className="h-12 w-3/4" />
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
+        </CardBody>
+      </Card>
+    );
+  }
+
+  if (!forecast) {
+    return (
+      <Card>
+        <CardHeader>
+          <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-sm text-semantic-muted">{error || "Weather feed unavailable."}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setRefreshTick((v) => v + 1)}>
+              Retry weather
+            </Button>
+            <Link href="/dashboard/settings">
+              <Button size="sm" variant="secondary">
+                Verify service area
+              </Button>
+            </Link>
+          </div>
         </CardBody>
       </Card>
     );
@@ -119,6 +155,15 @@ export function WeatherTicker({
           <div>
             <h3 className="text-base font-semibold text-semantic-text">Weather Watch</h3>
             {locationLabel && <p className="mt-1 text-sm text-semantic-muted">{locationLabel}</p>}
+            {forecast.meta?.updatedAt && (
+              <p className="mt-1 text-xs text-semantic-muted">
+                {forecast.meta.provider === "demo" ? "Demo weather model" : "Live weather feed"}
+                {" · "}
+                Updated {formatUpdatedAt(forecast.meta.updatedAt)}
+                {forecast.meta.timezoneAbbreviation ? ` · ${forecast.meta.timezoneAbbreviation}` : ""}
+                {forecast.meta.stale ? " · using recent cached data" : ""}
+              </p>
+            )}
           </div>
           <BadgeStat icon={<TriangleAlert className="h-3 w-3" />} label={impact.title} />
         </div>
@@ -231,6 +276,12 @@ function buildTickerItems({
   ].filter(Boolean);
 
   return items as string[];
+}
+
+function formatUpdatedAt(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "just now";
+  return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 function BadgeStat({ icon, label }: { icon: ReactNode; label: string }) {

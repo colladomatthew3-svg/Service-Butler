@@ -1,0 +1,204 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.POST = POST;
+const server_1 = require("next/server");
+const rbac_1 = require("@/lib/auth/rbac");
+const store_1 = require("@/lib/demo/store");
+const intent_engine_1 = require("@/lib/services/intent-engine");
+const scanner_1 = require("@/lib/services/scanner");
+const review_mode_1 = require("@/lib/services/review-mode");
+const weather_1 = require("@/lib/services/weather");
+function normalizeMode(input) {
+    if (input == null)
+        return null;
+    return String(input).toLowerCase() === "job" ? "job" : "lead";
+}
+function statusFromMode(mode) {
+    return mode === "job" ? "scheduled" : "new";
+}
+function stageFromStatus(status) {
+    if (status === "scheduled")
+        return "BOOKED";
+    if (status === "contacted")
+        return "CONTACTED";
+    if (status === "won")
+        return "COMPLETED";
+    if (status === "lost")
+        return "LOST";
+    return "NEW";
+}
+function recommendedSchedule(intent, slaMinutes) {
+    const d = new Date(Date.now() + Math.max(15, slaMinutes) * 60_000);
+    if (intent >= 78) {
+        d.setMinutes(0, 0, 0);
+        d.setHours(d.getHours() + 1);
+    }
+    return d.toISOString();
+}
+function categoryService(category) {
+    const c = String(category || "general").toLowerCase();
+    if (c === "restoration")
+        return "Restoration";
+    if (c === "plumbing")
+        return "Plumbing";
+    if (c === "demolition")
+        return "Demolition";
+    if (c === "asbestos")
+        return "Asbestos";
+    return "General";
+}
+function randomPhone(seed) {
+    let h = 2166136261;
+    for (let i = 0; i < seed.length; i += 1) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    const n = 2000000 + (Math.abs(h >>> 0) % 7999999);
+    return `+1631${String(n).padStart(7, "0")}`;
+}
+async function POST(req, { params }) {
+    const { id } = await params;
+    if ((0, review_mode_1.isDemoMode)()) {
+        const body = (await req.json().catch(() => ({})));
+        const result = (0, store_1.dispatchDemoScannerEvent)(id, normalizeMode(body.createMode) || undefined);
+        if (!result) {
+            return server_1.NextResponse.json({ error: "Scanner event not found" }, { status: 404 });
+        }
+        return server_1.NextResponse.json({
+            dispatched: true,
+            mode: result.mode,
+            leadId: result.leadId,
+            jobId: result.jobId,
+            message: result.message,
+            redirectPath: "/dashboard/scanner?demoAction=1"
+        });
+    }
+    const { accountId, role, supabase } = await (0, rbac_1.getCurrentUserContext)();
+    (0, rbac_1.assertRole)(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
+    const body = (await req.json().catch(() => ({})));
+    const { data: event, error: eventError } = await supabase
+        .from("scanner_events")
+        .select("id,category,title,description,location_text,intent_score,confidence,tags,raw,lat,lon")
+        .eq("account_id", accountId)
+        .eq("id", id)
+        .single();
+    if (eventError || !event) {
+        return server_1.NextResponse.json({ error: "Scanner event not found" }, { status: 404 });
+    }
+    const { data: rule } = await supabase
+        .from("routing_rules")
+        .select("id,default_assignee,default_create_mode,default_job_value_cents,default_sla_minutes,enabled")
+        .eq("account_id", accountId)
+        .eq("category", String(event.category || "general").toLowerCase())
+        .eq("enabled", true)
+        .maybeSingle();
+    const mode = normalizeMode(body.createMode) || rule?.default_create_mode || (Number(event.intent_score) >= 75 ? "job" : "lead");
+    const assignee = (body.assignee || rule?.default_assignee || "Dispatch Queue").trim();
+    const { data: contractor } = await supabase
+        .from("contractors")
+        .select("id")
+        .eq("account_id", accountId)
+        .eq("name", assignee)
+        .maybeSingle();
+    const addressInfo = (0, scanner_1.resolveOpportunityAddress)({
+        locationText: String(event.raw?.property_address || event.location_text || ""),
+        lat: event.lat,
+        lon: event.lon,
+        serviceAreaLabel: String(event.raw?.service_area_label || event.location_text || "Service Area"),
+        seed: event.id
+    });
+    const leadPayload = {
+        account_id: accountId,
+        source: "import",
+        stage: stageFromStatus(statusFromMode(mode)),
+        status: statusFromMode(mode),
+        name: event.title,
+        phone: randomPhone(`${event.id}:${event.title}`),
+        service_type: categoryService(event.category),
+        address: addressInfo.address,
+        city: addressInfo.city,
+        state: addressInfo.state,
+        postal_code: addressInfo.postalCode,
+        requested_timeframe: Number(event.intent_score) >= 78 ? "ASAP" : "Today",
+        notes: `Scanner dispatch: ${event.description || "opportunity"}`
+    };
+    const { data: lead, error: leadError } = await supabase
+        .from("leads")
+        .insert(leadPayload)
+        .select("id,service_type,requested_timeframe,address,city,state,postal_code")
+        .single();
+    if (leadError || !lead) {
+        return server_1.NextResponse.json({ error: leadError?.message || "Failed to create lead" }, { status: 400 });
+    }
+    let forecast = null;
+    if (event.lat != null && event.lon != null) {
+        forecast = await (0, weather_1.getForecastByLatLng)(Number(event.lat), Number(event.lon)).catch(() => null);
+    }
+    const signals = (0, intent_engine_1.generateSignals)({ lead, forecast });
+    if (signals.length > 0) {
+        await supabase.from("lead_intent_signals").insert(signals.map((signal) => ({
+            lead_id: lead.id,
+            ...signal
+        })));
+    }
+    if (mode === "lead") {
+        await supabase
+            .from("opportunities")
+            .update({ status: "claimed", claimed_by_contractor_id: contractor?.id || null })
+            .eq("account_id", accountId)
+            .contains("raw", { scanner_opportunity_id: id });
+        return server_1.NextResponse.json({
+            dispatched: true,
+            mode,
+            leadId: lead.id,
+            jobId: null
+        });
+    }
+    const scheduleIso = body.scheduleIso || recommendedSchedule(Number(event.intent_score) || 60, Number(rule?.default_sla_minutes) || 60);
+    const estimatedValue = Math.max(0, Math.round((Number(rule?.default_job_value_cents) || 60000) / 100));
+    const { data: job, error: jobError } = await supabase
+        .from("jobs")
+        .insert({
+        account_id: accountId,
+        lead_id: lead.id,
+        status: "SCHEDULED",
+        pipeline_status: "SCHEDULED",
+        scheduled_for: scheduleIso,
+        service_type: leadPayload.service_type,
+        assigned_tech_name: assignee,
+        estimated_value: estimatedValue,
+        notes: `Auto-created from scanner event ${event.id}`,
+        intent_score: Number(event.intent_score) || 0,
+        customer_name: leadPayload.name,
+        customer_phone: leadPayload.phone,
+        city: leadPayload.city,
+        state: leadPayload.state
+    })
+        .select("id")
+        .single();
+    if (jobError || !job) {
+        return server_1.NextResponse.json({ error: jobError?.message || "Failed to create job" }, { status: 400 });
+    }
+    await supabase.from("lead_jobs").upsert({
+        account_id: accountId,
+        lead_id: lead.id,
+        job_id: job.id
+    }, { onConflict: "account_id,lead_id" });
+    await supabase
+        .from("leads")
+        .update({ converted_job_id: job.id, stage: "BOOKED", status: "scheduled", scheduled_for: scheduleIso })
+        .eq("account_id", accountId)
+        .eq("id", lead.id);
+    await supabase
+        .from("opportunities")
+        .update({ status: "claimed", claimed_by_contractor_id: contractor?.id || null })
+        .eq("account_id", accountId)
+        .contains("raw", { scanner_opportunity_id: id });
+    return server_1.NextResponse.json({
+        dispatched: true,
+        mode,
+        leadId: lead.id,
+        jobId: job.id,
+        scheduleIso
+    });
+}

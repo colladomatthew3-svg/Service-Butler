@@ -201,90 +201,81 @@ export default async function DashboardOverviewPage() {
 
   const openJobs = jobRows.filter((j) => !["WON", "LOST", "COMPLETED"].includes(String(j.pipeline_status))).length;
   const syncedLists = outboundLists.filter((item) => String(item.export_status) === "synced").length;
+  const priorityLeads = [...enrichedLeads]
+    .filter((lead) => !["won", "lost"].includes(String(lead.status || "").toLowerCase()))
+    .sort((a, b) => Number(b.intent || 0) - Number(a.intent || 0))
+    .slice(0, 5);
 
   return (
     <div className="space-y-8">
-      <Card className="border-brand-500/25 bg-brand-50/50">
-        <CardBody className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="relative overflow-hidden rounded-[2rem] border border-brand-500/25 bg-[linear-gradient(120deg,rgba(216,239,229,0.85),rgba(255,255,255,0.9))] px-5 py-6 shadow-[0_24px_64px_rgba(25,112,77,0.12)] sm:px-7 sm:py-8">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-brand-100/65 blur-3xl" />
+        <div className="relative grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-end">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Opportunities Near You</p>
-            <h1 className="dashboard-page-title mt-1 text-semantic-text">Find and claim jobs before your competitors.</h1>
-            <p className="mt-2 text-sm text-semantic-muted">
+            <h1 className="dashboard-page-title mt-2 text-semantic-text">Find and claim jobs before your competitors.</h1>
+            <p className="mt-3 text-base text-semantic-muted">
               {demoMode
                 ? "Demo-ready Scanner and Weather signals using saved service-area data. Try storm response in Brentwood, Hauppauge, or Midtown."
-                : "Scanner intelligence across Long Island and NYC. Focus zip seeds: 11705, 11788, 10019."}
+                : "Scanner intelligence aligned to your saved service area. Run weather-led scans and route urgent opportunities first."}
             </p>
+            <div className="mt-5 grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+              <Link href="/dashboard/scanner">
+                <Button size="lg" fullWidth>Run Scanner</Button>
+              </Link>
+              <Link href="/dashboard/leads">
+                <Button size="lg" variant="secondary" fullWidth>Open Leads</Button>
+              </Link>
+              <Link href="/dashboard/pipeline">
+                <Button size="lg" variant="secondary" fullWidth>Open Pipeline</Button>
+              </Link>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/dashboard/scanner">
-              <Button size="lg">Run Scanner</Button>
-            </Link>
-            <Link href="/dashboard/leads">
-              <Button size="lg" variant="secondary">Open Leads</Button>
-            </Link>
-          </div>
-        </CardBody>
-      </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_400px] lg:items-start">
-        <PageHeader
-          title="Dispatch Dashboard"
-          subtitle="See the jobs, know the pressure, and move the next call forward."
-          actions={<Badge variant="brand">Scanner first</Badge>}
-        />
-        <div className="lg:pt-1">
-          <WeatherTicker lat={lat} lng={lng} compact locationLabel={weatherLabel} />
-        </div>
-      </div>
-
-      <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
-        <Card>
-          <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">Today At A Glance</h2>
-          </CardHeader>
-          <CardBody className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <SnapshotStat label="Open jobs" value={String(openJobs)} helper="Jobs still in play" />
-            <SnapshotStat label="Scheduled today" value={String(scheduledToday)} helper="Visits on the board" />
-            <SnapshotStat label="High intent" value={String(highIntent)} helper="Leads to call first" />
-            <SnapshotStat label="Week revenue" value={`$${Math.round(weeklyRevenue).toLocaleString()}`} helper="Booked this week" />
-            <SnapshotStat label="Next 7 days" value={String(jobsNextSeven)} helper="Jobs scheduled ahead" />
-            <SnapshotStat label="Prospects" value={String(prospects.length)} helper="Outbound-ready records" />
-            <SnapshotStat label="Partners" value={String(referralPartners.length)} helper="Referral relationships" />
-            <SnapshotStat label="Lists" value={String(outboundLists.length)} helper="Target lists built" />
-            <SnapshotStat label="Smartlead synced" value={String(syncedLists)} helper="Lists pushed out" />
-          </CardBody>
-        </Card>
-
-        <Card className={weatherHighRisk ? "border-warning-500/30" : ""}>
-          <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">What To Do Next</h2>
-          </CardHeader>
-          <CardBody className="space-y-3">
+          <div className="space-y-3 rounded-[1.4rem] border border-semantic-border/65 bg-white/75 p-4 sm:p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Dispatch Focus</p>
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-semantic-text">
               <TriangleAlert className={`h-4 w-4 ${weatherHighRisk ? "text-warning-500" : "text-brand-600"}`} />
               {weatherHighRisk ? "Weather pressure is building" : "Normal operating window"}
             </p>
             <p className="text-sm text-semantic-muted">{weatherActionText}</p>
             <div className="flex flex-wrap gap-2">
-              <Link href={`/dashboard/scanner${weatherLabel ? `?location=${encodeURIComponent(weatherLabel)}` : ""}`}>
-                <Button size="sm">Run scanner now</Button>
-              </Link>
-              <Link href="/dashboard/leads">
-                <Button size="sm" variant="secondary">Work new leads</Button>
+              <Link href="/dashboard/scanner">
+                <Button size="sm">Start high-priority scan</Button>
               </Link>
               <Link href="/dashboard/schedule">
                 <Button size="sm" variant="secondary">Open schedule</Button>
               </Link>
-              <Link href="/dashboard/outbound">
-                <Button size="sm" variant="secondary">Open outbound</Button>
-              </Link>
             </div>
-          </CardBody>
-        </Card>
+            <div className="pt-2">
+              <WeatherTicker lat={lat} lng={lng} compact locationLabel={weatherLabel} />
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
-        <Card>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <PageHeader
+          title="Dispatch Dashboard"
+          subtitle="See the jobs, know the pressure, and move the next call forward."
+          actions={<Badge variant="brand">Booked-job focus</Badge>}
+        />
+      </div>
+
+      <section className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <SnapshotStat label="Open jobs" value={String(openJobs)} helper="Jobs still in play" />
+        <SnapshotStat label="Scheduled today" value={String(scheduledToday)} helper="Visits on the board" />
+        <SnapshotStat label="High intent" value={String(highIntent)} helper="Leads to call first" />
+        <SnapshotStat label="Week revenue" value={`$${Math.round(weeklyRevenue).toLocaleString()}`} helper="Booked this week" />
+        <SnapshotStat label="Next 7 days" value={String(jobsNextSeven)} helper="Jobs scheduled ahead" />
+        <SnapshotStat label="Prospects" value={String(prospects.length)} helper="Outbound-ready records" />
+        <SnapshotStat label="Partners" value={String(referralPartners.length)} helper="Referral relationships" />
+        <SnapshotStat label="Lists" value={String(outboundLists.length)} helper="Target lists built" />
+        <SnapshotStat label="Synced lists" value={String(syncedLists)} helper="Automation health" />
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <Card className="flex-1">
           <CardHeader>
             <div className="flex items-center justify-between">
               <h2 className="dashboard-section-title text-semantic-text">Opportunity Feed</h2>
@@ -295,7 +286,11 @@ export default async function DashboardOverviewPage() {
           </CardHeader>
           <CardBody className="space-y-3">
             {(opportunities || []).slice(0, 6).map((item) => (
-              <Link key={item.id} href="/dashboard/scanner" className="block rounded-xl border border-semantic-border bg-semantic-surface2 p-4 transition hover:border-brand-300 hover:bg-white">
+              <Link
+                key={item.id}
+                href="/dashboard/scanner"
+                className="block rounded-[1.2rem] border border-semantic-border/65 bg-white/70 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-white"
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-semibold text-semantic-text">{item.title}</p>
@@ -312,7 +307,7 @@ export default async function DashboardOverviewPage() {
               </Link>
             ))}
             {(opportunities || []).length === 0 && (
-              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2 p-4">
+              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
                 <p className="text-sm font-semibold text-semantic-text">Run the Lead Scanner to generate opportunities.</p>
                 <p className="mt-1 text-sm text-semantic-muted">Weather and service-demand signals will appear here once the first scan is complete.</p>
               </div>
@@ -322,40 +317,53 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <h2 className="dashboard-section-title text-semantic-text">Next Up</h2>
-              <Link href="/dashboard/schedule" className="text-sm font-semibold text-brand-700">
-                Open schedule
+              <h2 className="dashboard-section-title text-semantic-text">Priority Queue</h2>
+              <Link href="/dashboard/leads" className="text-sm font-semibold text-brand-700">
+                Open leads
               </Link>
             </div>
           </CardHeader>
           <CardBody className="space-y-3">
-            {nextUp.length === 0 && (
-              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2 p-4">
-                <p className="text-sm font-semibold text-semantic-text">Convert a lead into a job to populate your calendar.</p>
-                <p className="mt-1 text-sm text-semantic-muted">Once work is booked, the next scheduled visits will show up here for dispatch.</p>
+            {priorityLeads.length === 0 && (
+              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
+                <p className="text-sm font-semibold text-semantic-text">No active lead queue yet.</p>
+                <p className="mt-1 text-sm text-semantic-muted">Run the scanner and claim opportunities to fill your call list.</p>
               </div>
             )}
-            {nextUp.map((job) => (
+            {priorityLeads.map((lead) => (
               <Link
-                key={job.id}
-                href={`/dashboard/jobs/${job.id}`}
-                className="block rounded-xl border border-semantic-border p-4 transition hover:border-brand-300 hover:bg-brand-50/40"
+                key={lead.id}
+                href={`/dashboard/leads/${lead.id}`}
+                className="block rounded-xl border border-semantic-border/70 p-4 transition hover:border-brand-300 hover:bg-brand-50/35"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-semantic-text">{job.customer_name || "Unknown customer"}</p>
+                    <p className="font-semibold text-semantic-text">{lead.name || "Unknown lead"}</p>
                     <p className="text-sm text-semantic-muted">
-                      {job.service_type || "Service"} · {[job.city, job.state].filter(Boolean).join(", ")}
+                      {lead.service_type || "Service"} · {[lead.city, lead.state].filter(Boolean).join(", ")}
                     </p>
                   </div>
-                  <Badge variant={Number(job.intent_score) >= 75 ? "warning" : "default"}>{Number(job.intent_score) || 0}%</Badge>
+                  <Badge variant={Number(lead.intent || 0) >= 75 ? "warning" : "default"}>{Number(lead.intent || 0)}%</Badge>
                 </div>
-                <p className="mt-2 inline-flex items-center text-sm text-semantic-muted">
-                  {formatScheduled(job.scheduled_for as string)}
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </p>
+                <p className="mt-2 text-sm text-semantic-muted">{lead.scheduled_for ? `Scheduled ${formatScheduled(lead.scheduled_for)}` : "Needs first contact"}</p>
               </Link>
             ))}
+
+            <div className="rounded-xl border border-semantic-border/65 bg-white/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next scheduled jobs</p>
+              <div className="mt-2 space-y-2">
+                {nextUp.length === 0 && <p className="text-sm text-semantic-muted">No booked visits yet for the next window.</p>}
+                {nextUp.map((job) => (
+                  <Link key={job.id} href={`/dashboard/jobs/${job.id}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 transition hover:bg-semantic-surface2">
+                    <span className="text-sm font-medium text-semantic-text">{job.customer_name || "Unknown customer"}</span>
+                    <span className="inline-flex items-center text-xs text-semantic-muted">
+                      {formatScheduled(job.scheduled_for as string)}
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
           </CardBody>
         </Card>
       </section>
@@ -375,10 +383,10 @@ function formatScheduled(date: string) {
 
 function SnapshotStat({ label, value, helper }: { label: string; value: string; helper: string }) {
   return (
-    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+    <div className="min-w-[188px] shrink-0 rounded-[1.1rem] border border-semantic-border/70 bg-white/72 px-4 py-3 shadow-[0_10px_26px_rgba(31,42,36,0.08)]">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-semantic-text">{value}</p>
-      <p className="mt-1 text-sm text-semantic-muted">{helper}</p>
+      <p className="mt-1 text-xl font-semibold text-semantic-text">{value}</p>
+      <p className="text-xs text-semantic-muted">{helper}</p>
     </div>
   );
 }

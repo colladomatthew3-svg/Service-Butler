@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
+import { getDemoDashboardSnapshot } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +10,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { BriefcaseBusiness } from "lucide-react";
 
 export default async function JobsPage() {
+  if (isDemoMode()) {
+    const { jobs } = getDemoDashboardSnapshot();
+    return <JobsBoard jobs={jobs || []} />;
+  }
+
   const { accountId, supabase } = await getCurrentUserContext();
 
   const { data: jobs } = await supabase
@@ -16,6 +23,22 @@ export default async function JobsPage() {
     .eq("account_id", accountId)
     .order("scheduled_for", { ascending: true, nullsFirst: false });
 
+  return <JobsBoard jobs={jobs || []} />;
+}
+
+type JobRow = {
+  id: string;
+  customer_name?: string | null;
+  service_type?: string | null;
+  pipeline_status?: string | null;
+  scheduled_for?: string | null;
+  estimated_value?: number | null;
+  city?: string | null;
+  state?: string | null;
+  intent_score?: number | null;
+};
+
+function JobsBoard({ jobs }: { jobs: JobRow[] }) {
   return (
     <div className="space-y-6">
       <PageHeader title="Jobs" subtitle="Active and upcoming jobs with value and priority." />
@@ -25,7 +48,7 @@ export default async function JobsPage() {
           <h2 className="dashboard-section-title text-semantic-text">Jobs Board</h2>
         </CardHeader>
         <CardBody className="space-y-3">
-          {(jobs || []).length === 0 && (
+          {jobs.length === 0 && (
             <EmptyState
               icon={<BriefcaseBusiness className="h-5 w-5" />}
               title="No jobs yet"
@@ -35,7 +58,7 @@ export default async function JobsPage() {
             />
           )}
 
-          {(jobs || []).map((job) => (
+          {jobs.map((job) => (
             <article key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
               <div>
                 <p className="font-semibold text-semantic-text">{job.customer_name || "Unknown customer"}</p>

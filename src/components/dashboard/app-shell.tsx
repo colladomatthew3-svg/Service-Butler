@@ -41,11 +41,16 @@ export function DashboardAppShell({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-semantic-bg">
-      <div className="mx-auto flex max-w-[1440px]">
+    <div className="relative min-h-screen overflow-x-hidden bg-semantic-bg">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -left-24 top-12 h-72 w-72 rounded-full bg-brand-100/70 blur-3xl" />
+        <div className="absolute right-0 top-0 h-80 w-80 rounded-full bg-[rgb(var(--accentSoft))/0.58] blur-3xl" />
+      </div>
+
+      <div className="mx-auto flex max-w-[1600px] gap-3 px-2 pb-6 pt-3 md:gap-5 md:px-5 md:pb-8 md:pt-4">
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 w-72 border-r border-semantic-border bg-semantic-surface px-5 py-6 shadow-card transition-transform lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 w-72 border-r border-semantic-border/70 bg-[linear-gradient(170deg,rgba(255,255,255,0.9),rgba(246,248,243,0.7))] px-5 py-6 shadow-[0_24px_64px_rgba(23,34,29,0.2)] backdrop-blur transition-transform lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:translate-x-0 lg:rounded-[2rem] lg:border lg:border-semantic-border/65",
             open ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -72,8 +77,10 @@ export function DashboardAppShell({
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "sidebar-label flex min-h-12 items-center gap-3 rounded-xl px-4 py-3 transition",
-                    active ? "bg-brand-50 text-brand-700" : "text-semantic-muted hover:bg-semantic-surface2 hover:text-semantic-text"
+                    "sidebar-label flex min-h-12 items-center gap-3 rounded-2xl px-4 py-3 transition",
+                    active
+                      ? "bg-[linear-gradient(120deg,rgba(34,148,102,0.2),rgba(34,148,102,0.08))] text-brand-700 shadow-[0_8px_20px_rgba(25,112,77,0.14)]"
+                      : "text-semantic-muted hover:bg-white/80 hover:text-semantic-text"
                   )}
                   onClick={() => setOpen(false)}
                 >
@@ -84,7 +91,7 @@ export function DashboardAppShell({
             })}
           </nav>
 
-          <div className="mt-8 rounded-xl bg-semantic-surface2 p-4">
+          <div className="mt-8 rounded-2xl border border-semantic-border/60 bg-white/65 p-4">
             <p className="text-xs uppercase tracking-wide text-semantic-muted">Today</p>
             <p className="sidebar-label mt-2 text-semantic-text">Prioritize new high-urgency leads first.</p>
           </div>
@@ -94,16 +101,16 @@ export function DashboardAppShell({
 
         {open && (
           <button
-            className="fixed inset-0 z-30 bg-neutral-900/30 lg:hidden"
+            className="fixed inset-0 z-30 bg-neutral-900/35 backdrop-blur-[1px] lg:hidden"
             aria-label="Close navigation overlay"
             onClick={() => setOpen(false)}
           />
         )}
 
-        <div className="flex min-h-screen flex-1 flex-col lg:pl-0">
-          <header className="sticky top-0 z-20 border-b border-semantic-border bg-semantic-surface/95 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="flex min-h-[calc(100dvh-1.1rem)] flex-1 flex-col rounded-[1.5rem] border border-semantic-border/45 bg-white/38 shadow-[0_26px_80px_rgba(31,42,36,0.12)] backdrop-blur-lg sm:rounded-[2rem] lg:pl-0">
+          <header className="sticky top-0 z-20 rounded-t-[1.5rem] border-b border-semantic-border/45 bg-white/52 px-3 py-3 backdrop-blur-md sm:rounded-t-[2rem] sm:px-6">
             {demoMode && (
-              <div className="mb-3 rounded-xl border border-brand-500/30 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700">
+              <div className="mb-3 rounded-2xl border border-brand-500/30 bg-brand-50/90 px-3 py-2 text-sm font-semibold text-brand-700">
                 Demo Mode (no auth)
               </div>
             )}
@@ -133,7 +140,7 @@ export function DashboardAppShell({
             </div>
           </header>
 
-          <main className="w-full px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+          <main className="w-full px-3 py-5 sm:px-6 sm:py-8 animate-rise-in">{children}</main>
         </div>
       </div>
     </div>

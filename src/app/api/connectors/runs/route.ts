@@ -5,6 +5,7 @@ import { featureFlags } from "@/lib/config/feature-flags";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getConnectorByKey } from "@/lib/v2/connectors/registry";
 import { runConnectorForSource } from "@/lib/v2/connectors/runner";
+import { inferConnectorKey } from "@/lib/v2/connectors/source-type-map";
 import type { AccountRole } from "@/types/domain";
 
 function parseEncryptedConfig(raw: unknown) {
@@ -25,6 +26,15 @@ function connectorRuntimeMode(sourceType: string, config: Record<string, unknown
   const normalizedType = String(sourceType || "").toLowerCase();
   const terms = String(config.terms_status || "").toLowerCase();
   const hasPermitsProvider = Boolean(config.provider_url || process.env.PERMITS_PROVIDER_URL);
+  const hasOpen311Endpoint = Boolean(
+    config.endpoint || process.env.OPEN311_ENDPOINT || "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=100"
+  );
+  const hasCensusEndpoint = Boolean(
+    config.endpoint ||
+      process.env.CENSUS_API_ENDPOINT ||
+      "https://api.census.gov/data/2023/acs/acs5?get=NAME,B25034_010E,B25034_011E,B25003_003E,B25004_001E&for=county:*&in=state:36"
+  );
+  const hasOverpassQuery = Boolean(config.query || process.env.OVERPASS_QUERY);
 
   if (normalizedType.includes("permit")) {
     if (!hasPermitsProvider) return "simulated";
@@ -32,6 +42,25 @@ function connectorRuntimeMode(sourceType: string, config: Record<string, unknown
     return "fully-live";
   }
 
+  if (normalizedType.includes("open311") || normalizedType.includes("311")) {
+    if (!hasOpen311Endpoint) return "simulated";
+    if (terms && terms !== "approved") return "live-partial";
+    return "fully-live";
+  }
+
+  if (normalizedType.includes("census")) {
+    if (!hasCensusEndpoint) return "simulated";
+    if (terms && terms !== "approved") return "live-partial";
+    return "fully-live";
+  }
+
+  if (normalizedType.includes("overpass") || normalizedType.includes("osm")) {
+    if (!hasOverpassQuery) return "simulated";
+    if (terms && terms !== "approved") return "live-partial";
+    return "fully-live";
+  }
+
+  if (terms && terms !== "approved") return "live-partial";
   return "fully-live";
 }
 
@@ -118,15 +147,7 @@ export async function POST(req: NextRequest) {
     };
     const runtimeMode = connectorRuntimeMode(String(source.source_type || "unknown"), sourceConfig);
 
-    const key =
-      String(body.connectorKey || "").trim() ||
-      (String(source.source_type || "").toLowerCase().includes("weather")
-        ? "weather.noaa"
-        : String(source.source_type || "").toLowerCase().includes("permit")
-          ? "permits.production"
-          : String(source.source_type || "").toLowerCase().includes("social")
-            ? "social.intent.placeholder"
-            : "incidents.generic");
+    const key = String(body.connectorKey || "").trim() || inferConnectorKey(String(source.source_type || ""));
 
     const connector = getConnectorByKey(key);
     if (!connector) {

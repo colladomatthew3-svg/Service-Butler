@@ -1,4 +1,26 @@
 import { createClient } from "@supabase/supabase-js";
+import fs from "node:fs";
+import path from "node:path";
+
+function loadEnvFromFile(filePath: string) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
+const cwd = process.cwd();
+loadEnvFromFile(path.join(cwd, ".env.local"));
+loadEnvFromFile(path.join(cwd, ".env"));
 
 type Status = "PASS" | "WARN" | "FAIL";
 
@@ -221,7 +243,7 @@ async function main() {
         name: "data_sources",
         status: "FAIL",
         detail: sourceError?.message || "No active v2_data_sources configured.",
-        remediation: "Seed/update at least one active source (weather/permits/social placeholder)."
+        remediation: "Seed/update active sources (weather, permits, incidents, social, USGS, Open311, OpenFEMA, Census, Overpass)."
       });
     } else {
       pushResult(results, {

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
 const REQUIRED_LINES = [
@@ -12,6 +14,25 @@ const REQUIRED_LINES = [
   "webhook booked job received",
   "dashboard updated"
 ];
+
+function loadEnvFromFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadEnvFromFile(path.join(process.cwd(), ".env.local"));
+loadEnvFromFile(path.join(process.cwd(), ".env"));
 
 function envTrue(name) {
   const value = String(process.env[name] || "").trim().toLowerCase();
@@ -80,16 +101,17 @@ function scoreFromSeverity(severity) {
 async function resolveOperatorTenantId(supabase) {
   const explicit = String(process.env.OPERATOR_TENANT_ID || "").trim();
   if (explicit) return explicit;
+  const operatorTenantName = String(process.env.OPERATOR_TENANT_NAME || "NY Restoration Group").trim();
 
   const { data, error } = await supabase
     .from("v2_tenants")
     .select("id")
-    .eq("name", "NY Restoration Group")
+    .eq("name", operatorTenantName)
     .eq("type", "franchise")
     .limit(1)
     .maybeSingle();
 
-  if (error || !data?.id) throw new Error("Operator tenant not found. Run operator seed first.");
+  if (error || !data?.id) throw new Error(`Operator tenant not found (${operatorTenantName}). Run operator seed first.`);
   return String(data.id);
 }
 
@@ -158,6 +180,11 @@ async function fetchPermitsSignal() {
       ? payload.results
       : Array.isArray(payload?.records)
         ? payload.records
+        : payload && typeof payload === "object"
+          ? (() => {
+              const firstArray = Object.values(payload).find((value) => Array.isArray(value));
+              return Array.isArray(firstArray) ? firstArray : [];
+            })()
         : Array.isArray(payload)
           ? payload
           : [];
@@ -223,6 +250,65 @@ function computeFreshnessScore(occurredAt) {
   return Math.max(0, Math.min(100, Math.round(100 - ageHours * 5)));
 }
 
+function textField(...values) {
+  for (const value of values) {
+    if (value && typeof value === "object") continue;
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function inferServiceLine(record) {
+  const text = `${textField(record.service_line, record.service_name, record.complaint_type, record.descriptor, record.title, record.description)}`.toLowerCase();
+  if (text.includes("plumb") || text.includes("pipe") || text.includes("sewer") || text.includes("leak")) return "plumbing";
+  if (text.includes("roof") || text.includes("hail")) return "roofing";
+  if (text.includes("heat") || text.includes("hvac") || text.includes("ac") || text.includes("air conditioning")) return "hvac";
+  if (text.includes("streamflow") || text.includes("gage") || text.includes("flood") || text.includes("storm")) return "restoration";
+  if (text.includes("fire") || text.includes("smoke") || text.includes("flood") || text.includes("water")) return "restoration";
+  return "restoration";
+}
+
+function locationFromRecord(record) {
+  const locationObj = record.location && typeof record.location === "object" ? record.location : null;
+  const designatedArea = textField(record.designatedArea).toLowerCase();
+  const suffolkHint = designatedArea.includes("suffolk");
+  const lat = toNumber(
+    record.latitude ??
+      record.lat ??
+      locationObj?.latitude ??
+      locationObj?.lat ??
+      locationObj?.y ??
+      record.sourceInfo?.geoLocation?.geogLocation?.latitude,
+    suffolkHint ? 40.869 : 40.7484
+  );
+  const lng = toNumber(
+    record.longitude ??
+      record.long ??
+      locationObj?.longitude ??
+      locationObj?.lng ??
+      locationObj?.x ??
+      record.sourceInfo?.geoLocation?.geogLocation?.longitude,
+    suffolkHint ? -72.941 : -73.9857
+  );
+
+  const line1 = textField(
+    record.location,
+    record.address,
+    record.incident_address,
+    record.street_address,
+    record.property_address,
+    record.designatedArea,
+    record.sourceInfo?.siteName
+  );
+  const city = textField(record.city, record.borough, suffolkHint ? "Ronkonkoma" : "New York");
+  const state = textField(record.state, "NY");
+  const postal = textField(record.postal_code, record.zip, record.incident_zip, suffolkHint ? "11779" : "10001");
+  const locationText = line1 ? `${line1}, ${city}, ${state} ${postal}` : `350 5th Ave, ${city}, ${state} ${postal}`;
+
+  return { lat, lng, locationText, city, state, postal };
+}
+
 async function main() {
   const mode = runtimeMode();
 
@@ -285,15 +371,33 @@ async function main() {
   console.log("connector run");
 
   const record = pulled.record;
-  const occurredAt = new Date(String(record.occurred_at || record.issued_at || nowIso)).toISOString();
-  const lat = toNumber(record.latitude, 40.7484);
-  const lng = toNumber(record.longitude, -73.9857);
+  const occurredAt = new Date(
+    String(record.occurred_at || record.issued_at || record.requested_datetime || record.created_date || record.created_at || nowIso)
+  ).toISOString();
+  const { lat, lng, locationText, city, state, postal } = locationFromRecord(record);
   const severity = toNumber(record.severity, 75);
   const sourceReliability = toNumber(record.source_reliability, 72);
-  const serviceLine = String(record.service_line || "restoration");
-  const title = String(record.title || record.permit_type || "Operator pilot opportunity");
-  const description = String(record.description || "Operator test generated opportunity");
-  const locationText = String(record.location || record.address || "350 5th Ave, New York, NY 10118");
+  const serviceLine = inferServiceLine(record);
+  const title = textField(
+    record.title,
+    record.permit_type,
+    record.service_name,
+    record.complaint_type,
+    record.descriptor,
+    record.incidentType,
+    record.sourceInfo?.siteName,
+    "Operator pilot opportunity"
+  );
+  const description = textField(
+    record.description,
+    record.declarationTitle,
+    record.incidentType,
+    record.variable?.variableName,
+    record.status_notes,
+    record.resolution_description,
+    record.descriptor,
+    "Operator test generated opportunity"
+  );
 
   const sourceEventId = randomUUID();
   const scores = scoreFromSeverity(severity);
@@ -310,7 +414,10 @@ async function main() {
       source_provenance: pulled.sourceProvenance,
       connector_version: "operator-test-2",
       terms_status: String(process.env.PERMITS_TERMS_STATUS || "approved"),
-      data_freshness_score: computeFreshnessScore(occurredAt)
+      data_freshness_score: computeFreshnessScore(occurredAt),
+      city,
+      state,
+      postal_code: postal
     },
     location_text: locationText,
     location: `SRID=4326;POINT(${lng} ${lat})`,
@@ -340,7 +447,7 @@ async function main() {
     catastrophe_linkage_score: scores.catastrophe,
     location_text: locationText,
     location: `SRID=4326;POINT(${lng} ${lat})`,
-    postal_code: "10001",
+    postal_code: postal,
     contact_status: "identified",
     routing_status: "pending",
     lifecycle_status: "new",
@@ -390,7 +497,7 @@ async function main() {
       .from("v2_territories")
       .select("id")
       .eq("tenant_id", tenantId)
-      .contains("zip_codes", ["10001"])
+      .contains("zip_codes", [postal])
       .eq("active", true)
       .limit(1)
       .maybeSingle();
@@ -427,10 +534,10 @@ async function main() {
     opportunity_id: opportunityId,
     contact_name: "Operator Pilot Contact",
     contact_channels_json: { phone: "+15555550123" },
-    property_address: "350 5th Ave, New York, NY 10118",
-    city: "New York",
-    state: "NY",
-    postal_code: "10001",
+    property_address: locationText,
+    city,
+    state,
+    postal_code: postal,
     lead_status: "new",
     crm_sync_status: "not_synced",
     do_not_contact: false

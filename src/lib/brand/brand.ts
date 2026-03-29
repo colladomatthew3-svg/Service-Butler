@@ -1,18 +1,10 @@
-import { Space_Grotesk, Sora } from "next/font/google";
+export const inter = {
+  variable: "--font-inter"
+} as const;
 
-export const inter = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-  weight: ["400", "500", "600", "700"]
-});
-
-export const manrope = Sora({
-  subsets: ["latin"],
-  variable: "--font-manrope",
-  display: "swap",
-  weight: ["500", "600", "700", "800"]
-});
+export const manrope = {
+  variable: "--font-manrope"
+} as const;
 
 export const brand = {
   colors: {

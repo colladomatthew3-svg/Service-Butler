@@ -110,6 +110,16 @@ const marketPresets = [
   { label: "Tampa, FL", value: "Tampa, FL 33602" }
 ] as const;
 
+function ScannerMetric({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return (
+    <div className="rounded-[1.1rem] border border-semantic-border/60 bg-white/74 px-4 py-3 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-semantic-text">{value}</p>
+      <p className="mt-1 text-xs text-semantic-muted">{helper}</p>
+    </div>
+  );
+}
+
 export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   const [mode] = useState<Mode>(isDemoMode() ? "demo" : "live");
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -411,24 +421,46 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
         subtitle="Pick your market, scan for jobs, and work the best calls first."
       />
 
-      <div className="rounded-[1.7rem] border border-brand-500/30 bg-[linear-gradient(120deg,rgba(216,239,229,0.9),rgba(255,255,255,0.94))] px-5 py-5 shadow-[0_18px_54px_rgba(25,112,77,0.12)] sm:px-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Lead Engine Flow</p>
-        <p className="mt-2 text-sm text-semantic-text">
-          Scanner now prioritizes contactable opportunities first. Signals are ranked, verified, and routed so your team spends time on real bookable jobs.
-        </p>
-      </div>
+      <section className="overflow-hidden rounded-[2.1rem] border border-brand-500/24 bg-[linear-gradient(120deg,rgba(216,239,229,0.94),rgba(255,255,255,0.97))] shadow-[0_24px_64px_rgba(25,112,77,0.12)]">
+        <div className="grid gap-6 px-5 py-6 lg:grid-cols-[1.25fr_0.95fr] lg:px-6">
+          <div className="space-y-4">
+            <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/72 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+              Lead Engine Flow
+            </p>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold tracking-tight text-semantic-text sm:text-3xl">Rank the market, surface the job, and hand off only the calls worth making.</h2>
+              <p className="max-w-2xl text-sm text-semantic-text sm:text-base">
+                Scanner prioritizes contactable opportunities first. Signals are ranked, verified, and routed so your team spends time on real bookable jobs.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setTab("feed")}>
+                Signal Feed
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setTab("rules")}>
+                Routing Rules
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <ScannerMetric label="Active market" value={location} helper="Target geography" />
+            <ScannerMetric label="Signals" value={`${selectedTriggers.length} enabled`} helper="Signal filters on" />
+            <ScannerMetric label="Radius" value={`${radius} miles`} helper="Coverage window" />
+          </div>
+        </div>
+      </section>
 
-      <Card>
-        <CardBody className="space-y-4">
+      <Card className="overflow-hidden border-semantic-border/55 bg-white/62 shadow-[0_16px_42px_rgba(31,42,36,0.06)]">
+        <CardBody className="space-y-5 p-5 sm:p-6">
           {demoActionMessage && (
-            <div className="rounded-xl border border-brand-500/20 bg-brand-50/70 px-4 py-3 text-sm font-medium text-brand-700">
+            <div className="rounded-[1.1rem] border border-brand-500/20 bg-brand-50/70 px-4 py-3 text-sm font-medium text-brand-700">
               {demoActionMessage}
             </div>
           )}
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.3fr_1fr_120px_160px]">
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Market</p>
+          <div className="grid gap-3 xl:grid-cols-[1.3fr_1fr_120px_160px]">
+            <div className="rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Market</p>
               <Input
                 data-testid="scanner-location"
                 value={location}
@@ -437,8 +469,8 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               />
             </div>
 
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Job Type</p>
+            <div className="rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Job Type</p>
               <Select
                 value={campaignMode}
                 onChange={(e) => {
@@ -459,8 +491,8 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               </Select>
             </div>
 
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Radius (mi)</p>
+            <div className="rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Radius (mi)</p>
               <Select data-testid="scanner-radius" value={radius} onChange={(e) => setRadius(e.target.value)}>
                 {["5", "10", "25", "50", "100"].map((value) => (
                   <option key={value} value={value}>{value}</option>
@@ -468,7 +500,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
               </Select>
             </div>
 
-            <div className="self-end md:col-span-2 xl:col-span-1">
+            <div className="self-end rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)] xl:col-span-1">
               <Button data-testid="scanner-run" onClick={() => runScan(true)} disabled={loading} fullWidth>
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 Scan Now
@@ -476,7 +508,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </div>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-2 overflow-x-auto rounded-[1.25rem] border border-semantic-border/60 bg-white/68 px-3 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {marketPresets.map((market) => (
               <Button
                 key={market.value}
@@ -490,46 +522,44 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             ))}
           </div>
 
-          <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+          <div className="rounded-[1.25rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(241,245,240,0.8))] p-4">
             <p className="text-sm font-semibold text-semantic-text">
               {campaignOptions.find((option) => option.value === campaignMode)?.helper}
             </p>
             <p className="mt-1 text-sm text-semantic-muted">We use your saved service area first so the jobs stay close to where your crews actually work.</p>
           </div>
 
-          <details className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-semantic-text">More scan options</summary>
-              <p className="mt-2 text-sm text-semantic-muted">
-                Use these only if you need to fine-tune the scan.
-              </p>
-              <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_120px]">
-                <label>
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Signals</span>
-                  <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0">
-                    {triggerOptions.map((trigger) => {
-                      const active = selectedTriggers.includes(trigger.id);
-                      return (
-                        <button
-                          key={trigger.id}
-                          type="button"
-                          data-testid={`scanner-trigger-${trigger.id}`}
-                          onClick={() =>
-                            setSelectedTriggers((prev) =>
-                              prev.includes(trigger.id) ? prev.filter((item) => item !== trigger.id) : [...prev, trigger.id]
-                            )
-                          }
-                          className={cn(
-                            "min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold",
-                            active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
-                          )}
-                        >
-                          {trigger.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
+          <details className="rounded-[1.25rem] border border-semantic-border/60 bg-white/68 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-semantic-text">More scan options</summary>
+            <p className="mt-2 text-sm text-semantic-muted">Use these only if you need to fine-tune the scan.</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_120px]">
+              <label className="rounded-[1rem] border border-semantic-border/55 bg-white/74 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Signals</span>
+                <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0">
+                  {triggerOptions.map((trigger) => {
+                    const active = selectedTriggers.includes(trigger.id);
+                    return (
+                      <button
+                        key={trigger.id}
+                        type="button"
+                        data-testid={`scanner-trigger-${trigger.id}`}
+                        onClick={() =>
+                          setSelectedTriggers((prev) =>
+                            prev.includes(trigger.id) ? prev.filter((item) => item !== trigger.id) : [...prev, trigger.id]
+                          )
+                        }
+                        className={cn(
+                          "min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold",
+                          active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
+                        )}
+                      >
+                        {trigger.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </label>
+              <div className="grid grid-cols-2 gap-2 rounded-[1rem] border border-semantic-border/55 bg-white/74 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
                 <div>
                   <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat</p>
                   <Input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="40.7812" />
@@ -539,16 +569,16 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                   <Input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="-73.2462" />
                 </div>
               </div>
-                <label>
-                  <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Results</span>
-                  <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
-                    {["8", "12", "20", "30", "50"].map((value) => (
-                      <option key={value} value={value}>{value}</option>
-                    ))}
-                  </Select>
-                </label>
-              </div>
-            </details>
+              <label className="rounded-[1rem] border border-semantic-border/55 bg-white/74 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
+                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Results</span>
+                <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
+                  {["8", "12", "20", "30", "50"].map((value) => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </Select>
+              </label>
+            </div>
+          </details>
         </CardBody>
       </Card>
 
@@ -561,8 +591,10 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 key={item.id}
                 onClick={() => setTab(item.id)}
                 className={cn(
-                  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-semibold",
-                  tab === item.id ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
+                  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-[0.95rem] px-4 text-sm font-semibold",
+                  tab === item.id
+                    ? "bg-semantic-brand text-white shadow-[0_10px_24px_rgba(25,112,77,0.18)]"
+                    : "bg-semantic-surface2/80 text-semantic-muted ring-1 ring-inset ring-semantic-border hover:bg-semantic-surface"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -576,13 +608,13 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       {tab === "feed" && (
         <section className="space-y-4">
           {!loading && sortedEvents.length > 0 && (
-            <div className="rounded-xl border border-semantic-border bg-semantic-surface2/70 px-4 py-3 text-sm text-semantic-text">
+            <div className="rounded-[1rem] border border-semantic-border/60 bg-white/70 px-4 py-3 text-sm text-semantic-text">
               <span className="font-semibold">{sortedEvents.length} jobs found.</span> Start with the closest high-urgency calls and book the inspection.
             </div>
           )}
 
           {loading && (
-            <Card>
+            <Card className="border-semantic-border/55 bg-white/58">
               <CardBody className="space-y-3">
                 <p className="text-sm font-semibold text-semantic-text">Scanning live signals and local incident pressure...</p>
                 <Skeleton className="h-16 w-full" />
@@ -593,7 +625,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
           )}
 
           {!loading && sortedEvents.length === 0 && (
-            <Card>
+            <Card className="border-semantic-border/55 bg-white/58">
               <CardBody className="py-12 text-center">
                 <Radar className="mx-auto h-10 w-10 text-brand-700" />
                 <p className="mt-3 text-lg font-semibold text-semantic-text">Scanner is listening</p>
@@ -614,8 +646,8 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             const areaContext = [String(event.raw?.neighborhood || "").trim(), String(event.raw?.county || "").trim()].filter(Boolean).join(" · ");
 
             return (
-              <Card key={event.id} className="transition hover:shadow-card" data-testid="scanner-result-card">
-                <CardBody className="grid gap-5 xl:grid-cols-[240px_1fr_240px] xl:items-start">
+              <Card key={event.id} className="overflow-hidden border-semantic-border/55 bg-white/74 transition hover:-translate-y-0.5 hover:shadow-card" data-testid="scanner-result-card">
+                <CardBody className="grid gap-5 xl:grid-cols-[220px_1fr_220px] xl:items-start">
                   <OpportunityPropertyVisual event={event} address={displayAddress} addressLine={addressParts.streetLine} enrichment={enrichment} />
 
                   <div className="space-y-4">
@@ -652,7 +684,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                       <MetricStat label="Job score" value={`${event.intent_score}`} emphasize />
                     </div>
 
-                    <div className="rounded-xl border border-semantic-border/70 bg-semantic-surface2/65 p-4">
+                    <div className="rounded-[1.15rem] border border-semantic-border/60 bg-white/70 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this job is showing up</p>
                       <ul className="mt-3 grid gap-2 text-sm text-semantic-text">
                         {bullets.map((bullet, index) => (
@@ -665,7 +697,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     </div>
 
                     {enrichment && (
-                      <details className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
+                      <details className="rounded-[1.15rem] border border-semantic-border/60 bg-white/68 p-4">
                         <summary className="cursor-pointer text-sm font-semibold text-semantic-text">Property details</summary>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                           <MetricStat label="Neighborhood" value={enrichment.neighborhood} />
@@ -686,12 +718,12 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                     )}
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 xl:rounded-[1.15rem] xl:border xl:border-semantic-border/60 xl:bg-white/68 xl:p-3">
                     <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
                       {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
                       Schedule Inspection
                     </Button>
-                    <p className="rounded-xl border border-semantic-border/75 bg-semantic-surface2/75 px-4 py-3 text-sm text-semantic-text sm:col-span-2 xl:col-span-1">
+                    <p className="rounded-[1rem] border border-semantic-border/60 bg-white/72 px-4 py-3 text-sm text-semantic-text sm:col-span-2 xl:col-span-1">
                       <span className="font-semibold">Next step:</span> {nextAction}
                     </p>
                     <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
@@ -725,7 +757,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
       {tab === "rules" && (
         <section className="grid gap-5 xl:grid-cols-[1.2fr_1fr]">
-          <Card>
+          <Card className="border-semantic-border/55 bg-white/58">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">Routing Rules</h2>
             </CardHeader>
@@ -741,7 +773,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
               {!rulesLoading &&
                 rules.map((rule) => (
-                  <article key={rule.id} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
+                  <article key={rule.id} className="rounded-[1.15rem] border border-semantic-border/60 bg-white/72 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="font-semibold text-semantic-text">{categoryLabel[rule.category]}</p>
@@ -769,7 +801,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </CardBody>
           </Card>
 
-          <Card>
+          <Card className="border-semantic-border/55 bg-white/58">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">{editing ? "Edit Rule" : "Add Rule"}</h2>
             </CardHeader>
@@ -849,7 +881,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 )}
               </div>
 
-              <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+              <div className="rounded-[1.15rem] border border-semantic-border/60 bg-white/72 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Test Routing</p>
                 <p className="mt-1 text-sm text-semantic-text">
                   {testRule

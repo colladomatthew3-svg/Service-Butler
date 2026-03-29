@@ -13,6 +13,7 @@ Set these before activation:
 export NEXT_PUBLIC_SUPABASE_URL="https://<project>.supabase.co"
 export SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
 export SUPABASE_DB_URL="postgresql://..."
+export NEXT_PUBLIC_APP_URL="https://<your-app-origin>"
 
 # Feature flags (required for v2 live path)
 export SB_USE_V2_WRITES=true
@@ -20,7 +21,7 @@ export SB_USE_V2_READS=true
 # Optional: polygon routing path
 export SB_USE_POLYGON_ROUTING=true
 
-# Webhook auth (recommended required for production)
+# Webhook auth (required)
 export WEBHOOK_SHARED_SECRET="<strong-shared-secret>"
 
 # Inngest (required for workflow-backed operations)
@@ -90,6 +91,7 @@ Healthcheck must report pass for:
 - v2 feature flags loaded
 - operator tenant and territory records
 - active data source config
+- webhook secret configured
 - Inngest config
 - Twilio/HubSpot configured or explicitly disabled
 

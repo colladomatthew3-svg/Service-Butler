@@ -15,6 +15,8 @@
   --sb-surface-subtle: 226 232 226;
   --sb-copper: 193 118 77;
   --sb-copper-soft: 244 222 205;
+  --font-inter: "Inter";
+  --font-manrope: "Manrope";
   --bg: var(--sb-bg);
   --surface: var(--sb-card);
   --surface2: var(--sb-surface-alt);

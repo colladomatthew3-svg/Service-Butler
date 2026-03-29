@@ -10,6 +10,7 @@ Target example: **NY Restoration Group**
 export NEXT_PUBLIC_SUPABASE_URL="https://<project>.supabase.co"
 export SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
 export SUPABASE_DB_URL="postgresql://..."
+export NEXT_PUBLIC_APP_URL="https://<your-app-origin>"
 export SB_USE_V2_WRITES=true
 export SB_USE_V2_READS=true
 # Optional

@@ -208,18 +208,26 @@ export default async function DashboardOverviewPage() {
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-[2rem] border border-brand-500/25 bg-[linear-gradient(120deg,rgba(216,239,229,0.85),rgba(255,255,255,0.9))] px-5 py-6 shadow-[0_24px_64px_rgba(25,112,77,0.12)] sm:px-7 sm:py-8">
+      <section className="relative overflow-hidden rounded-[2.15rem] border border-brand-500/25 bg-[linear-gradient(120deg,rgba(216,239,229,0.92),rgba(255,255,255,0.95))] px-5 py-6 shadow-[0_24px_64px_rgba(25,112,77,0.12)] sm:px-7 sm:py-8">
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-brand-100/65 blur-3xl" />
-        <div className="relative grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-end">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Opportunities Near You</p>
-            <h1 className="dashboard-page-title mt-2 text-semantic-text">Find and claim jobs before your competitors.</h1>
-            <p className="mt-3 text-base text-semantic-muted">
-              {demoMode
-                ? "Demo-ready Scanner and Weather signals using saved service-area data. Try storm response in Brentwood, Hauppauge, or Midtown."
-                : "Scanner intelligence aligned to your saved service area. Run weather-led scans and route urgent opportunities first."}
-            </p>
-            <div className="mt-5 grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+        <div className="pointer-events-none absolute bottom-0 left-0 h-24 w-24 rounded-full bg-white/45 blur-2xl" />
+        <div className="relative grid gap-5 xl:grid-cols-[1.08fr_0.92fr] xl:items-stretch">
+          <div className="flex flex-col justify-between gap-5">
+            <div className="space-y-4">
+              <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/65 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+                Command Center
+              </p>
+              <div className="max-w-3xl">
+                <h1 className="dashboard-page-title text-semantic-text">Find and claim jobs before your competitors.</h1>
+                <p className="mt-3 text-base text-semantic-muted">
+                  {demoMode
+                    ? "Demo-ready Scanner and Weather signals using saved service-area data. Try storm response in Brentwood, Hauppauge, or Midtown."
+                    : "Scanner intelligence aligned to your saved service area. Run weather-led scans and route urgent opportunities first."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
               <Link href="/dashboard/scanner">
                 <Button size="lg" fullWidth>Run Scanner</Button>
               </Link>
@@ -232,22 +240,25 @@ export default async function DashboardOverviewPage() {
             </div>
           </div>
 
-          <div className="space-y-3 rounded-[1.4rem] border border-semantic-border/65 bg-white/75 p-4 sm:p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Dispatch Focus</p>
+          <div className="grid gap-3 rounded-[1.55rem] border border-semantic-border/60 bg-white/72 p-4 shadow-[0_12px_34px_rgba(31,42,36,0.08)] sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Dispatch Pulse</p>
+              <Badge variant={weatherHighRisk ? "warning" : "brand"}>{weatherHighRisk ? "High risk" : "Steady"}</Badge>
+            </div>
             <p className="inline-flex items-center gap-2 text-sm font-semibold text-semantic-text">
               <TriangleAlert className={`h-4 w-4 ${weatherHighRisk ? "text-warning-500" : "text-brand-600"}`} />
               {weatherHighRisk ? "Weather pressure is building" : "Normal operating window"}
             </p>
             <p className="text-sm text-semantic-muted">{weatherActionText}</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <Link href="/dashboard/scanner">
-                <Button size="sm">Start high-priority scan</Button>
+                <Button size="sm" fullWidth>Start high-priority scan</Button>
               </Link>
               <Link href="/dashboard/schedule">
-                <Button size="sm" variant="secondary">Open schedule</Button>
+                <Button size="sm" variant="secondary" fullWidth>Open schedule</Button>
               </Link>
             </div>
-            <div className="pt-2">
+            <div className="rounded-[1.15rem] border border-semantic-border/60 bg-white/70 p-3">
               <WeatherTicker lat={lat} lng={lng} compact locationLabel={weatherLabel} />
             </div>
           </div>
@@ -275,10 +286,13 @@ export default async function DashboardOverviewPage() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="flex-1">
+        <Card className="flex-1 border-semantic-border/55 bg-white/58">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <h2 className="dashboard-section-title text-semantic-text">Opportunity Feed</h2>
+              <span className="hidden rounded-full border border-semantic-border/70 bg-white/75 px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-semantic-muted sm:inline-flex">
+                Signal stream
+              </span>
               <Link href="/dashboard/scanner">
                 <Button size="sm" variant="secondary">Open Scanner</Button>
               </Link>
@@ -289,9 +303,10 @@ export default async function DashboardOverviewPage() {
               <Link
                 key={item.id}
                 href="/dashboard/scanner"
-                className="block rounded-[1.2rem] border border-semantic-border/65 bg-white/70 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-white"
+                className="block rounded-[1.2rem] border border-semantic-border/60 bg-white/72 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-white"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-4">
+                  <div className="mt-1 h-12 w-1.5 shrink-0 rounded-full bg-[linear-gradient(180deg,rgb(var(--brand)),rgb(var(--accent)))]" />
                   <div>
                     <p className="font-semibold text-semantic-text">{item.title}</p>
                     <p className="mt-1 text-sm text-semantic-muted">{item.location_text || "Service area"}</p>
@@ -300,9 +315,7 @@ export default async function DashboardOverviewPage() {
                     </p>
                     <p className="mt-1 text-xs text-semantic-muted">Open Scanner to create a lead, assign follow-up, or schedule the inspection.</p>
                   </div>
-                  <Badge variant={Number(item.intent_score) >= 75 ? "warning" : "default"}>
-                    {Number(item.intent_score) || 0}
-                  </Badge>
+                  <Badge variant={Number(item.intent_score) >= 75 ? "warning" : "default"}>{Number(item.intent_score) || 0}</Badge>
                 </div>
               </Link>
             ))}
@@ -314,10 +327,13 @@ export default async function DashboardOverviewPage() {
             )}
           </CardBody>
         </Card>
-        <Card>
+        <Card className="border-semantic-border/55 bg-white/58">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <h2 className="dashboard-section-title text-semantic-text">Priority Queue</h2>
+              <span className="hidden rounded-full border border-semantic-border/70 bg-white/75 px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-semantic-muted sm:inline-flex">
+                Next actions
+              </span>
               <Link href="/dashboard/leads" className="text-sm font-semibold text-brand-700">
                 Open leads
               </Link>
@@ -334,27 +350,34 @@ export default async function DashboardOverviewPage() {
               <Link
                 key={lead.id}
                 href={`/dashboard/leads/${lead.id}`}
-                className="block rounded-xl border border-semantic-border/70 p-4 transition hover:border-brand-300 hover:bg-brand-50/35"
+                className="block rounded-[1.15rem] border border-semantic-border/60 bg-white/74 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-white"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-semantic-text">{lead.name || "Unknown lead"}</p>
-                    <p className="text-sm text-semantic-muted">
-                      {lead.service_type || "Service"} · {[lead.city, lead.state].filter(Boolean).join(", ")}
-                    </p>
+                <div className="flex items-start gap-4">
+                  <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
+                    {String(lead.intent || 0)}
                   </div>
-                  <Badge variant={Number(lead.intent || 0) >= 75 ? "warning" : "default"}>{Number(lead.intent || 0)}%</Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-semantic-text">{lead.name || "Unknown lead"}</p>
+                        <p className="text-sm text-semantic-muted">
+                          {lead.service_type || "Service"} · {[lead.city, lead.state].filter(Boolean).join(", ")}
+                        </p>
+                      </div>
+                      <Badge variant={Number(lead.intent || 0) >= 75 ? "warning" : "default"}>{Number(lead.intent || 0)}%</Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-semantic-muted">{lead.scheduled_for ? `Scheduled ${formatScheduled(lead.scheduled_for)}` : "Needs first contact"}</p>
+                  </div>
                 </div>
-                <p className="mt-2 text-sm text-semantic-muted">{lead.scheduled_for ? `Scheduled ${formatScheduled(lead.scheduled_for)}` : "Needs first contact"}</p>
               </Link>
             ))}
 
-            <div className="rounded-xl border border-semantic-border/65 bg-white/70 p-4">
+            <div className="rounded-[1.15rem] border border-semantic-border/60 bg-white/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next scheduled jobs</p>
               <div className="mt-2 space-y-2">
                 {nextUp.length === 0 && <p className="text-sm text-semantic-muted">No booked visits yet for the next window.</p>}
                 {nextUp.map((job) => (
-                  <Link key={job.id} href={`/dashboard/jobs/${job.id}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 transition hover:bg-semantic-surface2">
+                  <Link key={job.id} href={`/dashboard/jobs/${job.id}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 transition hover:bg-semantic-surface2/70">
                     <span className="text-sm font-medium text-semantic-text">{job.customer_name || "Unknown customer"}</span>
                     <span className="inline-flex items-center text-xs text-semantic-muted">
                       {formatScheduled(job.scheduled_for as string)}
@@ -383,7 +406,7 @@ function formatScheduled(date: string) {
 
 function SnapshotStat({ label, value, helper }: { label: string; value: string; helper: string }) {
   return (
-    <div className="min-w-[188px] shrink-0 rounded-[1.1rem] border border-semantic-border/70 bg-white/72 px-4 py-3 shadow-[0_10px_26px_rgba(31,42,36,0.08)]">
+    <div className="min-w-[188px] shrink-0 rounded-[1.1rem] border border-semantic-border/60 bg-white/72 px-4 py-3 shadow-[0_10px_26px_rgba(31,42,36,0.08)]">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
       <p className="mt-1 text-xl font-semibold text-semantic-text">{value}</p>
       <p className="text-xs text-semantic-muted">{helper}</p>

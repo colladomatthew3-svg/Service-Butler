@@ -62,3 +62,15 @@ Use existing SDR env vars to tighten or loosen qualification:
 - `SB_SDR_MIN_SOURCE_RELIABILITY`
 - `SB_SDR_MIN_VERIFY_SCORE`
 - `SB_SDR_MAX_LEADS`
+
+For Suffolk weekly QA and source ranking, also run:
+
+```bash
+npm run suffolk:quality-report
+```
+
+If Suffolk has not been seeded in the current environment, use:
+
+```bash
+npm run suffolk:quality-report -- --template
+```

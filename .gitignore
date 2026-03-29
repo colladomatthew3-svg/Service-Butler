@@ -1,6 +1,8 @@
 .next/
 .next-dev/
 .next-build/
+.tmp/
+artifacts/suffolk-quality/
 next-env.d.ts
 node_modules/
 node_modules

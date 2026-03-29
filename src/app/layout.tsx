@@ -1,7 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { ToastProvider } from "@/components/ui/toast";
-import { inter, manrope } from "@/lib/brand/brand";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://servicebutler.ai"),
@@ -57,7 +56,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${manrope.variable}`}>
+    <html
+      lang="en"
+      style={
+        {
+          "--font-inter": '"Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          "--font-manrope": '"Manrope", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+        } as React.CSSProperties
+      }
+    >
       <body>
         <ToastProvider>{children}</ToastProvider>
       </body>

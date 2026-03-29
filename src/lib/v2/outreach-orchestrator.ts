@@ -1,6 +1,7 @@
 import { createHubSpotTask } from "@/lib/v2/hubspot";
 import { queueTwilioVoiceTask, sendTwilioMessage } from "@/lib/v2/twilio";
 import { logV2AuditEvent } from "@/lib/v2/audit";
+import { normalizeDestinationForChannel } from "@/lib/v2/contact-destinations";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const DEFAULT_COOLING_WINDOW_MINUTES = 240;
@@ -30,12 +31,13 @@ async function isSuppressed({
   channel: string;
   value: string;
 }) {
+  const normalizedValue = normalizeDestinationForChannel(channel, value) || String(value || "").trim();
   const { data } = await supabase
     .from("v2_suppression_list")
     .select("id")
     .eq("tenant_id", tenantId)
     .eq("channel", channel)
-    .eq("value", value)
+    .eq("value", normalizedValue)
     .maybeSingle();
 
   return Boolean(data?.id);
@@ -106,6 +108,7 @@ async function insertOutreachEvent(input: {
 
 export async function dispatchOutreach(input: DispatchInput) {
   const coolingWindowMinutes = Math.max(5, Number(input.coolingWindowMinutes || DEFAULT_COOLING_WINDOW_MINUTES));
+  const destination = normalizeDestinationForChannel(input.channel, input.to) || input.to;
 
   const blockedByLead = await leadIsDoNotContact({
     supabase: input.supabase,
@@ -131,7 +134,7 @@ export async function dispatchOutreach(input: DispatchInput) {
     supabase: input.supabase,
     tenantId: input.tenantId,
     channel: input.channel,
-    value: input.to
+    value: destination
   });
 
   if (suppressed) {
@@ -247,7 +250,7 @@ export async function dispatchOutreach(input: DispatchInput) {
       before: null,
       after: {
         channel: input.channel,
-        to: input.to,
+        to: destination,
         outcome,
         provider_message_id: providerMessageId
       }

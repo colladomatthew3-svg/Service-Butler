@@ -127,32 +127,37 @@ export function LeadInboxView() {
 
   async function submitLead() {
     setSavingLead(true);
-    const res = await fetch("/api/leads", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(form)
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast((data as { error?: string }).error || "Failed to create lead");
+        return;
+      }
+      showToast("Lead added");
+      setShowAdd(false);
+      setForm({
+        name: "",
+        phone: "",
+        service_type: "HVAC",
+        address: "",
+        city: "",
+        state: "",
+        postal_code: "",
+        requested_timeframe: "ASAP",
+        notes: ""
+      });
+      router.push(`/dashboard/leads/${(data as { leadId: string }).leadId}`);
+      router.refresh();
+    } catch {
+      showToast("Failed to create lead");
+    } finally {
       setSavingLead(false);
-      showToast((data as { error?: string }).error || "Failed to create lead");
-      return;
     }
-    showToast("Lead added");
-    setShowAdd(false);
-    setForm({
-      name: "",
-      phone: "",
-      service_type: "HVAC",
-      address: "",
-      city: "",
-      state: "",
-      postal_code: "",
-      requested_timeframe: "ASAP",
-      notes: ""
-    });
-    router.push(`/dashboard/leads/${(data as { leadId: string }).leadId}`);
-    router.refresh();
   }
 
   async function scheduleLead(leadId: string, preset: "todayPm" | "tomorrowAm" | "thisWeek") {
@@ -168,18 +173,22 @@ export function LeadInboxView() {
       d.setHours(10, 0, 0, 0);
     }
 
-    const res = await fetch(`/api/leads/${leadId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status: "scheduled", scheduled_for: d.toISOString() })
-    });
-    if (!res.ok) {
-      showToast("Could not schedule lead");
-      return;
-    }
+    try {
+      const res = await fetch(`/api/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "scheduled", scheduled_for: d.toISOString() })
+      });
+      if (!res.ok) {
+        showToast("Could not schedule lead");
+        return;
+      }
 
-    setLeads((prev) => prev.map((lead) => (lead.id === leadId ? { ...lead, status: "scheduled", scheduled_for: d.toISOString() } : lead)));
-    showToast("Scheduled");
+      setLeads((prev) => prev.map((lead) => (lead.id === leadId ? { ...lead, status: "scheduled", scheduled_for: d.toISOString() } : lead)));
+      showToast("Scheduled");
+    } catch {
+      showToast("Could not schedule lead");
+    }
   }
 
   async function handleTextLead(lead: LeadRow) {
@@ -205,15 +214,19 @@ export function LeadInboxView() {
       window.location.href = `/dashboard/jobs/${lead.converted_job_id}`;
       return;
     }
-    const res = await fetch(`/api/leads/${lead.id}/convert`, { method: "POST" });
-    const data = await res.json();
-    if (!res.ok || !data.jobId) {
-      showToast(data.error || "Could not convert lead");
-      return;
+    try {
+      const res = await fetch(`/api/leads/${lead.id}/convert`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.jobId) {
+        showToast(data.error || "Could not convert lead");
+        return;
+      }
+      setLeads((prev) => prev.map((row) => (row.id === lead.id ? { ...row, converted_job_id: data.jobId } : row)));
+      showToast(data.created ? "Converted to Job" : "Opened existing job");
+      window.location.href = `/dashboard/jobs/${data.jobId}`;
+    } catch {
+      showToast("Could not convert lead");
     }
-    setLeads((prev) => prev.map((row) => (row.id === lead.id ? { ...row, converted_job_id: data.jobId } : row)));
-    showToast(data.created ? "Converted to Job" : "Opened existing job");
-    window.location.href = `/dashboard/jobs/${data.jobId}`;
   }
 
   async function importCsvFile(file: File) {
@@ -298,35 +311,70 @@ export function LeadInboxView() {
         }
       />
 
-      <div className="rounded-[1.7rem] border border-brand-500/28 bg-[linear-gradient(115deg,rgba(216,239,229,0.88),rgba(255,255,255,0.94))] px-5 py-5 shadow-[0_20px_56px_rgba(25,112,77,0.11)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Verified Lead Queue</p>
-        <p className="mt-2 text-sm text-semantic-text">
-          This inbox is optimized for verified, contactable leads first. Use quick actions to call, text, schedule, and convert without context switching.
-        </p>
-      </div>
-
-      <Card className="overflow-visible">
-        <CardBody className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[1fr_220px_220px] lg:items-center">
-            <div className="flex flex-col gap-2 rounded-2xl border border-semantic-border/75 bg-white/78 p-2 sm:flex-row sm:items-center sm:px-3 sm:py-2">
-              <div className="flex flex-1 items-center gap-2 px-1">
-                <Search className="h-4 w-4 text-semantic-muted" />
-                <Input
-                  placeholder="Search customer, phone, or location"
-                  className="border-0 bg-transparent shadow-none focus:ring-0"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      loadLeads();
-                    }
-                  }}
-                />
-              </div>
-              <Button size="sm" fullWidth className="sm:w-auto" onClick={loadLeads}>Search</Button>
+      <section className="overflow-hidden rounded-[2.1rem] border border-brand-500/24 bg-[linear-gradient(120deg,rgba(216,239,229,0.94),rgba(255,255,255,0.97))] shadow-[0_24px_64px_rgba(25,112,77,0.12)]">
+        <div className="grid gap-6 px-5 py-6 lg:grid-cols-[1.35fr_0.95fr] lg:px-6">
+          <div className="space-y-4">
+            <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/72 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+              Verified Lead Queue
+            </p>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold tracking-tight text-semantic-text sm:text-3xl">Keep the contactable work on top and move faster on the next booked job.</h2>
+              <p className="max-w-2xl text-sm text-semantic-text sm:text-base">
+                This inbox is optimized for verified, contactable leads first. Use quick actions to call, text, schedule, and convert without context switching.
+              </p>
             </div>
-            <div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/dashboard/scanner">
+                <Button size="sm" variant="secondary">
+                  Open Scanner
+                </Button>
+              </Link>
+              <Button size="sm" onClick={() => setShowAdd(true)}>
+                <Plus className="h-4 w-4" />
+                Add Lead
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => csvInputRef.current?.click()} disabled={importingCsv}>
+                {importingCsv ? <Clock3 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Import CSV
+              </Button>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <LeadStat label="New today" value={kpis.newToday} helper="Captured in the last 24 hours" />
+            <LeadStat label="High intent" value={kpis.highIntent} helper="Ready for a call or text" />
+            <LeadStat label="Need schedule" value={kpis.needsSchedule} helper="Needs a time on the board" />
+          </div>
+        </div>
+      </section>
+
+      <Card className="overflow-visible border-semantic-border/55 bg-white/62 shadow-[0_16px_42px_rgba(31,42,36,0.06)]">
+        <CardBody className="space-y-4 p-5 sm:p-6">
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_0.8fr] xl:items-end">
+            <div className="rounded-[1.35rem] border border-semantic-border/60 bg-white/76 p-3 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Search queue</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="flex flex-1 items-center gap-2 rounded-[1rem] border border-semantic-border/60 bg-white px-3 py-2">
+                  <Search className="h-4 w-4 text-semantic-muted" />
+                  <Input
+                    placeholder="Search customer, phone, or location"
+                    className="border-0 bg-transparent shadow-none focus:ring-0"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        loadLeads();
+                      }
+                    }}
+                  />
+                </div>
+                <Button size="sm" className="sm:w-auto" onClick={loadLeads}>
+                  Search
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Service line</p>
               <Select value={service} onChange={(e) => setService(e.target.value)}>
                 {serviceFilters.map((option) => (
                   <option key={option} value={option}>
@@ -335,7 +383,8 @@ export function LeadInboxView() {
                 ))}
               </Select>
             </div>
-            <div>
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Sort</p>
               <Select value={sort} onChange={(e) => setSort(e.target.value as SortMode)}>
                 <option value="intent">Highest intent</option>
                 <option value="newest">Newest</option>
@@ -361,7 +410,7 @@ export function LeadInboxView() {
       </section>
 
       {loading ? (
-        <Card>
+        <Card className="border-semantic-border/55 bg-white/58">
           <CardBody className="space-y-3">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-24 w-full" />
@@ -370,7 +419,7 @@ export function LeadInboxView() {
           </CardBody>
         </Card>
       ) : visibleLeads.length === 0 ? (
-        <Card>
+        <Card className="border-semantic-border/55 bg-white/58">
           <CardBody className="py-12 text-center">
             <p className="text-lg font-semibold text-semantic-text">No leads found</p>
             <p className="mt-1 text-sm text-semantic-muted">Run the Lead Scanner or add a new lead to start the inbox workflow.</p>
@@ -392,37 +441,42 @@ export function LeadInboxView() {
         <>
           <div className="space-y-4 lg:hidden">
             {visibleLeads.map((lead) => (
-              <Card key={lead.id} className="transition hover:border-brand-300 hover:shadow-card">
-                <CardBody className="space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-lg font-semibold text-semantic-text">{lead.name || "Unknown lead"}</p>
-                      <p className="text-sm text-semantic-muted">{[lead.city, lead.state].filter(Boolean).join(", ") || "Location pending"}</p>
+              <Card key={lead.id} className="overflow-hidden border-semantic-border/60 bg-white/78 shadow-[0_14px_30px_rgba(31,42,36,0.06)] transition hover:-translate-y-0.5 hover:border-brand-300">
+                <CardBody className="space-y-4 p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="mt-1 h-16 w-1.5 shrink-0 rounded-full bg-[linear-gradient(180deg,rgb(var(--brand)),rgb(var(--accent)))]" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-lg font-semibold text-semantic-text">{lead.name || "Unknown lead"}</p>
+                          <p className="text-sm text-semantic-muted">{[lead.city, lead.state].filter(Boolean).join(", ") || "Location pending"}</p>
+                        </div>
+                        <Badge variant={statusBadge(lead.status)}>{lead.status}</Badge>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Badge variant="default">{lead.service_type || "Service"}</Badge>
+                        {lead.converted_job_id && <Badge variant="success">Job created</Badge>}
+                        {isUrgent(lead.requested_timeframe) && <Badge variant="warning">ASAP</Badge>}
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-semantic-muted">
+                          <Clock3 className="h-3 w-3" />
+                          {relativeTime(lead.created_at)}
+                        </span>
+                      </div>
                     </div>
-                    <Badge variant={statusBadge(lead.status)}>{lead.status}</Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="default">{lead.service_type || "Service"}</Badge>
-                    {lead.converted_job_id && <Badge variant="success">Job created</Badge>}
-                    {isUrgent(lead.requested_timeframe) && <Badge variant="warning">ASAP</Badge>}
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-semantic-muted">
-                      <Clock3 className="h-3 w-3" />
-                      {relativeTime(lead.created_at)}
-                    </span>
                   </div>
 
                   <IntentMeter score={lead.intentScore} signalCount={lead.signalCount} />
                   <div className="flex flex-wrap gap-2 text-xs font-semibold text-semantic-muted">
-                    <span className="rounded-full bg-semantic-surface2 px-3 py-1">Source: {leadSourceLabel(lead.source)}</span>
-                    <span className="rounded-full bg-semantic-surface2 px-3 py-1">Detected: {relativeTime(lead.created_at)}</span>
-                    <span className="rounded-full bg-semantic-surface2 px-3 py-1">{lead.requested_timeframe || "Timing pending"}</span>
+                    <span className="rounded-full bg-semantic-surface2/80 px-3 py-1">Source: {leadSourceLabel(lead.source)}</span>
+                    <span className="rounded-full bg-semantic-surface2/80 px-3 py-1">Detected: {relativeTime(lead.created_at)}</span>
+                    <span className="rounded-full bg-semantic-surface2/80 px-3 py-1">{lead.requested_timeframe || "Timing pending"}</span>
                   </div>
                   {lead.notes && (
-                    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-3 py-2 text-sm text-semantic-muted">
+                    <div className="rounded-[1rem] border border-semantic-border/60 bg-white/72 px-3 py-2 text-sm text-semantic-muted">
                       <span className="font-semibold text-semantic-text">Why this lead matters:</span> {lead.notes}
                     </div>
                   )}
-                  <div className="rounded-xl border border-semantic-border bg-semantic-surface2 px-3 py-2 text-sm text-semantic-muted">
+                  <div className="rounded-[1rem] border border-semantic-border/60 bg-white/72 px-3 py-2 text-sm text-semantic-muted">
                     <span className="font-semibold text-semantic-text">Next step:</span> {nextStepLabel(lead)}
                   </div>
 
@@ -487,7 +541,7 @@ export function LeadInboxView() {
             {visibleLeads.map((lead) => (
               <article
                 key={lead.id}
-                className="rounded-[1.3rem] border border-semantic-border/70 bg-white/76 px-5 py-4 shadow-[0_14px_30px_rgba(30,42,36,0.08)] transition hover:-translate-y-0.5 hover:border-brand-300"
+                className="rounded-[1.3rem] border border-semantic-border/60 bg-white/74 px-5 py-4 shadow-[0_14px_30px_rgba(30,42,36,0.08)] transition hover:-translate-y-0.5 hover:border-brand-300"
               >
                 <div className="grid gap-4 xl:grid-cols-[1.1fr_0.75fr_1fr] xl:items-center">
                   <div className="space-y-2">
@@ -712,12 +766,22 @@ function FilterChips({
 function QuickKpi({ label, value, tone = "default" }: { label: string; value: number; tone?: "default" | "warning" | "brand" }) {
   const toneClass = tone === "warning" ? "text-warning-700" : tone === "brand" ? "text-brand-700" : "text-semantic-text";
   return (
-    <Card className="min-w-[180px] shrink-0">
+    <Card className="min-w-[180px] shrink-0 border-semantic-border/55 bg-white/72 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
       <CardBody className="space-y-1 py-3 sm:py-4">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-semantic-muted">{label}</p>
         <p className={cn("text-2xl font-semibold", toneClass)}>{value}</p>
       </CardBody>
     </Card>
+  );
+}
+
+function LeadStat({ label, value, helper }: { label: string; value: number; helper: string }) {
+  return (
+    <div className="rounded-[1.1rem] border border-semantic-border/60 bg-white/74 px-4 py-3 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-semantic-text">{value}</p>
+      <p className="mt-1 text-xs text-semantic-muted">{helper}</p>
+    </div>
   );
 }
 

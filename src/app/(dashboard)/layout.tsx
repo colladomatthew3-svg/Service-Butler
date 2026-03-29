@@ -35,14 +35,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
       demoMode={demoMode}
       onSignOut={
         <div className="space-y-3">
-          <Link href="/billing" className={buttonStyles({ variant: "secondary", fullWidth: true })}>
+          <Link href="/billing" className={buttonStyles({ variant: "secondary", fullWidth: true, className: "border-white/10 bg-white/8 text-white hover:bg-white/14 hover:text-white" })}>
             Billing
           </Link>
-          <Link href="/pipeline" className={buttonStyles({ variant: "ghost", fullWidth: true })}>
+          <Link href="/pipeline" className={buttonStyles({ variant: "ghost", fullWidth: true, className: "text-white/72 hover:bg-white/8 hover:text-white" })}>
             Legacy Pipeline
           </Link>
           <form action={signOut}>
-            <Button variant="danger" fullWidth type="submit">
+            <Button variant="danger" fullWidth type="submit" className="border border-white/8 bg-white text-neutral-950 hover:bg-white/92">
               Sign out
             </Button>
           </form>
@@ -50,7 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       }
     >
       {(showWarning || billing.allowedReason === "billing_disabled") && (
-        <Card className="mb-6">
+        <Card className="mb-6 overflow-hidden border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(31,42,36,0.06)]">
           <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <Badge

@@ -290,36 +290,9 @@ async function resolveTenant({
       legacyAccountId: row.legacy_account_id ? String(row.legacy_account_id) : null
     };
   }
-
-  // Pilot fallback: use the first available franchise tenant when no explicit name/id was supplied.
-  const { data: fallbackTenant, error: fallbackError } = await supabase
-    .from("v2_tenants")
-    .select("id,legacy_account_id,name")
-    .eq("type", "franchise")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  const fallback = (fallbackTenant || null) as {
-    id?: string;
-    name?: string | null;
-    legacy_account_id?: string | null;
-  } | null;
-
-  if (fallbackError || !fallback?.id) {
-    throw new Error(
-      `Could not resolve tenant by name (${tenantName}). Run 'npm run operator:seed' or set OPERATOR_TENANT_ID.`
-    );
-  }
-
-  console.log(
-    `[sdr-agent] OPERATOR_TENANT_NAME (${tenantName}) not found. Using fallback tenant ${fallback.name || fallback.id}.`
+  throw new Error(
+    `Could not resolve tenant by name (${tenantName}). Set OPERATOR_TENANT_ID or a valid OPERATOR_TENANT_NAME before running the SDR agent.`
   );
-
-  return {
-    tenantId: String(fallback.id),
-    legacyAccountId: fallback.legacy_account_id ? String(fallback.legacy_account_id) : null
-  };
 }
 
 async function main() {

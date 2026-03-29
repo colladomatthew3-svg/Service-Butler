@@ -60,27 +60,32 @@ export function JobDetailView({ jobId }: { jobId: string }) {
 
   async function load() {
     setLoading(true);
-    const res = await fetch(`/api/jobs/${jobId}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !(data as { job?: Job }).job) {
-      showToast((data as { error?: string }).error || "Could not load job");
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !(data as { job?: Job }).job) {
+        showToast((data as { error?: string }).error || "Could not load job");
+        setLoading(false);
+        return;
+      }
+      const payload = data as { job: Job; signals?: Signal[] };
+      setJob(payload.job);
+      setSignals(payload.signals || []);
+      setNotes(payload.job.notes || "");
+      setValueDraft(Number(payload.job.estimated_value || 0));
+      setAssignedDraft(payload.job.assigned_tech_name || "");
+      setScheduleDraft(payload.job.scheduled_for ? toDatetimeLocal(payload.job.scheduled_for) : "");
+      const insurance = parseInsurance(payload.job.notes || "");
+      setInsuranceCarrier(insurance.carrier || "");
+      setClaimNumber(insurance.claimNumber || "");
+      setAdjusterName(insurance.adjusterName || "");
+      setAdjusterPhone(insurance.adjusterPhone || "");
+      setInsuranceStage(insurance.stage || "Filed");
+    } catch {
+      showToast("Could not load job");
+    } finally {
       setLoading(false);
-      return;
     }
-    const payload = data as { job: Job; signals?: Signal[] };
-    setJob(payload.job);
-    setSignals(payload.signals || []);
-    setNotes(payload.job.notes || "");
-    setValueDraft(Number(payload.job.estimated_value || 0));
-    setAssignedDraft(payload.job.assigned_tech_name || "");
-    setScheduleDraft(payload.job.scheduled_for ? toDatetimeLocal(payload.job.scheduled_for) : "");
-    const insurance = parseInsurance(payload.job.notes || "");
-    setInsuranceCarrier(insurance.carrier || "");
-    setClaimNumber(insurance.claimNumber || "");
-    setAdjusterName(insurance.adjusterName || "");
-    setAdjusterPhone(insurance.adjusterPhone || "");
-    setInsuranceStage(insurance.stage || "Filed");
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -94,18 +99,22 @@ export function JobDetailView({ jobId }: { jobId: string }) {
   }, [signals]);
 
   async function update(patch: Record<string, unknown>, successMessage: string) {
-    const res = await fetch(`/api/jobs/${jobId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(patch)
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      showToast((data as { error?: string }).error || "Update failed");
-      return;
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast((data as { error?: string }).error || "Update failed");
+        return;
+      }
+      setJob((data as { job: Job }).job);
+      showToast(successMessage);
+    } catch {
+      showToast("Update failed");
     }
-    setJob((data as { job: Job }).job);
-    showToast(successMessage);
   }
 
   async function handleText() {
@@ -143,7 +152,23 @@ export function JobDetailView({ jobId }: { jobId: string }) {
         actions={<Badge variant="brand">Intent {job.intent_score || totalSignal}%</Badge>}
       />
 
-      <Card>
+      <section className="grid gap-3 rounded-[2rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(216,239,229,0.88),rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_18px_48px_rgba(25,112,77,0.1)] sm:grid-cols-[1.3fr_0.7fr] sm:px-6">
+        <div className="space-y-3">
+          <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+            Job Command
+          </p>
+          <p className="text-sm text-semantic-text">
+            Keep the job moving from contact to schedule to completion. Use the top actions to call, text, and advance stage without losing context.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <MiniStat label="Status" value={job.pipeline_status} />
+          <MiniStat label="Value" value={`$${Number(job.estimated_value || 0).toLocaleString()}`} />
+          <MiniStat label="Signals" value={signals.length} />
+        </div>
+      </section>
+
+      <Card className="border-semantic-border/55 bg-white/58">
         <CardBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Select value={job.pipeline_status} onChange={(e) => update({ pipeline_status: e.target.value }, "Status updated") }>
             <option value="NEW">New</option>
@@ -184,14 +209,16 @@ export function JobDetailView({ jobId }: { jobId: string }) {
 
       <section className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
         <div className="space-y-5">
-          <Card>
+          <Card className="border-semantic-border/55 bg-white/58">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">Job Details</h2>
             </CardHeader>
             <CardBody className="space-y-3">
-              <Detail label="Service" value={job.service_type} icon={<Wrench className="h-4 w-4" />} />
-              <Detail label="Customer Phone" value={job.customer_phone} icon={<PhoneCall className="h-4 w-4" />} />
-              <Detail label="Address" value={[job.address, job.city, job.state, job.postal_code].filter(Boolean).join(", ")} />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Detail label="Service" value={job.service_type} icon={<Wrench className="h-4 w-4" />} />
+                <Detail label="Customer Phone" value={job.customer_phone} icon={<PhoneCall className="h-4 w-4" />} />
+                <Detail label="Address" value={[job.address, job.city, job.state, job.postal_code].filter(Boolean).join(", ")} />
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label>
                   <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">Estimated value</span>
@@ -228,7 +255,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
             </CardBody>
           </Card>
 
-          <Card>
+          <Card className="border-semantic-border/55 bg-white/58">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">Notes</h2>
             </CardHeader>
@@ -241,7 +268,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
             </CardBody>
           </Card>
 
-          <Card>
+          <Card className="border-semantic-border/55 bg-white/58">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">Insurance</h2>
             </CardHeader>
@@ -295,7 +322,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
         </div>
 
         <div className="space-y-5">
-          <Card>
+          <Card className="border-semantic-border/55 bg-white/58">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">Revenue Snapshot</h2>
             </CardHeader>
@@ -308,14 +335,14 @@ export function JobDetailView({ jobId }: { jobId: string }) {
             </CardBody>
           </Card>
 
-          <Card>
+          <Card className="border-semantic-border/55 bg-white/58">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">Lead Origin & Intent</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               {signals.length === 0 && <p className="text-sm text-semantic-muted">No signals found for origin lead.</p>}
               {signals.slice(0, 5).map((signal) => (
-                <div key={signal.id} className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+                <div key={signal.id} className="rounded-[1rem] border border-semantic-border/60 bg-white/72 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-medium text-semantic-text">{signal.title}</p>
                     <Badge variant={signal.score >= 75 ? "success" : signal.score >= 60 ? "warning" : "default"}>{signal.score}</Badge>
@@ -335,9 +362,18 @@ export function JobDetailView({ jobId }: { jobId: string }) {
   );
 }
 
+function MiniStat({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="rounded-[1rem] border border-semantic-border/60 bg-white/74 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-semantic-text">{value || "-"}</p>
+    </div>
+  );
+}
+
 function Detail({ label, value, icon }: { label: string; value?: string | null; icon?: ReactNode }) {
   return (
-    <div className="rounded-xl border border-semantic-border bg-semantic-surface2 p-3">
+    <div className="rounded-[1rem] border border-semantic-border/60 bg-white/72 p-3">
       <p className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-semantic-muted">
         {icon}
         {label}

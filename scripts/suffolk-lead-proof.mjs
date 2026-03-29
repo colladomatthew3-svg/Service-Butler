@@ -61,8 +61,13 @@ const baseEnv = {
   WEBHOOK_SHARED_SECRET: process.env.WEBHOOK_SHARED_SECRET || "local-dev-secret"
 };
 
-printHeader("Seed Suffolk Operator");
-run("npm", ["run", "operator:seed"], baseEnv);
+if (String(process.env.SB_SUFFOLK_SKIP_SEED || "").trim().toLowerCase() === "true") {
+  printHeader("Skip Suffolk Seed");
+  console.log("SB_SUFFOLK_SKIP_SEED=true, using the existing Suffolk tenant if present.");
+} else {
+  printHeader("Seed Suffolk Operator");
+  run("npm", ["run", "operator:seed"], baseEnv);
+}
 
 const femaBase =
   "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=state%20eq%20%27NY%27%20and%20designatedArea%20eq%20%27Suffolk%20(County)%27&$orderby=declarationDate%20desc";
@@ -147,6 +152,7 @@ for (const lead of leads || []) {
 printHeader("Suffolk Live Lead Proof");
 if (liveRows.length === 0) {
   console.error("No live_provider leads found. Verify source endpoints and rerun.");
+  console.error("If Suffolk is already seeded, rerun with SB_SUFFOLK_SKIP_SEED=true to avoid reseeding.");
   process.exit(1);
 }
 

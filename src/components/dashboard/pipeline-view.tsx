@@ -96,14 +96,50 @@ export function PipelineView() {
         }
       />
 
-      <section className="flex flex-wrap gap-3">
-        <SummaryCard label="Active Jobs" value={summary.active.toString()} />
-        <SummaryCard label="Scheduled" value={summary.scheduled.toString()} />
-        <SummaryCard label="Pipeline Value" value={`$${summary.value.toLocaleString()}`} />
+      <section className="overflow-hidden rounded-[1.75rem] border border-semantic-border/60 bg-white/72 shadow-[0_18px_60px_rgba(31,42,36,0.08)]">
+        <div className="grid gap-6 px-5 py-6 lg:grid-cols-[1.4fr_1fr] lg:px-6">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand-800">
+              Command view
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold tracking-tight text-semantic-text sm:text-3xl">Keep work moving from booked to complete without hunting through cards.</h2>
+              <p className="max-w-2xl text-sm text-semantic-muted sm:text-base">
+                The pipeline should read like an operator command center: active work up top, stage movement one tap away, and revenue context visible at a glance.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/dashboard/leads">
+                <Button size="sm" variant="secondary">
+                  Convert Lead to Job
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link href="/dashboard/jobs">
+                <Button size="sm" variant="secondary">
+                  Open Jobs
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link href="/dashboard/schedule">
+                <Button size="sm" variant="secondary">
+                  Review Schedule
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <SummaryCard label="Active Jobs" value={summary.active.toString()} helper="Open work that still needs movement" />
+            <SummaryCard label="Scheduled" value={summary.scheduled.toString()} helper="Jobs with a calendar commitment" />
+            <SummaryCard label="Pipeline Value" value={`$${summary.value.toLocaleString()}`} helper="Gross estimated value in play" />
+          </div>
+        </div>
       </section>
 
       {loading ? (
-        <Card>
+        <Card className="border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(31,42,36,0.06)]">
           <CardBody className="space-y-3">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
@@ -112,7 +148,7 @@ export function PipelineView() {
         </Card>
       ) : (
         <>
-          <div className="flex gap-2 overflow-x-auto pb-2 lg:hidden">
+          <div className="flex gap-2 overflow-x-auto rounded-2xl border border-semantic-border/60 bg-white/70 p-2 pb-2 lg:hidden">
             {columns.map((col) => (
               <button
                 key={col}
@@ -127,11 +163,7 @@ export function PipelineView() {
           </div>
 
           <div className="grid gap-4 lg:hidden">
-            <PipelineColumn
-              title={activeMobile}
-              items={grouped[activeMobile]}
-              onMove={(job) => setSelectedJob(job)}
-            />
+            <PipelineColumn title={activeMobile} items={grouped[activeMobile]} onMove={(job) => setSelectedJob(job)} />
           </div>
 
           <div className="hidden gap-4 overflow-x-auto pb-2 lg:flex">
@@ -145,7 +177,7 @@ export function PipelineView() {
       {selectedJob && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-neutral-900/40 p-0 sm:items-center sm:p-6">
           <div className="absolute inset-0" onClick={() => setSelectedJob(null)} />
-          <Card className="relative z-[71] w-full max-w-xl rounded-t-3xl sm:rounded-2xl">
+          <Card className="relative z-[71] w-full max-w-xl rounded-t-3xl border-semantic-border/60 bg-white/95 shadow-[0_18px_60px_rgba(31,42,36,0.14)] sm:rounded-2xl">
             <CardHeader>
               <h3 className="text-lg font-semibold text-semantic-text">Move {selectedJob.customer_name || "job"}</h3>
             </CardHeader>
@@ -177,36 +209,47 @@ function PipelineColumn({
   onMove: (job: JobRow) => void;
 }) {
   return (
-    <Card className="min-w-[290px] border-semantic-border/60 bg-white/70">
+    <Card className="min-w-[290px] border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(31,42,36,0.06)]">
       <CardHeader>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold uppercase tracking-wide text-semantic-muted">{label(title)}</p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wide text-semantic-muted">{label(title)}</p>
+            <p className="mt-1 text-xs text-semantic-muted">{emptyStateDescription(title)}</p>
+          </div>
           <Badge variant="default">{items.length}</Badge>
         </div>
       </CardHeader>
-      <CardBody className="space-y-3">
+      <CardBody className="space-y-3.5">
         {items.length === 0 && (
-          <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
+          <div className="rounded-2xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
             <p className="text-sm font-semibold text-semantic-text">{emptyStateTitle(title)}</p>
             <p className="mt-1 text-sm text-semantic-muted">{emptyStateDescription(title)}</p>
           </div>
         )}
         {items.map((job) => (
-          <article key={job.id} className="rounded-[1rem] border border-semantic-border/70 bg-white/72 p-3 shadow-[0_10px_24px_rgba(31,42,36,0.07)]">
+          <article
+            key={job.id}
+            className="rounded-2xl border border-semantic-border/70 bg-white/82 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.06)] transition hover:border-semantic-border hover:bg-white"
+          >
             <div className="flex items-start justify-between gap-2">
-              <p className="font-semibold text-semantic-text">{job.customer_name || "Unknown customer"}</p>
+              <div className="space-y-1">
+                <p className="font-semibold text-semantic-text">{job.customer_name || "Unknown customer"}</p>
+                {job.assigned_tech_name && <p className="text-xs text-semantic-muted">Assigned to {job.assigned_tech_name}</p>}
+              </div>
               <Badge variant={job.intent_score >= 75 ? "warning" : "default"}>{job.intent_score}%</Badge>
             </div>
-            <p className="mt-1 text-sm text-semantic-muted">{job.service_type || "Service"} · {[job.city, job.state].filter(Boolean).join(", ")}</p>
-            <p className="mt-1 inline-flex items-center gap-1 text-sm text-semantic-muted">
-              <DollarSign className="h-4 w-4" />
-              ${Number(job.estimated_value || 0).toLocaleString()}
-            </p>
-            <p className="mt-1 inline-flex items-center gap-1 text-sm text-semantic-muted">
-              <CalendarClock className="h-4 w-4" />
-              {job.scheduled_for ? formatDate(job.scheduled_for) : "Not scheduled"}
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-2">
+            <p className="mt-2 text-sm text-semantic-muted">{job.service_type || "Service"} · {[job.city, job.state].filter(Boolean).join(", ")}</p>
+            <div className="mt-3 flex flex-wrap gap-3 text-sm text-semantic-muted">
+              <p className="inline-flex items-center gap-1">
+                <DollarSign className="h-4 w-4" />
+                ${Number(job.estimated_value || 0).toLocaleString()}
+              </p>
+              <p className="inline-flex items-center gap-1">
+                <CalendarClock className="h-4 w-4" />
+                {job.scheduled_for ? formatDate(job.scheduled_for) : "Not scheduled"}
+              </p>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-2">
               {job.customer_phone ? (
                 <a href={`tel:${job.customer_phone}`}>
                   <Button size="sm" fullWidth>
@@ -249,12 +292,13 @@ function emptyStateDescription(title: Pipeline) {
   return "Move work forward from the previous stage to build this column.";
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SummaryCard({ label, value, helper }: { label: string; value: string; helper: string }) {
   return (
-    <Card className="min-w-[180px] flex-1 border-semantic-border/60 bg-white/72">
+    <Card className="border-semantic-border/60 bg-white/76">
       <CardBody className="py-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-semantic-muted">{label}</p>
-        <p className="mt-1 text-2xl font-semibold text-semantic-text">{value}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">{label}</p>
+        <p className="mt-2 text-2xl font-semibold tracking-tight text-semantic-text">{value}</p>
+        <p className="mt-1 text-xs text-semantic-muted">{helper}</p>
       </CardBody>
     </Card>
   );

@@ -41,6 +41,18 @@ function parseObject(value) {
   }
 }
 
+function whyWorkThisLead({ phone, email, sourceName, sourceType, serviceLine, opportunityType, verificationReasons }) {
+  const parts = [];
+  if (phone) parts.push(`phone ${phone}`);
+  if (email) parts.push(`email ${email}`);
+  if (sourceName || sourceType) parts.push(`source ${[sourceName, sourceType].filter(Boolean).join(" - ")}`);
+  if (serviceLine || opportunityType) parts.push(`service line ${serviceLine || opportunityType}`);
+  if (Array.isArray(verificationReasons) && verificationReasons.length > 0) {
+    parts.push(`reasons ${verificationReasons.slice(0, 3).join(", ")}`);
+  }
+  return parts.join("; ");
+}
+
 function nowSlug() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -71,7 +83,22 @@ async function main() {
   });
 
   let tenantId = explicitTenantId;
-  if (!tenantId) {
+  if (tenantId) {
+    const { data: tenant, error } = await supabase
+      .from("v2_tenants")
+      .select("id")
+      .eq("id", tenantId)
+      .eq("type", "franchise")
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !tenant?.id) {
+      console.log(`Could not resolve tenant id: ${tenantId}`);
+      console.log("Set a valid OPERATOR_TENANT_ID or OPERATOR_TENANT_NAME, then retry export.");
+      console.log("If you intended Suffolk, run: OPERATOR_PROFILE=suffolk_restoration npm run operator:seed");
+      return;
+    }
+  } else {
     const { data: tenant, error } = await supabase
       .from("v2_tenants")
       .select("id")
@@ -82,26 +109,16 @@ async function main() {
     if (!error && tenant?.id) {
       tenantId = String(tenant.id);
     } else {
-      const { data: fallback } = await supabase
-        .from("v2_tenants")
-        .select("id,name")
-        .eq("type", "franchise")
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (!fallback?.id) {
-        console.log(`Could not resolve tenant: ${tenantName}`);
-        console.log("Run operator seed first (npm run operator:seed) then retry export.");
-        return;
-      }
-      tenantId = String(fallback.id);
-      console.log(`OPERATOR_TENANT_NAME not found, using fallback tenant: ${fallback.name || fallback.id}`);
+      console.log(`Could not resolve tenant: ${tenantName}`);
+      console.log("Set OPERATOR_TENANT_ID or a valid OPERATOR_TENANT_NAME, then retry export.");
+      console.log("If you intended Suffolk, run: OPERATOR_PROFILE=suffolk_restoration npm run operator:seed");
+      return;
     }
   }
 
   const { data: leads, error: leadError } = await supabase
     .from("v2_leads")
-    .select("id,opportunity_id,contact_name,contact_channels_json,property_address,city,state,postal_code,lead_status,created_at")
+    .select("id,opportunity_id,contact_name,contact_channels_json,property_address,city,state,postal_code,lead_status,do_not_contact,created_at")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -122,9 +139,12 @@ async function main() {
     };
   });
 
-  const verified = candidateLeads.filter((lead) => lead.verificationStatus === "verified" && (lead.phone || lead.email));
+  const verified = candidateLeads.filter(
+    (lead) => lead.verificationStatus === "verified" && (lead.phone || lead.email) && !lead.do_not_contact
+  );
   if (verified.length === 0) {
     console.log("No verified leads found for export.");
+    console.log("Run `npm run suffolk:lead-proof` and/or `npm run suffolk:quality-report -- --template` to review source QA.");
     return;
   }
 
@@ -148,6 +168,15 @@ async function main() {
   const rows = verified.map((lead) => {
     const opp = opportunityById.get(asText(lead.opportunity_id)) || {};
     const source = sourceById.get(asText(opp.source_event_id)) || {};
+    const proofSummary = whyWorkThisLead({
+      phone: lead.phone,
+      email: lead.email,
+      sourceName: asText(source.source_name),
+      sourceType: asText(source.source_type),
+      serviceLine: asText(opp.service_line),
+      opportunityType: asText(opp.opportunity_type),
+      verificationReasons: lead.verificationReasons
+    });
     return {
       tenant_id: tenantId,
       lead_id: asText(lead.id),
@@ -172,7 +201,8 @@ async function main() {
       event_timestamp: asText(source.event_timestamp),
       verification_status: lead.verificationStatus,
       verification_score: lead.verificationScore,
-      verification_reasons: lead.verificationReasons.join(" | ")
+      verification_reasons: lead.verificationReasons.join(" | "),
+      proof_summary: proofSummary
     };
   });
 

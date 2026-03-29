@@ -144,6 +144,12 @@ function boundedNumber(value: number | undefined, fallback = 0) {
   return Number.isFinite(value) ? Number(value) : fallback;
 }
 
+export function currentValueOrHourly<T>(currentValue: T | undefined, hourlyValues: T[] | undefined, index: number) {
+  if (currentValue != null) return currentValue;
+  if (!Array.isArray(hourlyValues)) return undefined;
+  return hourlyValues[index];
+}
+
 function staleCachedForecast(lat: number, lng: number) {
   const cached = cache.get(cacheKey(lat, lng));
   if (!cached) return null;
@@ -276,6 +282,15 @@ export async function getForecastByLatLng(
   };
 
   const hourlyStart = forecastStartIndex(json.hourly.time, current.time);
+  const currentTemperature = currentValueOrHourly(current.temperature_2m, json.hourly.temperature_2m, hourlyStart);
+  const currentFeelsLike = currentValueOrHourly(current.apparent_temperature, json.hourly.temperature_2m, hourlyStart);
+  const currentPrecipitationProbability = currentValueOrHourly(
+    current.precipitation_probability,
+    json.hourly.precipitation_probability,
+    hourlyStart
+  );
+  const currentWindSpeed = currentValueOrHourly(current.wind_speed_10m, json.hourly.wind_speed_10m, hourlyStart);
+  const currentWeatherCode = currentValueOrHourly(current.weather_code, json.hourly.weather_code, hourlyStart);
 
   const next6Hours = json.hourly.time.slice(hourlyStart, hourlyStart + 6).map((time, offset) => {
     const index = hourlyStart + offset;
@@ -305,11 +320,11 @@ export async function getForecastByLatLng(
     },
     location: { lat, lng },
     current: {
-      temp: Math.round(boundedNumber(current.temperature_2m)),
-      feelsLike: current.apparent_temperature != null ? Math.round(current.apparent_temperature) : undefined,
-      windKph: current.wind_speed_10m != null ? Math.round(current.wind_speed_10m) : undefined,
-      precipitationChance: current.precipitation_probability != null ? Math.round(current.precipitation_probability) : undefined,
-      condition: conditionLabel(current.weather_code)
+      temp: Math.round(boundedNumber(currentTemperature)),
+      feelsLike: currentFeelsLike != null ? Math.round(boundedNumber(currentFeelsLike)) : undefined,
+      windKph: currentWindSpeed != null ? Math.round(boundedNumber(currentWindSpeed)) : undefined,
+      precipitationChance: currentPrecipitationProbability != null ? Math.round(boundedNumber(currentPrecipitationProbability)) : undefined,
+      condition: conditionLabel(currentWeatherCode)
     },
     next6Hours,
     next5Days

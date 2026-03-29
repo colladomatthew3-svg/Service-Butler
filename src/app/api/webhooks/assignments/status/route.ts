@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { logV2AuditEvent } from "@/lib/v2/audit";
-
-function authorized(req: NextRequest) {
-  const expected = process.env.WEBHOOK_SHARED_SECRET;
-  if (!expected) return true;
-  const received = req.headers.get("x-servicebutler-signature") || "";
-  return received === expected;
-}
+import { applyAssignmentWebhookStatus } from "@/lib/v2/assignment-webhook";
+import { verifySharedSecretWebhook } from "@/lib/v2/webhook-auth";
 
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: "Unauthorized webhook" }, { status: 401 });
+  const auth = verifySharedSecretWebhook(req, "assignments.status");
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const body = (await req.json().catch(() => ({}))) as {
     tenantId?: string;
@@ -23,45 +18,17 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdminClient();
+  try {
+    const result = await applyAssignmentWebhookStatus({
+      supabase,
+      tenantId: body.tenantId,
+      assignmentId: body.assignmentId,
+      status: body.status
+    });
 
-  const patch: Record<string, unknown> = {};
-  if (body.status === "accepted") {
-    patch.status = "accepted";
-    patch.accepted_at = new Date().toISOString();
-  } else if (body.status === "rejected") {
-    patch.status = "rejected";
-    patch.escalated_at = new Date().toISOString();
-  } else {
-    patch.status = "complete";
-    patch.completed_at = new Date().toISOString();
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Assignment webhook processing failed";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
-
-  const { data: updated, error } = await supabase
-    .from("v2_assignments")
-    .update(patch)
-    .eq("tenant_id", body.tenantId)
-    .eq("id", body.assignmentId)
-    .select("id,status,opportunity_id")
-    .single();
-
-  if (error || !updated) return NextResponse.json({ error: error?.message || "Assignment not found" }, { status: 404 });
-
-  await supabase
-    .from("v2_opportunities")
-    .update({ routing_status: body.status === "rejected" ? "escalated" : body.status === "complete" ? "complete" : "routed" })
-    .eq("id", updated.opportunity_id)
-    .eq("tenant_id", body.tenantId);
-
-  await logV2AuditEvent({
-    tenantId: body.tenantId,
-    actorType: "webhook",
-    actorId: "assignment.status",
-    entityType: "assignment",
-    entityId: body.assignmentId,
-    action: `assignment_${body.status}`,
-    before: null,
-    after: { status: body.status }
-  });
-
-  return NextResponse.json({ received: true, assignment: updated });
 }

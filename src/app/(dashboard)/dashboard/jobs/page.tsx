@@ -39,11 +39,31 @@ type JobRow = {
 };
 
 function JobsBoard({ jobs }: { jobs: JobRow[] }) {
+  const openJobs = jobs.filter((job) => !["COMPLETED", "WON", "LOST"].includes(String(job.pipeline_status || "").toUpperCase())).length;
+  const scheduledJobs = jobs.filter((job) => Boolean(job.scheduled_for)).length;
+  const totalValue = jobs.reduce((sum, job) => sum + Number(job.estimated_value || 0), 0);
+
   return (
     <div className="space-y-6">
       <PageHeader title="Jobs" subtitle="Active and upcoming jobs with value and priority." />
 
-      <Card>
+      <section className="grid gap-3 rounded-[2rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(216,239,229,0.88),rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_18px_48px_rgba(25,112,77,0.1)] sm:grid-cols-[1.25fr_0.75fr] sm:px-6">
+        <div className="space-y-3">
+          <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+            Job Control
+          </p>
+          <p className="text-sm text-semantic-text">
+            Booked work sits here first. Keep scheduled work visible, prioritize open jobs, and move fast on the next inspection or crew assignment.
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <MiniStat label="Open" value={openJobs} />
+          <MiniStat label="Scheduled" value={scheduledJobs} />
+          <MiniStat label="Value" value={`$${totalValue.toLocaleString()}`} />
+        </div>
+      </section>
+
+      <Card className="border-semantic-border/55 bg-white/58">
         <CardHeader>
           <h2 className="dashboard-section-title text-semantic-text">Jobs Board</h2>
         </CardHeader>
@@ -59,15 +79,21 @@ function JobsBoard({ jobs }: { jobs: JobRow[] }) {
           )}
 
           {jobs.map((job) => (
-            <article key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-semantic-border bg-semantic-surface2 p-4">
-              <div>
-                <p className="font-semibold text-semantic-text">{job.customer_name || "Unknown customer"}</p>
-                <p className="text-sm text-semantic-muted">
-                  {job.service_type || "Service"} · {[job.city, job.state].filter(Boolean).join(", ")}
-                </p>
-                <p className="text-sm text-semantic-muted">
-                  {job.scheduled_for ? new Date(job.scheduled_for).toLocaleString() : "Not scheduled"}
-                </p>
+            <article
+              key={job.id}
+              className="flex flex-wrap items-start justify-between gap-4 rounded-[1.25rem] border border-semantic-border/60 bg-white/74 p-4 shadow-[0_12px_26px_rgba(31,42,36,0.07)] transition hover:-translate-y-0.5 hover:border-brand-300"
+            >
+              <div className="flex items-start gap-4">
+                <div className="mt-1 h-12 w-1.5 shrink-0 rounded-full bg-[linear-gradient(180deg,rgb(var(--brand)),rgb(var(--accent)))]" />
+                <div>
+                  <p className="font-semibold text-semantic-text">{job.customer_name || "Unknown customer"}</p>
+                  <p className="text-sm text-semantic-muted">
+                    {job.service_type || "Service"} · {[job.city, job.state].filter(Boolean).join(", ")}
+                  </p>
+                  <p className="text-sm text-semantic-muted">
+                    {job.scheduled_for ? new Date(job.scheduled_for).toLocaleString() : "Not scheduled"}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant="brand">{job.pipeline_status || "NEW"}</Badge>
@@ -81,6 +107,15 @@ function JobsBoard({ jobs }: { jobs: JobRow[] }) {
           ))}
         </CardBody>
       </Card>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-[1rem] border border-semantic-border/60 bg-white/74 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-semantic-text">{value}</p>
     </div>
   );
 }

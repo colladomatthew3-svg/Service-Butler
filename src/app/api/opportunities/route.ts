@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
+import { getDemoDashboardSnapshot } from "@/lib/demo/store";
+import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
 
 export async function GET(req: NextRequest) {
+  if (isDemoMode()) {
+    const category = (req.nextUrl.searchParams.get("category") || "").trim().toLowerCase();
+    const limitRaw = Number(req.nextUrl.searchParams.get("limit") || 50);
+    const limit = Math.max(1, Math.min(250, Number.isFinite(limitRaw) ? limitRaw : 50));
+
+    const opportunities = getDemoDashboardSnapshot().opportunities
+      .filter((item) => !category || category === "all" || String(item.category || "").toLowerCase() === category)
+      .slice(0, limit);
+
+    return NextResponse.json({ opportunities });
+  }
+
   if (featureFlags.useV2Reads) {
     const v2Context = await getV2TenantContext().catch(() => null);
     if (v2Context) {
@@ -29,6 +43,7 @@ export async function GET(req: NextRequest) {
         opportunities: (data || []).map((row: Record<string, unknown>) => ({
           id: row.id,
           category: row.service_line || row.opportunity_type,
+          service_line: row.service_line,
           title: row.title,
           description: row.description,
           location_text: row.location_text,
@@ -41,6 +56,25 @@ export async function GET(req: NextRequest) {
           intent_score: row.job_likelihood_score,
           confidence: row.source_reliability_score,
           urgency_score: row.urgency_score,
+          signal_count:
+            typeof (row.explainability_json as Record<string, unknown> | null)?.signal_count === "number"
+              ? (row.explainability_json as Record<string, unknown>).signal_count
+              : null,
+          source_types: Array.isArray((row.explainability_json as Record<string, unknown> | null)?.source_types)
+            ? ((row.explainability_json as Record<string, unknown>).source_types as unknown[])
+            : [],
+          confidence_reasoning:
+            typeof (row.explainability_json as Record<string, unknown> | null)?.confidence_reasoning === "string"
+              ? (row.explainability_json as Record<string, unknown>).confidence_reasoning
+              : null,
+          estimated_response_window:
+            typeof (row.explainability_json as Record<string, unknown> | null)?.estimated_response_window === "string"
+              ? (row.explainability_json as Record<string, unknown>).estimated_response_window
+              : null,
+          distress_context_summary:
+            typeof (row.explainability_json as Record<string, unknown> | null)?.distress_context_summary === "string"
+              ? (row.explainability_json as Record<string, unknown>).distress_context_summary
+              : null,
           tags: [],
           suggested_action: null,
           recommended_action: null,

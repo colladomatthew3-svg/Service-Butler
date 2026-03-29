@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logV2AuditEvent } from "@/lib/v2/audit";
-
-function authorized(req: NextRequest) {
-  const expected = process.env.WEBHOOK_SHARED_SECRET;
-  if (!expected) return true;
-  const received = req.headers.get("x-servicebutler-signature") || "";
-  return received === expected;
-}
+import { verifySharedSecretWebhook } from "@/lib/v2/webhook-auth";
 
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: "Unauthorized webhook" }, { status: 401 });
+  const auth = verifySharedSecretWebhook(req, "connectors.completed");
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const body = (await req.json().catch(() => ({}))) as {
     tenantId?: string;

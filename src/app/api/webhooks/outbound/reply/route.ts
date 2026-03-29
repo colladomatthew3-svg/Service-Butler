@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logV2AuditEvent } from "@/lib/v2/audit";
-
-function authorized(req: NextRequest) {
-  const expected = process.env.WEBHOOK_SHARED_SECRET;
-  if (!expected) return true;
-  const received = req.headers.get("x-servicebutler-signature") || "";
-  return received === expected;
-}
+import { extractLeadChannelDestination, normalizeDestinationForChannel } from "@/lib/v2/contact-destinations";
+import { verifySharedSecretWebhook } from "@/lib/v2/webhook-auth";
 
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: "Unauthorized webhook" }, { status: 401 });
+  const auth = verifySharedSecretWebhook(req, "outbound.reply");
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
 
   const body = (await req.json().catch(() => ({}))) as {
     tenantId?: string;
@@ -20,6 +16,7 @@ export async function POST(req: NextRequest) {
     message?: string | null;
     sequenceId?: string | null;
     assignmentId?: string | null;
+    to?: string | null;
   };
 
   if (!body.tenantId || !body.leadId || !body.channel) {
@@ -29,6 +26,7 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdminClient();
   const message = String(body.message || "");
   const optedOut = /\b(stop|unsubscribe|do not contact|quit)\b/i.test(message);
+  let normalizedDestination = normalizeDestinationForChannel(body.channel, body.to || null);
 
   await supabase.from("v2_outreach_events").insert({
     tenant_id: body.tenantId,
@@ -46,21 +44,37 @@ export async function POST(req: NextRequest) {
   });
 
   if (optedOut) {
+    if (!normalizedDestination) {
+      const { data: lead } = await supabase
+        .from("v2_leads")
+        .select("contact_channels_json")
+        .eq("tenant_id", body.tenantId)
+        .eq("id", body.leadId)
+        .maybeSingle();
+
+      normalizedDestination = extractLeadChannelDestination(
+        body.channel,
+        (lead?.contact_channels_json || {}) as Record<string, unknown>
+      );
+    }
+
     await supabase
       .from("v2_leads")
       .update({ do_not_contact: true })
       .eq("tenant_id", body.tenantId)
       .eq("id", body.leadId);
 
-    await supabase.from("v2_suppression_list").upsert(
-      {
-        tenant_id: body.tenantId,
-        channel: body.channel,
-        value: body.providerMessageId || body.leadId,
-        reason: "Opt-out via inbound reply"
-      },
-      { onConflict: "tenant_id,channel,value" }
-    );
+    if (normalizedDestination) {
+      await supabase.from("v2_suppression_list").upsert(
+        {
+          tenant_id: body.tenantId,
+          channel: body.channel,
+          value: normalizedDestination,
+          reason: "Opt-out via inbound reply"
+        },
+        { onConflict: "tenant_id,channel,value" }
+      );
+    }
   }
 
   await logV2AuditEvent({
@@ -74,7 +88,8 @@ export async function POST(req: NextRequest) {
     after: {
       channel: body.channel,
       provider_message_id: body.providerMessageId,
-      message
+      message,
+      normalized_destination: normalizedDestination
     }
   });
 

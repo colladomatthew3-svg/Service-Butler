@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { NextRequest } from "next/server";
 import { GET as getScannerEvents } from "../src/app/api/scanner/events/route";
+import { extractVerifiedOwnerContactFromEnrichment, hasVerifiedOwnerContact } from "../src/lib/services/contact-proof";
 import { enrichOpportunityLive } from "../src/lib/services/enrichment";
 import { runScanner } from "../src/lib/services/scanner";
 
@@ -302,6 +303,36 @@ test.describe.serial("scanner and enrichment fallbacks", () => {
           expect(enrichedOpportunity).toBeTruthy();
           expect(((enrichedOpportunity?.raw as Record<string, any>)?.enrichment?.propertyImageLabel)).toBe("USGS aerial image");
           expect(((enrichedOpportunity?.raw as Record<string, any>)?.enrichment?.ownerContact)).toBeNull();
+          expect(hasVerifiedOwnerContact((enrichedOpportunity?.raw as Record<string, any>)?.enrichment)).toBeFalsy();
+          expect(extractVerifiedOwnerContactFromEnrichment((enrichedOpportunity?.raw as Record<string, any>)?.enrichment)).toBeNull();
+        });
+      }
+    );
+  });
+
+  test("public enrichment stays research-only when no verified owner contact is available", async () => {
+    await withEnv(
+      {
+        DEMO_MODE: undefined,
+        REVIEW_MODE: undefined
+      },
+      async () => {
+        await withFetchMock(buildLiveScannerFetch(), async () => {
+          const result = await runScanner({
+            mode: "live",
+            location: "Hauppauge, NY 11788",
+            categories: ["restoration"],
+            limit: 6,
+            radius: 25
+          });
+
+          const enrichedOpportunity = result.opportunities.find((item) => Boolean((item.raw as Record<string, unknown>).enrichment));
+          expect(enrichedOpportunity).toBeTruthy();
+          expect(hasVerifiedOwnerContact((enrichedOpportunity?.raw as Record<string, any>)?.enrichment)).toBeFalsy();
+          expect(extractVerifiedOwnerContactFromEnrichment((enrichedOpportunity?.raw as Record<string, any>)?.enrichment)).toBeNull();
+          expect(((enrichedOpportunity?.raw as Record<string, any>)?.enrichment?.notes || [])).toEqual(
+            expect.arrayContaining([expect.stringContaining("No verified homeowner contact data")])
+          );
         });
       }
     );

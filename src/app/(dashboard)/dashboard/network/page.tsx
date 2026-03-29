@@ -6,10 +6,12 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableHead, TD, TH } from "@/components/ui/table";
+import { buildEnvironmentReadinessState } from "@/lib/control-plane/readiness";
 import { listDataSourceSummaries } from "@/lib/control-plane/data-sources";
-import type { DataSourceSummary } from "@/lib/control-plane/types";
+import type { DataSourceSummary, ReadinessState } from "@/lib/control-plane/types";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getCorporateDashboardReadModel, getFranchiseDashboardReadModel } from "@/lib/v2/dashboard-read-models";
+import { getProductionReadinessSummary } from "@/lib/v2/readiness";
 import { isDemoMode } from "@/lib/services/review-mode";
 import type { ReactNode } from "react";
 
@@ -76,10 +78,12 @@ type CorporateReadModel = {
 } | null;
 
 type NetworkViewModel = {
+  viewState: "live" | "demo" | "blocked";
   demoMode: boolean;
   franchise: FranchiseReadModel | null;
   corporate: CorporateReadModel | null;
   dataSources: DataSourceSummary[];
+  readiness: ReadinessState | null;
 };
 
 export default async function NetworkOverviewPage() {
@@ -101,7 +105,8 @@ export default async function NetworkOverviewPage() {
   const outreachTotal = franchise?.outreach_activity?.total || 0;
   const territoryPerformance = franchise?.territory_performance || [];
   const proofSamples = franchise?.lead_quality_proof?.proof_samples || [];
-  const revenue = pickMetric(corporate?.metrics || [], "estimated_revenue");
+  const revenue = pickMetric(corporate?.metrics || [], "attributable_revenue") || pickMetric(corporate?.metrics || [], "estimated_revenue");
+  const scheduledWork = pickMetric(corporate?.metrics || [], "scheduled_work");
   const opportunities = pickMetric(corporate?.metrics || [], "opportunity_volume");
   const bookedJobs = pickMetric(corporate?.metrics || [], "booked_jobs");
   const networkCount = corporate?.byFranchise?.length || 0;
@@ -114,7 +119,9 @@ export default async function NetworkOverviewPage() {
         subtitle="A buyer-facing proof surface for restoration demand, connector freshness, verified leads, booked jobs, and revenue evidence."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="brand">{viewModel.demoMode ? "Demo proof" : "Live proof"}</Badge>
+            <Badge variant={viewModel.viewState === "blocked" ? "danger" : "brand"}>
+              {viewModel.viewState === "blocked" ? "Blocked proof" : viewModel.demoMode ? "Demo proof" : "Live proof"}
+            </Badge>
             <Link href="/dashboard/settings#data-sources" className={buttonStyles({ size: "sm", variant: "secondary" })}>
               Review data sources
             </Link>
@@ -124,6 +131,40 @@ export default async function NetworkOverviewPage() {
           </div>
         }
       />
+
+      {viewModel.viewState === "blocked" && viewModel.readiness ? (
+        <Card className="border-rose-300/70 bg-rose-50/80">
+          <CardHeader>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-800">Buyer proof blocked</p>
+            <h2 className="mt-1 text-base font-semibold text-rose-950">This environment is not live enough to show buyer-proof metrics.</h2>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            <p className="text-sm text-rose-950">{viewModel.readiness.reason}</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              {viewModel.readiness.blockingIssues.map((entry) => (
+                <div key={`${entry.code}-${entry.message}`} className="rounded-lg border border-rose-300/70 bg-white/80 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-800">{entry.code.replace(/_/g, " ")}</p>
+                  <p className="mt-2 text-sm font-medium text-rose-950">{entry.message}</p>
+                  {entry.detail ? <p className="mt-1 text-sm text-rose-900/80">{entry.detail}</p> : null}
+                </div>
+              ))}
+            </div>
+            {viewModel.readiness.recommendedActions.length > 0 ? (
+              <div className="rounded-lg border border-rose-300/70 bg-white/80 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-800">Remediation</p>
+                <ul className="mt-3 space-y-2 text-sm text-rose-950">
+                  {viewModel.readiness.recommendedActions.map((action) => (
+                    <li key={action}>{action}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {viewModel.viewState === "blocked" ? null : (
+        <>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Verified leads" value={verifiedLeadCount} icon={<BadgeCheck className="h-4 w-4" />} tone="success" />
@@ -135,9 +176,9 @@ export default async function NetworkOverviewPage() {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Estimated revenue" value={formatCurrency(revenue)} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
+        <StatTile label="Attributable revenue" value={formatCurrency(revenue)} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
+        <StatTile label="Scheduled work" value={scheduledWork} icon={<BookOpen className="h-4 w-4" />} />
         <StatTile label="Active franchises" value={networkCount} icon={<Building2 className="h-4 w-4" />} />
-        <StatTile label="Network-activated opportunities" value={networkActivatedOpportunities} icon={<Target className="h-4 w-4" />} />
         <StatTile label="Network outreach events" value={networkOutreachEvents} icon={<Globe className="h-4 w-4" />} />
       </section>
 
@@ -234,6 +275,7 @@ export default async function NetworkOverviewPage() {
                       <p>Latest run: {source.latestRunStatus || "not run"}</p>
                       <p>Records: {source.recordsCreated.toLocaleString()} created</p>
                     </div>
+                    <p className="mt-3 text-xs leading-5 text-semantic-muted">{source.buyerReadinessNote}</p>
                   </div>
                 );
               })
@@ -329,9 +371,9 @@ export default async function NetworkOverviewPage() {
             </CardHeader>
             <CardBody className="space-y-3">
               <MetricRow
-                label="Estimated revenue"
+                label="Attributable revenue"
                 value={formatCurrency(revenue)}
-                helper="Enterprise roll-up from booked jobs across the network."
+                helper="Booked-job revenue only, after synthetic and research-only chains are excluded."
                 icon={<TrendingUp className="h-4 w-4" />}
               />
               <MetricRow
@@ -341,9 +383,15 @@ export default async function NetworkOverviewPage() {
                 icon={<Target className="h-4 w-4" />}
               />
               <MetricRow
+                label="Scheduled work"
+                value={scheduledWork}
+                helper="Scheduled or booked execution tied to qualified, traceable chains."
+                icon={<BookOpen className="h-4 w-4" />}
+              />
+              <MetricRow
                 label="Booked jobs"
                 value={bookedJobs}
-                helper="Work that turned into actual revenue or scheduled execution."
+                helper="Booked jobs only, separate from scheduled work and attribution roll-ups."
                 icon={<ArrowUpRight className="h-4 w-4" />}
               />
               <MetricRow
@@ -422,6 +470,8 @@ export default async function NetworkOverviewPage() {
           </CardBody>
         </Card>
       </section>
+        </>
+      )}
 
     </div>
   );
@@ -431,45 +481,113 @@ async function loadNetworkViewModel(): Promise<NetworkViewModel> {
   if (isDemoMode()) {
     const dataSources = await listDataSourceSummaries();
     return {
+      viewState: "demo",
       demoMode: true,
       franchise: buildDemoFranchiseModel(),
       corporate: buildDemoCorporateModel(),
-      dataSources
+      dataSources,
+      readiness: null
     };
   }
 
   const context = await getV2TenantContext().catch(() => null);
   if (!context) {
-    const dataSources = await listDataSourceSummaries();
     return {
-      demoMode: true,
-      franchise: buildDemoFranchiseModel(),
-      corporate: buildDemoCorporateModel(),
-      dataSources
+      viewState: "blocked",
+      demoMode: false,
+      franchise: null,
+      corporate: null,
+      dataSources: [],
+      readiness: buildEnvironmentReadinessState(
+        "No live tenant context is available for buyer-proof reporting.",
+        "Sign in with a tenant-mapped live account instead of falling back to demo proof."
+      )
     };
   }
 
-  const [franchise, corporate, dataSources] = await Promise.all([
-    getFranchiseDashboardReadModel({
-      supabase: context.supabase,
-      franchiseTenantId: context.franchiseTenantId
-    }),
-    getCorporateDashboardReadModel({
-      supabase: context.supabase,
-      enterpriseTenantId: context.enterpriseTenantId
-    }),
+  const [dataSources, readinessSummary] = await Promise.all([
     listDataSourceSummaries({
       supabase: context.supabase as never,
       tenantId: context.franchiseTenantId
+    }),
+    getProductionReadinessSummary({
+      supabase: context.supabase
     })
   ]);
 
-  return {
-    demoMode: false,
-    franchise,
-    corporate,
-    dataSources
-  };
+  const blockingChecks = readinessSummary.checks.filter(
+    (check) =>
+      check.required &&
+      check.status === "fail" &&
+      new Set(["v2_flags", "supabase_rest", "active_territories", "service_area", "active_data_sources", "live_safe_sources"]).has(check.key)
+  );
+
+  if (blockingChecks.length > 0) {
+    return {
+      viewState: "blocked",
+      demoMode: false,
+      franchise: null,
+      corporate: null,
+      dataSources,
+      readiness: {
+        mode: "blocked",
+        live: false,
+        reason: "Buyer-proof metrics are blocked until tenant readiness and live-safe source prerequisites pass.",
+        blockingIssues: blockingChecks.map((check) => ({
+          code: check.key === "live_safe_sources" ? "not_live_in_environment" : "live_partial",
+          message: check.message,
+          detail: check.detail
+        })),
+        recommendedActions: [
+          "Enable SB_USE_V2_READS and SB_USE_V2_WRITES in the live environment.",
+          "Configure at least one active, live-safe data source for the tenant.",
+          "Set active territories and service area before using the buyer network view."
+        ]
+      }
+    };
+  }
+
+  try {
+    const [franchise, corporate] = await Promise.all([
+      getFranchiseDashboardReadModel({
+        supabase: context.supabase,
+        franchiseTenantId: context.franchiseTenantId
+      }),
+      getCorporateDashboardReadModel({
+        supabase: context.supabase,
+        enterpriseTenantId: context.enterpriseTenantId
+      })
+    ]);
+
+    return {
+      viewState: "live",
+      demoMode: false,
+      franchise,
+      corporate,
+      dataSources,
+      readiness: null
+    };
+  } catch (error) {
+    return {
+      viewState: "blocked",
+      demoMode: false,
+      franchise: null,
+      corporate: null,
+      dataSources,
+      readiness: {
+        mode: "blocked",
+        live: false,
+        reason: "Buyer-proof read models could not be loaded from the live environment.",
+        blockingIssues: [
+          {
+            code: "not_live_in_environment",
+            message: error instanceof Error ? error.message : "Live buyer-proof read models are unavailable."
+          }
+        ],
+        recommendedActions: ["Restore live read-model access before using this buyer-facing surface."]
+      }
+    };
+  }
 }
 
 function pickMetric(metrics: Array<{ label: string; value: number }>, label: string) {

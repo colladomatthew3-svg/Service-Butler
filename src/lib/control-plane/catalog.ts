@@ -49,17 +49,21 @@ export const dataSourceCatalog: DataSourceCatalogEntry[] = [
     }
   },
   {
-    catalogKey: "social.intent.placeholder",
-    connectorKey: "social.intent.placeholder",
+    catalogKey: "social.intent.public",
+    connectorKey: "social.intent.public",
     sourceType: "social",
     name: "Consumer Distress Signals",
     description: "Reddit and review-style distress signals for restoration and emergency home-service demand.",
-    liveRequirements: ["Approved terms or custom provider path.", "Sample records are simulated until a live provider is added."],
+    liveRequirements: ["Approved terms for ingestion.", "Configure a public JSON feed URL or Reddit search terms before activating live runs."],
     defaultTermsStatus: "pending_review",
     defaultReliabilityScore: 58,
-    defaultProvenance: "social.intent.placeholder",
+    defaultProvenance: "reddit.com/search.json",
     defaultConfig: {
-      source_name: "Distress Signals",
+      source_name: "Public Distress Signals",
+      platform: "reddit",
+      feed_url: "",
+      search_terms: [],
+      subreddits: [],
       sample_records: []
     }
   },

@@ -30,6 +30,28 @@ function toNumber(value: unknown, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function cleanString(value: unknown) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function parseStringList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cleanString(entry)).filter((entry): entry is string => Boolean(entry));
+  }
+
+  const text = cleanString(value);
+  if (!text) return [];
+  return text
+    .split(",")
+    .map((entry) => cleanString(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
 function classifyDistress(text: string) {
   const lower = text.toLowerCase();
   const matched = DISTRESS_KEYWORDS.filter((rule) => lower.includes(rule.keyword));
@@ -68,6 +90,84 @@ function mapPlatform(raw: unknown) {
   return platform || "social";
 }
 
+function buildRedditSearchUrl(input: ConnectorPullInput) {
+  const directFeed = cleanString(input.config.feed_url || process.env.SOCIAL_INTENT_FEED_URL);
+  if (directFeed) return directFeed;
+
+  const searchTerms = parseStringList(input.config.search_terms || input.config.query_terms);
+  const searchQuery = cleanString(input.config.search_query || input.config.query);
+  const subreddits = parseStringList(input.config.subreddits);
+  const limit = Math.max(1, Math.min(50, toNumber(input.config.limit, 25)));
+
+  const queryParts: string[] = [];
+  if (searchQuery) {
+    queryParts.push(searchQuery);
+  } else if (searchTerms.length > 0) {
+    queryParts.push(searchTerms.map((term) => `"${term}"`).join(" OR "));
+  }
+
+  if (subreddits.length > 0) {
+    queryParts.push(subreddits.map((subreddit) => `subreddit:${subreddit}`).join(" OR "));
+  }
+
+  if (queryParts.length === 0) return null;
+
+  const url = new URL("https://www.reddit.com/search.json");
+  url.searchParams.set("q", queryParts.join(" "));
+  url.searchParams.set("sort", "new");
+  url.searchParams.set("t", "day");
+  url.searchParams.set("limit", String(limit));
+  url.searchParams.set("raw_json", "1");
+  return url.toString();
+}
+
+function extractFeedRecords(payload: unknown, input: ConnectorPullInput) {
+  if (Array.isArray(payload)) {
+    return payload.filter((row): row is Record<string, unknown> => isRecord(row));
+  }
+
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as Record<string, unknown>;
+
+  const records = record.records;
+  if (Array.isArray(records)) {
+    return records.filter((row): row is Record<string, unknown> => isRecord(row));
+  }
+
+  const items = record.items;
+  if (Array.isArray(items)) {
+    return items.filter((row): row is Record<string, unknown> => isRecord(row));
+  }
+
+  const redditChildren = (record.data as Record<string, unknown> | undefined)?.children;
+  if (Array.isArray(redditChildren)) {
+    return redditChildren.reduce<Record<string, unknown>[]>((acc, child) => {
+      const data = isRecord(child) ? ((child as { data?: Record<string, unknown> }).data ?? null) : null;
+      if (!data) return acc;
+
+      const createdUtc = toNumber(data.created_utc, 0);
+      acc.push({
+        id: data.id,
+        platform: "reddit",
+        title: data.title,
+        body: data.selftext || data.body || "",
+        created_at: createdUtc > 0 ? new Date(createdUtc * 1000).toISOString() : new Date().toISOString(),
+        author: data.author,
+        source_name: input.config.source_name || "Reddit",
+        source_provenance: data.permalink ? `reddit.com${data.permalink}` : "reddit.com/search.json",
+        location_text: cleanString(input.config.location_text) || cleanString(input.config.city) || "",
+        city: cleanString(input.config.city) || "",
+        state: cleanString(input.config.state) || "",
+        postal_code: cleanString(input.config.postal_code) || "",
+        url: cleanString(data.url_overridden_by_dest || data.url)
+      } satisfies Record<string, unknown>);
+      return acc;
+    }, []);
+  }
+
+  return [];
+}
+
 function termsStatus(input: ConnectorPullInput) {
   const status = String(input.config.terms_status || "pending_review").toLowerCase();
   if (status === "approved") return "approved" as const;
@@ -77,12 +177,36 @@ function termsStatus(input: ConnectorPullInput) {
 }
 
 export const socialIntentConnector: ConnectorAdapter = {
-  key: "social.intent.placeholder",
+  key: "social.intent.public",
 
   async pull(input: ConnectorPullInput) {
     const sample = input.config.sample_records;
+    const feedUrl = buildRedditSearchUrl(input);
+
+    if (!feedUrl) {
+      if (Array.isArray(sample)) {
+        return sample.filter((row): row is Record<string, unknown> => isRecord(row));
+      }
+      return [];
+    }
+
+    const response = await fetch(feedUrl, {
+      cache: "no-store",
+      headers: {
+        accept: "application/json",
+        "user-agent": "ServiceButler/1.0 (+https://servicebutler.ai)"
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`Public distress feed request failed (${response.status})`);
+    }
+
+    const payload = (await response.json().catch(() => null)) as unknown;
+    const records = extractFeedRecords(payload, input);
+    if (records.length > 0) return records;
+
     if (Array.isArray(sample)) {
-      return sample.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
+      return sample.filter((row): row is Record<string, unknown> => isRecord(row));
     }
     return [];
   },
@@ -178,7 +302,20 @@ export const socialIntentConnector: ConnectorAdapter = {
   },
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
-    const records = await this.pull(input);
-    return { ok: true, detail: `Distress connector ready; sample_count=${records.length}` };
+    const start = Date.now();
+    try {
+      const records = await this.pull(input);
+      return {
+        ok: true,
+        latencyMs: Date.now() - start,
+        detail: `Distress connector ready; records_available=${records.length}`
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - start,
+        detail: error instanceof Error ? error.message : "Public distress feed request failed"
+      };
+    }
   }
 };

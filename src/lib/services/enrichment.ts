@@ -80,7 +80,7 @@ function hash(str: string) {
   return Math.abs(h >>> 0);
 }
 
-class DemoEnrichmentProvider implements EnrichmentProvider {
+class IllustrativeEnrichmentProvider implements EnrichmentProvider {
   enrichOpportunity(input: {
     seed: string;
     address: string;
@@ -91,41 +91,31 @@ class DemoEnrichmentProvider implements EnrichmentProvider {
   }): EnrichmentRecord {
     const seed = hash(`${input.seed}|${input.address}|${input.serviceType}`);
     const neighborhood = neighborhoods[seed % neighborhoods.length] || "Service Area";
-    const firstNames = ["Jordan", "Taylor", "Casey", "Morgan", "Avery", "Parker"];
-    const lastNames = ["Brooks", "Reed", "Parker", "Diaz", "Stone", "Bennett"];
-    const ownerName = `${firstNames[seed % firstNames.length]} ${lastNames[(seed >> 2) % lastNames.length]}`;
-    const last4 = String(1000 + (seed % 9000));
 
     return {
-      provider: "Demo enrichment",
+      provider: "Illustrative service-area preview",
       simulated: true,
       propertyAddress: input.address,
       city: input.city,
       state: input.state,
       postalCode: input.postalCode,
       neighborhood,
-      propertyImageLabel: `${input.serviceType} property preview`,
+      propertyImageLabel: `${input.serviceType} service-area context`,
       propertyImageUrl: null,
-      propertyImageSource: "Demo placeholder",
-      propertyValueEstimate: `$${(325000 + (seed % 280000)).toLocaleString()}`,
+      propertyImageSource: "Illustrative preview",
+      propertyValueEstimate: null,
       propertyValueVerification: "demo",
-      ownerContact: {
-        name: ownerName,
-        phone: `+1 (631) 555-${last4}`,
-        email: `${ownerName.toLowerCase().replace(/\s+/g, ".")}@example-demo.com`,
-        verification: "demo",
-        confidenceLabel: "Demo placeholder only"
-      },
+      ownerContact: null,
       notes: [
-        "Simulated for demo mode using realistic placeholder property and homeowner data.",
-        "Do not treat owner name, phone, email, or value estimate as verified production records.",
-        "Replace with licensed or public-record enrichment providers in production."
+        "Illustrative preview generated from the selected service area for demo mode.",
+        "No homeowner, phone, or email is attached to demo-mode enrichment.",
+        "Use public or licensed enrichment providers in live mode for verified parcel context."
       ]
     };
   }
 }
 
-const demoProvider = new DemoEnrichmentProvider();
+const demoProvider = new IllustrativeEnrichmentProvider();
 
 function formatCurrency(value?: number | null) {
   if (!Number.isFinite(value)) return null;

@@ -2,6 +2,7 @@ import { inngest } from "@/lib/workflows/client";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getConnectorByKey } from "@/lib/v2/connectors/registry";
 import { runConnectorForSource } from "@/lib/v2/connectors/runner";
+import { inferConnectorKey } from "@/lib/v2/connectors/source-type-map";
 import { logV2AuditEvent } from "@/lib/v2/audit";
 
 export const v2ConnectorRunRequested = inngest.createFunction(
@@ -29,15 +30,7 @@ export const v2ConnectorRunRequested = inngest.createFunction(
 
     if (!source) return { ok: false, reason: "source_not_found" };
 
-    const key =
-      String(connectorKey || "") ||
-      (String(source.source_type || "").toLowerCase().includes("weather")
-        ? "weather.noaa"
-        : String(source.source_type || "").toLowerCase().includes("permit")
-          ? "permits.placeholder"
-          : String(source.source_type || "").toLowerCase().includes("social")
-            ? "social.intent.placeholder"
-            : "incidents.generic");
+    const key = String(connectorKey || "").trim() || inferConnectorKey(String(source.source_type || ""));
 
     const connector = getConnectorByKey(key);
     if (!connector) return { ok: false, reason: `connector_not_found:${key}` };

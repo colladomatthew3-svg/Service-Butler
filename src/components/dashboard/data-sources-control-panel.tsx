@@ -10,11 +10,19 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import type { DataSourceSummary, DataSourceTermsStatus, DataSourceStatus, IntegrationReadinessSummary } from "@/lib/control-plane/types";
+import { buildDataSourceReadinessState } from "@/lib/control-plane/readiness";
+import type { DataSourceSummary, DataSourceTermsStatus, DataSourceStatus, IntegrationReadinessSummary, ReadinessState } from "@/lib/control-plane/types";
 
 type DataSourceApiResponse = {
   sources: DataSourceSummary[];
   mode?: string;
+};
+
+type ActionResponse = {
+  source?: DataSourceSummary;
+  reason?: string;
+  error?: string;
+  readiness?: ReadinessState;
 };
 
 type DraftState = {
@@ -32,6 +40,7 @@ export function DataSourcesControlPanel() {
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [draft, setDraft] = useState<DraftState | null>(null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [inlineReadiness, setInlineReadiness] = useState<Record<string, ReadinessState>>({});
   const { showToast } = useToast();
 
   const selectedSource = useMemo(
@@ -56,6 +65,13 @@ export function DataSourcesControlPanel() {
       const data = (await res.json().catch(() => ({ sources: [] }))) as DataSourceApiResponse;
       if (!res.ok) throw new Error("Could not load data sources");
       setSources(data.sources || []);
+      setInlineReadiness(
+        Object.fromEntries(
+          (data.sources || [])
+            .map((source) => [source.id || source.catalogKey, buildDataSourceReadinessState(source)] as const)
+            .filter(([, readiness]) => readiness.blockingIssues.length > 0)
+        )
+      );
       const selected = nextSelectedKey || selectedKey;
       if (selected) {
         const match = (data.sources || []).find((source) => source.id === selected || source.catalogKey === selected);
@@ -103,12 +119,21 @@ export function DataSourcesControlPanel() {
           catalogKey: source.catalogKey
         })
       });
-      const data = (await res.json().catch(() => ({}))) as { source?: DataSourceSummary; reason?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as ActionResponse;
       if (!res.ok) throw new Error(data.error || "Could not create data source");
       if (res.status === 202) {
+        if (data.readiness) {
+          setInlineReadiness((prev) => ({ ...prev, [source.catalogKey]: data.readiness! }));
+        }
         showToast(data.reason || "Data source creation is unavailable in compat mode");
         return;
       }
+      setInlineReadiness((prev) => {
+        const next = { ...prev };
+        delete next[source.catalogKey];
+        delete next[data.source?.id || ""];
+        return next;
+      });
       showToast(`${source.name} added to the control plane`);
       await loadSources(data.source?.id || source.catalogKey);
     } catch (error) {
@@ -143,12 +168,20 @@ export function DataSourcesControlPanel() {
           config
         })
       });
-      const data = (await res.json().catch(() => ({}))) as { source?: DataSourceSummary; reason?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as ActionResponse;
       if (!res.ok) throw new Error(data.error || "Could not save data source");
       if (res.status === 202) {
+        if (data.readiness) {
+          setInlineReadiness((prev) => ({ ...prev, [selectedSource.id!]: data.readiness! }));
+        }
         showToast(data.reason || "Data source updates are unavailable in compat mode");
         return;
       }
+      setInlineReadiness((prev) => {
+        const next = { ...prev };
+        delete next[selectedSource.id!];
+        return next;
+      });
       showToast(`${draft.name} saved`);
       await loadSources(data.source?.id || selectedSource.id);
     } catch (error) {
@@ -168,11 +201,31 @@ export function DataSourcesControlPanel() {
         detail?: string;
         reason?: string;
         error?: string;
+        readiness?: ReadinessState;
       };
-      if (!res.ok) throw new Error(data.error || "Health probe failed");
+      if (!res.ok) {
+        if (data.readiness) {
+          setInlineReadiness((prev) => ({ ...prev, [source.id!]: data.readiness! }));
+          showToast(data.reason || data.error || "Health probe blocked");
+          return;
+        }
+        throw new Error(data.error || "Health probe failed");
+      }
       if (res.status === 202) {
+        if (data.readiness) {
+          setInlineReadiness((prev) => ({ ...prev, [source.id!]: data.readiness! }));
+        }
         showToast(data.reason || "Health probes are unavailable in compat mode");
         return;
+      }
+      if (data.readiness) {
+        setInlineReadiness((prev) => ({ ...prev, [source.id!]: data.readiness! }));
+      } else {
+        setInlineReadiness((prev) => {
+          const next = { ...prev };
+          delete next[source.id!];
+          return next;
+        });
       }
       showToast(data.health?.detail || data.detail || "Health probe completed");
       await loadSources(source.id);
@@ -193,11 +246,31 @@ export function DataSourcesControlPanel() {
         run?: { status?: string };
         reason?: string;
         error?: string;
+        readiness?: ReadinessState;
       };
-      if (!res.ok) throw new Error(data.error || "Connector run failed");
+      if (!res.ok) {
+        if (data.readiness) {
+          setInlineReadiness((prev) => ({ ...prev, [source.id!]: data.readiness! }));
+          showToast(data.reason || data.error || "Connector run blocked");
+          return;
+        }
+        throw new Error(data.error || "Connector run failed");
+      }
       if (res.status === 202) {
+        if (data.readiness) {
+          setInlineReadiness((prev) => ({ ...prev, [source.id!]: data.readiness! }));
+        }
         showToast(data.reason || "Connector runs are unavailable in compat mode");
         return;
+      }
+      if (data.readiness) {
+        setInlineReadiness((prev) => ({ ...prev, [source.id!]: data.readiness! }));
+      } else {
+        setInlineReadiness((prev) => {
+          const next = { ...prev };
+          delete next[source.id!];
+          return next;
+        });
       }
       showToast(`Connector run ${(data.result?.status || data.run?.status || "completed").toString()}`);
       await loadSources(source.id);
@@ -246,6 +319,7 @@ export function DataSourcesControlPanel() {
                 {sources.map((source) => {
                   const selected = selectedSource?.id === source.id || selectedSource?.catalogKey === source.catalogKey;
                   const isBusy = busyKey === source.id || busyKey === source.catalogKey;
+                  const sourceReadiness = inlineReadiness[source.id || source.catalogKey];
                   return (
                     <div
                       key={source.id || source.catalogKey}
@@ -278,6 +352,8 @@ export function DataSourcesControlPanel() {
                           <p>latest event</p>
                         </div>
                       </div>
+                      <ReadinessBanner readiness={sourceReadiness} compact />
+                      <p className="mt-3 text-xs text-semantic-muted">{source.buyerReadinessNote}</p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button
                           size="sm"
@@ -324,6 +400,7 @@ export function DataSourcesControlPanel() {
               <p className="text-sm text-semantic-muted">Pick a source to inspect runtime mode, update config, or run a health probe.</p>
             ) : (
               <>
+                <ReadinessBanner readiness={inlineReadiness[selectedSource.id || selectedSource.catalogKey]} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Name">
                     <Input value={draft.name} onChange={(event) => setDraft((prev) => prev ? { ...prev, name: event.target.value } : prev)} />
@@ -422,6 +499,35 @@ export function DataSourcesControlPanel() {
           </CardBody>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function ReadinessBanner({
+  readiness,
+  compact = false
+}: {
+  readiness?: ReadinessState;
+  compact?: boolean;
+}) {
+  if (!readiness || readiness.blockingIssues.length === 0) return null;
+
+  const issue = readiness.blockingIssues[0];
+  const tone =
+    issue.code === "not_live_in_environment" || issue.code === "blocked_by_terms"
+      ? "border-rose-300/80 bg-rose-50/85 text-rose-950"
+      : "border-amber-300/80 bg-amber-50/85 text-amber-950";
+
+  return (
+    <div className={`mt-3 rounded-[1rem] border px-4 py-3 text-sm ${tone}`}>
+      <p className="font-semibold">{issue.code.replace(/_/g, " ")}</p>
+      <p className={compact ? "mt-1 text-xs" : "mt-1"}>{issue.message}</p>
+      {issue.detail ? <p className={compact ? "mt-1 text-xs opacity-90" : "mt-1 text-sm opacity-90"}>{issue.detail}</p> : null}
+      {readiness.recommendedActions.length > 0 ? (
+        <p className={compact ? "mt-2 text-xs opacity-90" : "mt-2 text-sm opacity-90"}>
+          Next: {readiness.recommendedActions[0]}
+        </p>
+      ) : null}
     </div>
   );
 }

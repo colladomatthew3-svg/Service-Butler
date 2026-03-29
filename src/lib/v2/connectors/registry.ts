@@ -21,8 +21,14 @@ const CONNECTORS: Record<string, ConnectorAdapter> = {
   [overpassConnector.key]: overpassConnector
 };
 
+const CONNECTOR_ALIASES: Record<string, string> = {
+  "permits.placeholder": permitsConnector.key,
+  "social.intent.placeholder": socialIntentConnector.key
+};
+
 export function getConnectorByKey(key: string) {
-  return CONNECTORS[key] || null;
+  const normalizedKey = CONNECTOR_ALIASES[String(key || "").trim()] || String(key || "").trim();
+  return CONNECTORS[normalizedKey] || null;
 }
 
 export function listConnectors() {

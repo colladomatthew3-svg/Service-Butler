@@ -3,7 +3,7 @@ export function inferConnectorKey(sourceType: string) {
   if (normalizedType.includes("weather")) return "weather.noaa";
   if (normalizedType.includes("permit")) return "permits.production";
   if (normalizedType.includes("social") || normalizedType.includes("reddit") || normalizedType.includes("review")) {
-    return "social.intent.placeholder";
+    return "social.intent.public";
   }
   if (normalizedType.includes("incident") || normalizedType.includes("emergency")) return "incidents.generic";
   if (normalizedType.includes("usgs") || normalizedType.includes("water")) return "water.usgs";
@@ -13,4 +13,3 @@ export function inferConnectorKey(sourceType: string) {
   if (normalizedType.includes("overpass") || normalizedType.includes("osm") || normalizedType.includes("property")) return "property.overpass";
   return "incidents.generic";
 }
-

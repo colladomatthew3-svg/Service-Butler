@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { featureFlags } from "@/lib/config/feature-flags";
 import { dataSourceCatalog, getCatalogEntryForSourceType, getDataSourceCatalogEntry } from "@/lib/control-plane/catalog";
+import { buyerReadinessNoteForSource } from "@/lib/control-plane/readiness";
 import type {
   ConnectorHealthSummary,
   DataSourceMutationPayload,
@@ -171,7 +172,13 @@ export function computeRuntimeMode(sourceType: string, config: Record<string, un
   }
 
   if (normalizedType.includes("social") || normalizedType.includes("reddit") || normalizedType.includes("review")) {
-    return "simulated";
+    const hasFeed = Boolean(config.feed_url || config.endpoint || process.env.SOCIAL_INTENT_FEED_URL);
+    const hasSearchTerms =
+      (Array.isArray(config.search_terms) && config.search_terms.some((value) => String(value || "").trim().length > 0)) ||
+      Boolean(String(config.search_query || config.query || "").trim()) ||
+      (Array.isArray(config.subreddits) && config.subreddits.some((value) => String(value || "").trim().length > 0));
+    if (!hasFeed && !hasSearchTerms) return "simulated";
+    return termsStatus === "approved" ? "fully-live" : "live-partial";
   }
 
   return termsStatus === "approved" ? "fully-live" : "live-partial";
@@ -207,6 +214,14 @@ function configuredSummaryFromCatalog(catalogKey: string): DataSourceSummary {
     recordsCreated: 0,
     provenance: catalog.defaultProvenance,
     liveRequirements: catalog.liveRequirements,
+    buyerReadinessNote: buyerReadinessNoteForSource({
+      name: catalog.name,
+      configured: false,
+      status: "not_configured",
+      runtimeMode: computeRuntimeMode(catalog.sourceType, catalog.defaultConfig, catalog.defaultTermsStatus),
+      termsStatus: catalog.defaultTermsStatus,
+      complianceStatus: catalog.defaultTermsStatus
+    }),
     config: catalog.defaultConfig,
     configTemplate: catalog.defaultConfig,
     rateLimitPolicy: {}
@@ -256,12 +271,15 @@ function buildDemoBundle(): DemoBundle {
         status: "paused",
         terms_status: "pending_review",
         config_encrypted: {
-          source_name: "Distress Signals",
+          source_name: "Public Distress Signals",
+          platform: "reddit",
+          search_terms: ["flooded basement", "pipe burst"],
+          subreddits: ["homeowners", "plumbing"],
           sample_records: [{ channel: "reddit", market: "Long Island" }]
         },
         reliability_score: 58,
         freshness_timestamp: new Date(now - 1000 * 60 * 180).toISOString(),
-        provenance: "social.intent.placeholder"
+        provenance: "reddit.com/search.json"
       },
       {
         id: "demo-incidents",
@@ -502,6 +520,14 @@ function buildConfiguredSummary(
     recordsCreated: Number(latestRun?.records_created || 0),
     provenance: row.provenance || catalog?.defaultProvenance || null,
     liveRequirements: catalog?.liveRequirements || [],
+    buyerReadinessNote: buyerReadinessNoteForSource({
+      name: row.name || catalog?.name || row.source_type,
+      configured: true,
+      status: row.status,
+      runtimeMode,
+      termsStatus,
+      complianceStatus
+    }),
     config,
     configTemplate: catalog?.defaultConfig || {},
     rateLimitPolicy: (row.rate_limit_policy as Record<string, unknown>) || {}

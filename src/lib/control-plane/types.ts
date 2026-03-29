@@ -4,6 +4,29 @@ export type DataSourceTermsStatus = "approved" | "restricted" | "pending_review"
 
 export type DataSourceStatus = "active" | "paused" | "disabled" | "not_configured";
 
+export type ReadinessMode = "live" | "demo" | "blocked";
+
+export type ReadinessIssueCode =
+  | "not_configured"
+  | "simulated"
+  | "live_partial"
+  | "blocked_by_terms"
+  | "not_live_in_environment";
+
+export type ReadinessIssue = {
+  code: ReadinessIssueCode;
+  message: string;
+  detail?: string;
+};
+
+export type ReadinessState = {
+  mode: ReadinessMode;
+  live: boolean;
+  reason: string | null;
+  blockingIssues: ReadinessIssue[];
+  recommendedActions: string[];
+};
+
 export type ConnectorHealthSummary = {
   ok: boolean;
   detail: string;
@@ -37,6 +60,7 @@ export type DataSourceSummary = {
   recordsCreated: number;
   provenance: string | null;
   liveRequirements: string[];
+  buyerReadinessNote: string;
   config: Record<string, unknown>;
   configTemplate: Record<string, unknown>;
   rateLimitPolicy: Record<string, unknown>;

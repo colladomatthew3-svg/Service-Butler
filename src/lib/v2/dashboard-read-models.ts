@@ -1,4 +1,5 @@
 import type { V2DashboardMetricRow } from "@/lib/v2/types";
+import { getOpportunityQualificationSnapshot, isBuyerProofEligibleQualification } from "@/lib/v2/opportunity-qualification";
 import { classifyProofAuthenticity, type ProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -84,6 +85,33 @@ function isNetworkActivatedLead(row: Record<string, unknown>) {
     recordKind === "referral_partner" ||
     sourceType.includes("network")
   );
+}
+
+function proofAuthenticityForOpportunity(input: {
+  opportunity: Record<string, unknown>;
+  sourceEvent: Record<string, unknown>;
+  connectorRunMetadata?: Record<string, unknown>;
+}) {
+  return classifyProofAuthenticity({
+    sourceType: input.sourceEvent.source_type,
+    sourceName: input.sourceEvent.source_name,
+    sourceProvenance: input.sourceEvent.source_provenance,
+    normalizedPayload: asRecord(input.sourceEvent.normalized_payload),
+    connectorRunMetadata: input.connectorRunMetadata
+  });
+}
+
+function isBuyerProofEligibleOpportunity(input: {
+  opportunity: Record<string, unknown>;
+  sourceEvent: Record<string, unknown>;
+  connectorRunMetadata?: Record<string, unknown>;
+}) {
+  const proofAuthenticity = proofAuthenticityForOpportunity(input);
+  const qualification = getOpportunityQualificationSnapshot({
+    explainability: asRecord(input.opportunity.explainability_json),
+    proofAuthenticity
+  });
+  return isBuyerProofEligibleQualification(qualification);
 }
 
 function sourceRankingScore(stats: {
@@ -196,7 +224,13 @@ export async function getCorporateDashboardReadModel({
   }, {});
 
   const bookedJobs = jobRows.filter((row) => String(row.status || "").includes("book")).length;
-  const totalRevenue = jobRows.reduce((sum, row) => sum + toNumber(row.revenue_amount), 0);
+  const scheduledWork = jobRows.filter((row) => {
+    const status = String(row.status || "").toLowerCase();
+    return status.includes("schedule") || status.includes("book");
+  }).length;
+  const totalRevenue = jobRows
+    .filter((row) => String(row.status || "").toLowerCase().includes("book"))
+    .reduce((sum, row) => sum + toNumber(row.revenue_amount), 0);
 
   const acceptedAssignments = assignmentRows.filter((row) => row.status === "accepted").length;
   const overdueAssignments = assignmentRows.filter((row) => {
@@ -212,6 +246,7 @@ export async function getCorporateDashboardReadModel({
     { label: "opportunity_volume", value: totalOpportunities },
     { label: "routed_opportunities", value: routed },
     { label: "booked_jobs", value: bookedJobs },
+    { label: "scheduled_work", value: scheduledWork },
     { label: "assignment_acceptances", value: acceptedAssignments },
     { label: "assignment_overdue", value: overdueAssignments },
     { label: "catastrophe_surge_signals", value: catastrophe },
@@ -220,7 +255,8 @@ export async function getCorporateDashboardReadModel({
     { label: "distress_signal_opportunities", value: distressCount },
     { label: "connector_runs_completed", value: completedConnectorRuns },
     { label: "connector_runs_failed", value: failedConnectorRuns },
-    { label: "estimated_revenue", value: totalRevenue }
+    { label: "estimated_revenue", value: totalRevenue },
+    { label: "attributable_revenue", value: totalRevenue }
   ];
 
   const byFranchise = (franchises || []).map((franchise: Record<string, unknown>) => {
@@ -607,9 +643,16 @@ export async function getFranchiseDashboardReadModel({
     stats.reliability_scores.push(toNumber(sourceEvent.source_reliability_score, 0));
 
     const opportunitiesForSource = opportunitiesBySourceEvent.get(asText(sourceEvent.id)) || [];
-    stats.opportunity_count += opportunitiesForSource.length;
+    const eligibleOpportunitiesForSource = opportunitiesForSource.filter((opportunity) =>
+      isBuyerProofEligibleOpportunity({
+        opportunity,
+        sourceEvent,
+        connectorRunMetadata: asRecord(connectorRunById.get(asText(sourceEvent.connector_run_id))?.metadata)
+      })
+    );
+    stats.opportunity_count += eligibleOpportunitiesForSource.length;
 
-    for (const opportunity of opportunitiesForSource) {
+    for (const opportunity of eligibleOpportunitiesForSource) {
       const leadsForOpportunity = leadsByOpportunity.get(asText(opportunity.id)) || [];
       stats.lead_count += leadsForOpportunity.length;
 
@@ -631,6 +674,7 @@ export async function getFranchiseDashboardReadModel({
   }
 
   const sourceQualityPreview = Array.from(sourceStats.values())
+    .filter((stats) => stats.authenticity !== "synthetic")
     .map((stats) => {
       const ranking = sourceRankingScore(stats);
       return {
@@ -669,17 +713,36 @@ export async function getFranchiseDashboardReadModel({
     { keep: 0, tune: 0, pause: 0 }
   );
 
-  const proofSamples = verifiedLeadRows
+  const buyerProofVerifiedLeadRows = verifiedLeadRows.filter((lead) => {
+    const opportunity = oppRows.find((row) => asText(row.id) === asText(lead.opportunity_id)) || {};
+    const sourceEvent = sourceEventRows.find((row) => asText(row.id) === asText(opportunity.source_event_id)) || {};
+    const connectorRun = connectorRunById.get(asText(sourceEvent.connector_run_id));
+    return isBuyerProofEligibleOpportunity({
+      opportunity,
+      sourceEvent,
+      connectorRunMetadata: asRecord(connectorRun?.metadata)
+    });
+  });
+  const buyerProofLeadRows = leadRows.filter((lead) => {
+    const opportunity = oppRows.find((row) => asText(row.id) === asText(lead.opportunity_id)) || {};
+    const sourceEvent = sourceEventRows.find((row) => asText(row.id) === asText(opportunity.source_event_id)) || {};
+    const connectorRun = connectorRunById.get(asText(sourceEvent.connector_run_id));
+    return isBuyerProofEligibleOpportunity({
+      opportunity,
+      sourceEvent,
+      connectorRunMetadata: asRecord(connectorRun?.metadata)
+    });
+  });
+
+  const proofSamples = buyerProofVerifiedLeadRows
     .map((lead) => {
       const snapshot = leadVerificationSnapshot(lead);
       const opportunity = oppRows.find((row) => asText(row.id) === asText(lead.opportunity_id)) || {};
       const sourceEvent = sourceEventRows.find((row) => asText(row.id) === asText(opportunity.source_event_id)) || {};
       const connectorRun = connectorRunById.get(asText(sourceEvent.connector_run_id));
-      const authenticity = classifyProofAuthenticity({
-        sourceType: sourceEvent.source_type,
-        sourceName: sourceEvent.source_name,
-        sourceProvenance: sourceEvent.source_provenance,
-        normalizedPayload: asRecord(sourceEvent.normalized_payload),
+      const authenticity = proofAuthenticityForOpportunity({
+        opportunity,
+        sourceEvent,
         connectorRunMetadata: asRecord(connectorRun?.metadata)
       });
       const leadJobs = jobsByLead.get(asText(lead.id)) || [];
@@ -715,12 +778,22 @@ export async function getFranchiseDashboardReadModel({
     .sort((a, b) => b.verification_score - a.verification_score || b.booked_jobs - a.booked_jobs)
     .slice(0, 5);
 
-  const bookedJobsFromVerifiedLeads = verifiedLeadRows.reduce((sum, lead) => {
+  const bookedJobsFromVerifiedLeads = buyerProofVerifiedLeadRows.reduce((sum, lead) => {
     const leadJobs = jobsByLead.get(asText(lead.id)) || [];
     return sum + leadJobs.filter((job) => String(job.status || "").toLowerCase().includes("book")).length;
   }, 0);
 
-  const networkLeadRows = leadRows.filter((row) => isNetworkActivatedLead(row));
+  const networkLeadRows = leadRows.filter((row) => {
+    if (!isNetworkActivatedLead(row)) return false;
+    const opportunity = oppRows.find((opp) => asText(opp.id) === asText(row.opportunity_id)) || {};
+    const sourceEvent = sourceEventRows.find((event) => asText(event.id) === asText(opportunity.source_event_id)) || {};
+    const connectorRun = connectorRunById.get(asText(sourceEvent.connector_run_id));
+    return isBuyerProofEligibleOpportunity({
+      opportunity,
+      sourceEvent,
+      connectorRunMetadata: asRecord(connectorRun?.metadata)
+    });
+  });
   const verifiedNetworkLeadRows = networkLeadRows.filter((row) => leadVerificationSnapshot(row).verified);
   const networkLeadIds = new Set(networkLeadRows.map((row) => asText(row.id)));
   const networkOpportunityIds = new Set(networkLeadRows.map((row) => asText(row.opportunity_id)).filter(Boolean));
@@ -730,19 +803,15 @@ export async function getFranchiseDashboardReadModel({
     return sum + leadJobs.filter((job) => String(job.status || "").toLowerCase().includes("book")).length;
   }, 0);
 
-  const liveProviderVerifiedLeadRows = verifiedLeadRows.filter((lead) => {
+  const liveProviderVerifiedLeadRows = buyerProofVerifiedLeadRows.filter((lead) => {
     const opportunity = oppRows.find((row) => asText(row.id) === asText(lead.opportunity_id)) || {};
     const sourceEvent = sourceEventRows.find((row) => asText(row.id) === asText(opportunity.source_event_id)) || {};
     const connectorRun = connectorRunById.get(asText(sourceEvent.connector_run_id));
-    return (
-      classifyProofAuthenticity({
-        sourceType: sourceEvent.source_type,
-        sourceName: sourceEvent.source_name,
-        sourceProvenance: sourceEvent.source_provenance,
-        normalizedPayload: asRecord(sourceEvent.normalized_payload),
-        connectorRunMetadata: asRecord(connectorRun?.metadata)
-      }) === "live_provider"
-    );
+    return proofAuthenticityForOpportunity({
+      opportunity,
+      sourceEvent,
+      connectorRunMetadata: asRecord(connectorRun?.metadata)
+    }) === "live_provider";
   });
 
   const liveProviderBookedJobs = liveProviderVerifiedLeadRows.reduce((sum, lead) => {
@@ -800,12 +869,12 @@ export async function getFranchiseDashboardReadModel({
       source_trust_summary: sourceTrustSummary
     },
     lead_quality_proof: {
-      verified_lead_count: verifiedLeadRows.length,
+      verified_lead_count: buyerProofVerifiedLeadRows.length,
       live_provider_verified_lead_count: liveProviderVerifiedLeadRows.length,
       network_verified_lead_count: verifiedNetworkLeadRows.length,
       review_lead_count: reviewLeadRows.length,
       rejected_lead_count: rejectedLeadRows.length,
-      contactable_lead_count: leadRows.filter((row) => leadVerificationSnapshot(row).contactable).length,
+      contactable_lead_count: buyerProofLeadRows.filter((row) => leadVerificationSnapshot(row).contactable).length,
       booked_jobs_from_verified_leads: bookedJobsFromVerifiedLeads,
       booked_jobs_from_live_provider_verified_leads: liveProviderBookedJobs,
       booked_jobs_from_network_leads: bookedJobsFromNetworkLeads,

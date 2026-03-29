@@ -153,7 +153,7 @@ Recommended source config for the high-value intelligence categories:
   - connector key: `disaster.openfema`
 - Consumer distress (Reddit + Google reviews normalized path):
   - `source_type=social`
-  - connector key: `social.intent.placeholder`
+  - connector key: `social.intent.public`
   - set `terms_status=approved` before live ingestion
 - Census enrichment:
   - `source_type=census`

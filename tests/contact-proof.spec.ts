@@ -30,10 +30,10 @@ test("contact proof rejects demo or simulated owner contact records", () => {
   const enrichment = {
     simulated: true,
     ownerContact: {
-      name: "Demo Contact",
+      name: "Illustrative Contact",
       phone: "+16315550142",
       verification: "demo",
-      confidenceLabel: "Demo placeholder only"
+      confidenceLabel: "Illustrative preview only"
     }
   };
 

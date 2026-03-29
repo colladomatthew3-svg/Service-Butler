@@ -5,7 +5,9 @@ import { hasVerifiedOwnerContact } from "@/lib/services/contact-proof";
 import { runScanner } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { featureFlags } from "@/lib/config/feature-flags";
+import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { computeOpportunityScores } from "@/lib/v2/scoring";
+import type { OpportunityQualificationStatus } from "@/lib/v2/opportunity-qualification";
 
 type ScannerRunRequestBody = {
   mode?: "demo" | "live";
@@ -18,6 +20,26 @@ type ScannerRunRequestBody = {
   campaignMode?: "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
   triggers?: string[];
 };
+
+function buildScannerQualificationFields(op: { source: string; raw?: Record<string, unknown> }, hasVerifiedContact: boolean) {
+  const qualificationStatus: OpportunityQualificationStatus = hasVerifiedContact ? "qualified_contactable" : "research_only";
+  return {
+    qualification_status: qualificationStatus,
+    qualification_reason_code: hasVerifiedContact ? "verified_contact_present" : "missing_verified_contact",
+    next_recommended_action: hasVerifiedContact ? "create_lead" : "route_to_sdr",
+    research_only: !hasVerifiedContact,
+    requires_sdr_qualification: !hasVerifiedContact,
+    proof_authenticity: classifyProofAuthenticity({
+      sourceType: op.source,
+      sourceName: String(op.raw?.source_name || op.source || "scanner_signal"),
+      sourceProvenance: String(op.raw?.source_provenance || op.source || "scanner_signal"),
+      normalizedPayload: {
+        ...(op.raw || {}),
+        source_type: op.source
+      }
+    })
+  };
+}
 
 export async function POST(req: NextRequest) {
   if (isDemoMode()) {
@@ -123,35 +145,47 @@ export async function POST(req: NextRequest) {
     }
     const sourceEventIds = (sourceEvents || []).map((item) => String(item.id));
 
-    const rows = result.opportunities.map((op) => ({
-      account_id: accountId,
-      source: op.source,
-      category: op.category,
-      title: op.title,
-      description: op.description,
-      location_text: op.locationText,
-      lat: op.lat,
-      lon: op.lon,
-      intent_score: op.intentScore,
-      confidence: op.confidence,
-      tags: op.tags,
-      raw: {
-        ...op.raw,
-        scanner_opportunity_id: op.id,
-        next_action: op.nextAction,
-        reason_summary: op.reasonSummary,
-        recommended_create_mode: op.recommendedCreateMode,
-        recommended_schedule_iso: op.recommendedScheduleIso
-      }
-    }));
+    const rows = result.opportunities.map((op) => {
+      const hasVerifiedContact = hasVerifiedOwnerContact(op.raw?.enrichment);
+      return {
+        account_id: accountId,
+        source: op.source,
+        category: op.category,
+        title: op.title,
+        description: op.description,
+        location_text: op.locationText,
+        lat: op.lat,
+        lon: op.lon,
+        intent_score: op.intentScore,
+        confidence: op.confidence,
+        tags: op.tags,
+        raw: {
+          ...op.raw,
+          scanner_opportunity_id: op.id,
+          next_action: op.nextAction,
+          reason_summary: op.reasonSummary,
+          recommended_create_mode: op.recommendedCreateMode,
+          recommended_schedule_iso: op.recommendedScheduleIso,
+          ...buildScannerQualificationFields(op, hasVerifiedContact)
+        }
+      };
+    });
 
-    const { error: scannerEventsError } = await supabase.from("scanner_events").insert(rows);
+    const { data: persistedScannerEvents, error: scannerEventsError } = await supabase.from("scanner_events").insert(rows).select("id,raw");
     if (scannerEventsError) {
       warnings.push("Scanner feed persistence is unavailable, so this run is shown directly from the live response.");
     }
+    const scannerEventIdsByGeneratedId = new Map(
+      ((persistedScannerEvents || []) as Array<{ id: string; raw?: Record<string, unknown> | null }>).map((row) => [
+        String(row.raw?.scanner_opportunity_id || ""),
+        String(row.id || "")
+      ])
+    );
 
     const { error: opportunitiesError } = await supabase.from("opportunities").insert(
-      result.opportunities.map((op, index) => ({
+      result.opportunities.map((op, index) => {
+        const hasVerifiedContact = hasVerifiedOwnerContact(op.raw?.enrichment);
+        return {
         account_id: accountId,
         source_id: null,
         category: op.category,
@@ -181,9 +215,11 @@ export async function POST(req: NextRequest) {
           next_action: op.nextAction,
           reason_summary: op.reasonSummary,
           recommended_create_mode: op.recommendedCreateMode,
-          recommended_schedule_iso: op.recommendedScheduleIso
+          recommended_schedule_iso: op.recommendedScheduleIso,
+          ...buildScannerQualificationFields(op, hasVerifiedContact)
         }
-      }))
+      };
+      })
     );
     if (opportunitiesError) {
       warnings.push("Opportunity persistence is unavailable, so the live scan did not write into the legacy pipeline tables.");
@@ -302,13 +338,38 @@ export async function POST(req: NextRequest) {
                 lifecycle_status: "new",
                 explainability_json: {
                   ...score.explainability,
-                  contact_enrichment_available: hasVerifiedContact
+                  contact_enrichment_available: hasVerifiedContact,
+                  scanner_opportunity_id: op.id,
+                  ...buildScannerQualificationFields(op, hasVerifiedContact)
                 }
               })
               .select("id")
               .single();
 
             if (opportunityRow?.id) {
+              op.raw = {
+                ...op.raw,
+                v2_opportunity_id: opportunityRow.id,
+                ...buildScannerQualificationFields(op, hasVerifiedContact)
+              };
+              const scannerEventId = scannerEventIdsByGeneratedId.get(op.id);
+              if (scannerEventId) {
+                await supabase
+                  .from("scanner_events")
+                  .update({
+                    raw: {
+                      ...op.raw,
+                      scanner_opportunity_id: op.id,
+                      v2_opportunity_id: opportunityRow.id,
+                      next_action: op.nextAction,
+                      reason_summary: op.reasonSummary,
+                      recommended_create_mode: op.recommendedCreateMode,
+                      recommended_schedule_iso: op.recommendedScheduleIso
+                    }
+                  })
+                  .eq("account_id", accountId)
+                  .eq("id", scannerEventId);
+              }
               await supabase.from("v2_opportunity_signals").insert({
                 tenant_id: franchiseTenantId,
                 opportunity_id: opportunityRow.id,

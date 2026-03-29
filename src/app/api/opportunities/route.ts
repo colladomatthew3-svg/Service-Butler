@@ -4,6 +4,8 @@ import { featureFlags } from "@/lib/config/feature-flags";
 import { getDemoDashboardSnapshot } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
+import { getOpportunityQualificationSnapshot } from "@/lib/v2/opportunity-qualification";
+import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 
 export async function GET(req: NextRequest) {
   if (isDemoMode()) {
@@ -40,56 +42,65 @@ export async function GET(req: NextRequest) {
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
       return NextResponse.json({
-        opportunities: (data || []).map((row: Record<string, unknown>) => ({
-          id: row.id,
-          category: row.service_line || row.opportunity_type,
-          service_line: row.service_line,
-          title: row.title,
-          description: row.description,
-          location_text: row.location_text,
-          city: null,
-          state: null,
-          zip: row.postal_code,
-          territory: null,
-          lat: null,
-          lon: null,
-          intent_score: row.job_likelihood_score,
-          confidence: row.source_reliability_score,
-          urgency_score: row.urgency_score,
-          signal_count:
-            typeof (row.explainability_json as Record<string, unknown> | null)?.signal_count === "number"
-              ? (row.explainability_json as Record<string, unknown>).signal_count
-              : null,
-          source_types: Array.isArray((row.explainability_json as Record<string, unknown> | null)?.source_types)
-            ? ((row.explainability_json as Record<string, unknown>).source_types as unknown[])
-            : [],
-          confidence_reasoning:
-            typeof (row.explainability_json as Record<string, unknown> | null)?.confidence_reasoning === "string"
-              ? (row.explainability_json as Record<string, unknown>).confidence_reasoning
-              : null,
-          estimated_response_window:
-            typeof (row.explainability_json as Record<string, unknown> | null)?.estimated_response_window === "string"
-              ? (row.explainability_json as Record<string, unknown>).estimated_response_window
-              : null,
-          distress_context_summary:
-            typeof (row.explainability_json as Record<string, unknown> | null)?.distress_context_summary === "string"
-              ? (row.explainability_json as Record<string, unknown>).distress_context_summary
-              : null,
-          tags: [],
-          suggested_action: null,
-          recommended_action: null,
-          status: row.lifecycle_status,
-          raw: {
-            revenue_band: row.revenue_band,
-            routing_status: row.routing_status,
-            contact_status: row.contact_status,
-            catastrophe_linkage_score: row.catastrophe_linkage_score,
-            contactability_score: row.contactability_score,
-            explainability: row.explainability_json,
-            network_activation: (row.explainability_json as Record<string, unknown> | null)?.network_activation || null
-          },
-          created_at: row.created_at
-        }))
+        opportunities: (data || []).map((row: Record<string, unknown>) => {
+          const explainability = (row.explainability_json as Record<string, unknown> | null) || {};
+          const proofAuthenticity = classifyProofAuthenticity({
+            sourceType:
+              Array.isArray(explainability.source_types) && explainability.source_types.length > 0
+                ? explainability.source_types[0]
+                : row.service_line || row.opportunity_type,
+            sourceProvenance: explainability.source_provenance
+          });
+          const qualification = getOpportunityQualificationSnapshot({
+            explainability,
+            proofAuthenticity
+          });
+
+          return {
+            id: row.id,
+            category: row.service_line || row.opportunity_type,
+            service_line: row.service_line,
+            title: row.title,
+            description: row.description,
+            location_text: row.location_text,
+            city: null,
+            state: null,
+            zip: row.postal_code,
+            territory: null,
+            lat: null,
+            lon: null,
+            intent_score: row.job_likelihood_score,
+            confidence: row.source_reliability_score,
+            urgency_score: row.urgency_score,
+            signal_count: typeof explainability.signal_count === "number" ? explainability.signal_count : null,
+            source_types: Array.isArray(explainability.source_types) ? (explainability.source_types as unknown[]) : [],
+            confidence_reasoning: typeof explainability.confidence_reasoning === "string" ? explainability.confidence_reasoning : null,
+            estimated_response_window:
+              typeof explainability.estimated_response_window === "string" ? explainability.estimated_response_window : null,
+            distress_context_summary:
+              typeof explainability.distress_context_summary === "string" ? explainability.distress_context_summary : null,
+            tags: [],
+            suggested_action: null,
+            recommended_action: null,
+            status: row.lifecycle_status,
+            qualification_status: qualification.qualificationStatus,
+            qualification_reason_code: qualification.qualificationReasonCode,
+            proof_authenticity: qualification.proofAuthenticity,
+            next_recommended_action: qualification.nextRecommendedAction,
+            research_only: qualification.researchOnly,
+            requires_sdr_qualification: qualification.requiresSdrQualification,
+            raw: {
+              revenue_band: row.revenue_band,
+              routing_status: row.routing_status,
+              contact_status: row.contact_status,
+              catastrophe_linkage_score: row.catastrophe_linkage_score,
+              contactability_score: row.contactability_score,
+              explainability: row.explainability_json,
+              network_activation: explainability.network_activation || null
+            },
+            created_at: row.created_at
+          };
+        })
       });
     }
   }

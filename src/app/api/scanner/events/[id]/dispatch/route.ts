@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
+import { featureFlags } from "@/lib/config/feature-flags";
 import { dispatchDemoScannerEvent } from "@/lib/demo/store";
 import { extractVerifiedOwnerContactFromEnrichment } from "@/lib/services/contact-proof";
 import { generateSignals } from "@/lib/services/intent-engine";
 import { resolveOpportunityAddress } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getForecastByLatLng } from "@/lib/services/weather";
+import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from "@/lib/v2/opportunity-qualification";
 
 type CreateMode = "lead" | "job";
 
@@ -44,6 +46,10 @@ function categoryService(category: string) {
   return "General";
 }
 
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (isDemoMode()) {
@@ -65,7 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   }
 
-  const { accountId, role, supabase } = await getCurrentUserContext();
+  const { accountId, role, supabase, userId } = await getCurrentUserContext();
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -76,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: event, error: eventError } = await supabase
     .from("scanner_events")
-    .select("id,category,title,description,location_text,intent_score,confidence,tags,raw,lat,lon")
+    .select("id,source,category,title,description,location_text,intent_score,confidence,tags,raw,lat,lon")
     .eq("account_id", accountId)
     .eq("id", id)
     .single();
@@ -109,11 +115,100 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     serviceAreaLabel: String(event.raw?.service_area_label || event.location_text || "Service Area"),
     seed: event.id
   });
+
+  let v2Opportunity:
+    | {
+        id: string;
+        tenantId: string;
+        lifecycleStatus: string;
+        contactStatus: string;
+        explainability: Record<string, unknown>;
+      }
+    | null = null;
+
+  if (featureFlags.useV2Reads || featureFlags.useV2Writes) {
+    const { data: tenantMap } = await supabase
+      .from("v2_account_tenant_map")
+      .select("franchise_tenant_id")
+      .eq("account_id", accountId)
+      .maybeSingle();
+
+    const tenantId = String(tenantMap?.franchise_tenant_id || "").trim();
+    if (tenantId) {
+      const requestedOpportunityId = String(event.raw?.v2_opportunity_id || "").trim();
+      const query = requestedOpportunityId
+        ? supabase
+            .from("v2_opportunities")
+            .select("id,lifecycle_status,contact_status,explainability_json")
+            .eq("tenant_id", tenantId)
+            .eq("id", requestedOpportunityId)
+            .maybeSingle()
+        : supabase
+            .from("v2_opportunities")
+            .select("id,lifecycle_status,contact_status,explainability_json,created_at")
+            .eq("tenant_id", tenantId)
+            .order("created_at", { ascending: false })
+            .limit(200);
+
+      const { data } = await query;
+      if (Array.isArray(data)) {
+        const matched = data.find((row) => {
+          const qualification = getOpportunityQualificationSnapshot({
+            explainability: row.explainability_json,
+            lifecycleStatus: row.lifecycle_status,
+            contactStatus: row.contact_status
+          });
+          return qualification.scannerEventId === event.id;
+        });
+        if (matched?.id) {
+          v2Opportunity = {
+            id: String(matched.id),
+            tenantId,
+            lifecycleStatus: String(matched.lifecycle_status || "new"),
+            contactStatus: String(matched.contact_status || "unknown"),
+            explainability: asRecord(matched.explainability_json)
+          };
+        }
+      } else if (data?.id) {
+        v2Opportunity = {
+          id: String(data.id),
+          tenantId,
+          lifecycleStatus: String(data.lifecycle_status || "new"),
+          contactStatus: String(data.contact_status || "unknown"),
+          explainability: asRecord(data.explainability_json)
+        };
+      }
+    }
+  }
+
   const verifiedOwnerContact = extractVerifiedOwnerContactFromEnrichment(event.raw?.enrichment);
-  if (!verifiedOwnerContact?.phone) {
+  const qualification = v2Opportunity
+    ? getOpportunityQualificationSnapshot({
+        explainability: v2Opportunity.explainability,
+        lifecycleStatus: v2Opportunity.lifecycleStatus,
+        contactStatus: v2Opportunity.contactStatus
+      })
+    : null;
+  const dispatchContact = verifiedOwnerContact || (qualification && qualificationAllowsDispatch(qualification)
+    ? {
+        name: qualification.contactName,
+        phone: qualification.phone,
+        email: qualification.email,
+        verification: qualification.verificationStatus || "verified"
+      }
+    : null);
+
+  if (!dispatchContact?.phone && !dispatchContact?.email) {
     return NextResponse.json(
       {
-        error: "This scanner signal does not have a verified phone contact yet. Keep it in research mode or qualify it through SDR before creating a lead."
+        error: "This scanner signal does not have a verified phone contact yet. Keep it in research mode or qualify it through SDR before creating a lead.",
+        status: "research_only",
+        reason_code: qualification?.qualificationReasonCode || "missing_verified_contact",
+        next_step: qualification?.nextRecommendedAction || "route_to_sdr",
+        proof_authenticity: qualification?.proofAuthenticity || String(event.raw?.proof_authenticity || "unknown"),
+        source_type: qualification?.sourceType || String(event.raw?.source_type || event.source || "scanner_signal"),
+        scanner_event_id: event.id,
+        opportunity_id: v2Opportunity?.id || (typeof event.raw?.v2_opportunity_id === "string" ? event.raw.v2_opportunity_id : null)
       },
       { status: 409 }
     );
@@ -124,15 +219,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     source: "scanner_verified_contact",
     stage: stageFromStatus(statusFromMode(mode)),
     status: statusFromMode(mode),
-    name: verifiedOwnerContact.name || event.title,
-    phone: verifiedOwnerContact.phone,
+    name: dispatchContact.name || event.title,
+    phone: dispatchContact.phone || null,
     service_type: categoryService(event.category),
     address: addressInfo.address,
     city: addressInfo.city,
     state: addressInfo.state,
     postal_code: addressInfo.postalCode,
     requested_timeframe: Number(event.intent_score) >= 78 ? "ASAP" : "Today",
-    notes: `Scanner dispatch: ${event.description || "opportunity"} | contact_verification=${verifiedOwnerContact.verification}`
+    notes: [
+      `Scanner dispatch: ${event.description || "opportunity"}`,
+      `contact_verification=${dispatchContact.verification || "verified"}`,
+      dispatchContact.email ? `email=${dispatchContact.email}` : ""
+    ]
+      .filter(Boolean)
+      .join(" | ")
   };
 
   const { data: lead, error: leadError } = await supabase
@@ -160,6 +261,57 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
   }
 
+  let v2LeadId: string | null = null;
+  if (v2Opportunity && featureFlags.useV2Writes) {
+    const { data: existingLead } = await supabase
+      .from("v2_leads")
+      .select("id")
+      .eq("tenant_id", v2Opportunity.tenantId)
+      .eq("opportunity_id", v2Opportunity.id)
+      .maybeSingle();
+
+    if (existingLead?.id) {
+      v2LeadId = String(existingLead.id);
+    } else {
+      const { data: v2Lead } = await supabase
+        .from("v2_leads")
+        .insert({
+          tenant_id: v2Opportunity.tenantId,
+          opportunity_id: v2Opportunity.id,
+          contact_name: dispatchContact.name || event.title,
+          contact_channels_json: {
+            phone: dispatchContact.phone || null,
+            email: dispatchContact.email || null,
+            verification_status: dispatchContact.verification || "verified",
+            verification_score: dispatchContact.verification === "verified" ? 92 : 72,
+            verification_reasons: [
+              qualification?.qualificationSource ? `qualification_source=${qualification.qualificationSource}` : "",
+              qualification?.qualifiedAt ? `qualified_at=${qualification.qualifiedAt}` : "",
+              verifiedOwnerContact ? "enrichment_verified_contact" : "sdr_qualified_contact"
+            ].filter(Boolean),
+            contact_provenance: qualification?.qualificationSource || (verifiedOwnerContact ? "scanner_enrichment" : "scanner_sdr"),
+            contact_evidence: [
+              dispatchContact.phone ? "phone" : "",
+              dispatchContact.email ? "email" : "",
+              qualification?.qualificationNotes ? "qualification_notes" : ""
+            ].filter(Boolean)
+          },
+          property_address: addressInfo.address || null,
+          city: addressInfo.city || null,
+          state: addressInfo.state || null,
+          postal_code: addressInfo.postalCode || null,
+          lead_status: "new",
+          owner_user_id: userId,
+          crm_sync_status: "not_synced",
+          do_not_contact: false
+        })
+        .select("id")
+        .single();
+
+      v2LeadId = v2Lead?.id ? String(v2Lead.id) : null;
+    }
+  }
+
   if (mode === "lead") {
     await supabase
       .from("opportunities")
@@ -167,11 +319,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       .eq("account_id", accountId)
       .contains("raw", { scanner_opportunity_id: id });
 
+    if (v2Opportunity && featureFlags.useV2Writes) {
+      await supabase
+        .from("v2_opportunities")
+        .update({
+          lifecycle_status: "qualified",
+          contact_status: "identified"
+        })
+        .eq("tenant_id", v2Opportunity.tenantId)
+        .eq("id", v2Opportunity.id);
+    }
+
     return NextResponse.json({
       dispatched: true,
       mode,
       leadId: lead.id,
-      jobId: null
+      jobId: null,
+      opportunityId: v2Opportunity?.id || null,
+      v2LeadId
     });
   }
 
@@ -224,11 +389,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq("account_id", accountId)
     .contains("raw", { scanner_opportunity_id: id });
 
+  let v2JobId: string | null = null;
+  if (v2Opportunity && v2LeadId && featureFlags.useV2Writes) {
+    const { data: v2Job } = await supabase
+      .from("v2_jobs")
+      .insert({
+        tenant_id: v2Opportunity.tenantId,
+        lead_id: v2LeadId,
+        job_type: leadPayload.service_type,
+        booked_at: new Date().toISOString(),
+        scheduled_at: scheduleIso,
+        revenue_amount: estimatedValue,
+        status: "booked"
+      })
+      .select("id")
+      .single();
+
+    v2JobId = v2Job?.id ? String(v2Job.id) : null;
+
+    await supabase
+      .from("v2_opportunities")
+      .update({
+        lifecycle_status: "booked_job",
+        contact_status: "identified"
+      })
+      .eq("tenant_id", v2Opportunity.tenantId)
+      .eq("id", v2Opportunity.id);
+  }
+
   return NextResponse.json({
     dispatched: true,
     mode,
     leadId: lead.id,
     jobId: job.id,
-    scheduleIso
+    scheduleIso,
+    opportunityId: v2Opportunity?.id || null,
+    v2LeadId,
+    v2JobId
   });
 }

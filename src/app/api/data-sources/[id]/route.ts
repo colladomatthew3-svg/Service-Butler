@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
+import { buildEnvironmentReadinessState } from "@/lib/control-plane/readiness";
 import { isDemoMode } from "@/lib/services/review-mode";
 import {
   buildDataSourceUpdatePayload,
@@ -20,7 +21,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       {
         ok: false,
         mode: "compat",
-        reason: "Enable SB_USE_V2_WRITES to update data sources"
+        reason: "Enable SB_USE_V2_WRITES to update data sources",
+        readiness: buildEnvironmentReadinessState(
+          "Data-source updates are not live in this environment.",
+          "Enable SB_USE_V2_WRITES and use a tenant-mapped live account before updating the control plane."
+        )
       },
       { status: 202 }
     );

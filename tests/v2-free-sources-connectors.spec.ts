@@ -5,14 +5,21 @@ import { openFemaConnector } from "../src/lib/v2/connectors/openfema";
 import { censusConnector } from "../src/lib/v2/connectors/census";
 import { overpassConnector } from "../src/lib/v2/connectors/overpass";
 import { listConnectors } from "../src/lib/v2/connectors/registry";
+import { inferConnectorKey } from "../src/lib/v2/connectors/source-type-map";
 
 test("registry includes all free-source connector keys", () => {
   const keys = listConnectors().map((connector) => connector.key);
+  expect(keys).toContain("social.intent.public");
   expect(keys).toContain("water.usgs");
   expect(keys).toContain("open311.generic");
   expect(keys).toContain("disaster.openfema");
   expect(keys).toContain("enrichment.census");
   expect(keys).toContain("property.overpass");
+});
+
+test("source-type inference resolves social signals to the public distress connector", () => {
+  expect(inferConnectorKey("social")).toBe("social.intent.public");
+  expect(inferConnectorKey("reddit_distress")).toBe("social.intent.public");
 });
 
 test("USGS water connector creates flood intelligence events", async () => {

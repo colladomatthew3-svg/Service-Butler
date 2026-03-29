@@ -1,6 +1,59 @@
 import { expect, test } from "@playwright/test";
 import { socialIntentConnector } from "../src/lib/v2/connectors/social";
 
+test("distress connector can pull public reddit search results", async () => {
+  const previousFetch = globalThis.fetch;
+  (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = async (input) => {
+    expect(String(input)).toContain("reddit.com/search.json");
+
+    return new Response(
+      JSON.stringify({
+        data: {
+          children: [
+            {
+              data: {
+                id: "reddit-live-1",
+                title: "Flooded basement after last night's storm",
+                selftext: "Water is still coming in near the foundation wall.",
+                created_utc: 1773781200,
+                author: "storm_help_needed",
+                permalink: "/r/homeowners/comments/reddit_live_1/flooded_basement_after_last_nights_storm/"
+              }
+            }
+          ]
+        }
+      }),
+      {
+        headers: {
+          "content-type": "application/json"
+        }
+      }
+    );
+  };
+
+  try {
+    const records = await socialIntentConnector.pull({
+      tenantId: "tenant-1",
+      sourceId: "source-social-live",
+      sourceType: "social",
+      config: {
+        terms_status: "approved",
+        source_name: "Reddit",
+        search_terms: ["flooded basement"],
+        subreddits: ["homeowners"],
+        city: "Buffalo",
+        state: "NY"
+      }
+    });
+
+    expect(records).toHaveLength(1);
+    expect(records[0]?.platform).toBe("reddit");
+    expect(records[0]?.source_provenance).toContain("reddit.com/");
+  } finally {
+    (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = previousFetch;
+  }
+});
+
 test("distress connector classifies reddit flood distress into water mitigation opportunity", async () => {
   const [event] = await socialIntentConnector.normalize(
     [

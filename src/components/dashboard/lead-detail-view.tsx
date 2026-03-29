@@ -366,7 +366,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/88">
-                    {lead.enrichment.simulated ? "Demo record" : "Public record"}
+                    {lead.enrichment.simulated ? "Illustrative preview" : "Public record"}
                   </span>
                   <span className="rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/88">
                     {lead.enrichment.propertyAddress === lead.address ? "Exact address" : "Normalized address"}
@@ -377,7 +377,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <DetailCard label="Address" value={lead.enrichment.propertyAddress} />
                 <DetailCard label="Neighborhood" value={lead.enrichment.neighborhood} />
-                <DetailCard label="Image source" value={lead.enrichment.propertyImageSource || "Placeholder"} />
+                <DetailCard label="Image source" value={lead.enrichment.propertyImageSource || "Unavailable"} />
                 <DetailCard label="Property value" value={lead.enrichment.propertyValueEstimate || "Unavailable"} />
                 <DetailCard label="Value status" value={formatVerification(lead.enrichment.propertyValueVerification)} />
               </div>
@@ -397,7 +397,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
                     {lead.enrichment.provider}
                   </span>
                   <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-semantic-muted">
-                    {lead.enrichment.simulated ? "Demo placeholder, not verified" : "Production enrichment"}
+                    {lead.enrichment.simulated ? "Illustrative preview, not verified" : "Production enrichment"}
                   </span>
                   <span className="rounded-full bg-white px-3 py-1 text-sm font-medium text-semantic-muted">
                     Lead source: {lead.source || "manual"}
@@ -407,7 +407,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
               {lead.enrichment.ownerContact ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <DetailCard label={lead.enrichment.simulated ? "Owner / contact (demo)" : "Owner / contact"} value={lead.enrichment.ownerContact.name} />
+                  <DetailCard label={lead.enrichment.simulated ? "Owner / contact (illustrative)" : "Owner / contact"} value={lead.enrichment.ownerContact.name} />
                   <DetailCard label="Verification" value={formatVerification(lead.enrichment.ownerContact.verification)} />
                   <DetailCard label="Phone" value={lead.enrichment.ownerContact.phone || "Unavailable"} />
                   <DetailCard label="Email" value={lead.enrichment.ownerContact.email || "Unavailable"} />
@@ -642,7 +642,7 @@ function DetailCard({ label, value }: { label: string; value: string }) {
 }
 
 function formatVerification(value: string) {
-  if (value === "demo") return "Demo placeholder";
+  if (value === "demo") return "Illustrative preview";
   if (value === "estimated") return "Estimated";
   if (value === "public-record") return "Public record";
   if (value === "verified") return "Verified";

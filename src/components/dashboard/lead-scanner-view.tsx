@@ -66,6 +66,14 @@ type RoutingRule = {
   updated_at: string;
 };
 
+type QualificationState = {
+  status: "research_only" | "queued_for_sdr" | "qualified_contactable" | "rejected";
+  reasonCode: string | null;
+  nextRecommendedAction: string;
+  proofAuthenticity: string;
+  sourceType: string;
+};
+
 const categories: Category[] = ["restoration", "plumbing", "demolition", "asbestos", "general"];
 const triggerOptions: Array<{ id: Trigger; label: string }> = [
   { id: "storm", label: "Storm" },
@@ -172,6 +180,7 @@ export function LeadScannerView({
   const [preview, setPreview] = useState<ScannerEvent | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const [demoActionMessage, setDemoActionMessage] = useState<string | null>(null);
+  const [qualificationByEventId, setQualificationByEventId] = useState<Record<string, QualificationState>>({});
 
   const [rules, setRules] = useState<RoutingRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
@@ -375,10 +384,27 @@ export function LeadScannerView({
       jobId?: string;
       message?: string;
       redirectPath?: string;
+      status?: QualificationState["status"];
+      reason_code?: string;
+      next_step?: string;
+      proof_authenticity?: string;
+      source_type?: string;
     };
     setDispatchingId(null);
 
     if (!res.ok) {
+      if (res.status === 409 && data.status === "research_only") {
+        setQualificationByEventId((prev) => ({
+          ...prev,
+          [event.id]: {
+            status: "research_only",
+            reasonCode: data.reason_code || "missing_verified_contact",
+            nextRecommendedAction: data.next_step || "route_to_sdr",
+            proofAuthenticity: data.proof_authenticity || "unknown",
+            sourceType: data.source_type || String(event.source || "scanner_signal")
+          }
+        }));
+      }
       showToast(data.error || "Dispatch failed");
       return;
     }
@@ -402,6 +428,44 @@ export function LeadScannerView({
     }
 
     showToast("Dispatched");
+  }
+
+  async function sendToSdr(event: ScannerEvent) {
+    setDispatchingId(event.id);
+    const res = await fetch(`/api/opportunities/${String(event.raw?.v2_opportunity_id || event.id)}/qualify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        qualification_status: "queued_for_sdr",
+        qualification_source: "scanner_operator",
+        qualification_notes: `Queued from scanner for SDR follow-up: ${event.title}`,
+        scannerOpportunityId: typeof event.raw?.scanner_opportunity_id === "string" ? event.raw.scanner_opportunity_id : event.id
+      })
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      qualification_status?: QualificationState["status"];
+      qualification_reason_code?: string | null;
+      next_recommended_action?: string;
+    };
+    setDispatchingId(null);
+
+    if (!res.ok) {
+      showToast(data.error || "Could not send opportunity to SDR");
+      return;
+    }
+
+    setQualificationByEventId((prev) => ({
+      ...prev,
+      [event.id]: {
+        status: data.qualification_status || "queued_for_sdr",
+        reasonCode: data.qualification_reason_code || "missing_verified_contact",
+        nextRecommendedAction: data.next_recommended_action || "await_sdr_review",
+        proofAuthenticity: String(event.raw?.proof_authenticity || "unknown"),
+        sourceType: String(event.raw?.source_type || event.source || "scanner_signal")
+      }
+    }));
+    showToast("Opportunity queued for SDR qualification");
   }
 
   async function saveRule() {
@@ -465,7 +529,7 @@ export function LeadScannerView({
   }
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Radar }> = [
-    { id: "feed", label: "Leads", icon: Radar },
+    { id: "feed", label: "Signals", icon: Radar },
     { id: "rules", label: "Routing", icon: Settings2 }
   ];
 
@@ -850,6 +914,22 @@ export function LeadScannerView({
             const bullets = opportunityBullets(reasonDetails);
             const enrichment = getEventEnrichment(event);
             const hasVerifiedContact = hasVerifiedOwnerContact(event.raw?.enrichment);
+            const qualificationState =
+              qualificationByEventId[event.id] ||
+              ({
+                status: hasVerifiedContact ? "qualified_contactable" : "research_only",
+                reasonCode: typeof event.raw?.qualification_reason_code === "string" ? event.raw.qualification_reason_code : hasVerifiedContact ? "verified_contact_present" : "missing_verified_contact",
+                nextRecommendedAction:
+                  typeof event.raw?.next_recommended_action === "string"
+                    ? event.raw.next_recommended_action
+                    : hasVerifiedContact
+                      ? "dispatch_to_lead_queue"
+                      : "route_to_sdr",
+                proofAuthenticity: typeof event.raw?.proof_authenticity === "string" ? event.raw.proof_authenticity : "unknown",
+                sourceType: typeof event.raw?.source_type === "string" ? event.raw.source_type : String(event.source || "scanner_signal")
+              } satisfies QualificationState);
+            const researchOnly = qualificationState.status !== "qualified_contactable";
+            const sdrQueued = qualificationState.status === "queued_for_sdr";
             const areaContext = [String(event.raw?.neighborhood || "").trim(), String(event.raw?.county || "").trim()].filter(Boolean).join(" · ");
             const primaryAction = getPrimaryAction(event.intent_score, showingFirstScanGuide);
             const isFeatured = index === 0;
@@ -941,49 +1021,62 @@ export function LeadScannerView({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Decision rail</p>
-                        <Badge variant="brand">{primaryAction.label}</Badge>
+                        <Badge variant="brand">{researchOnly ? (sdrQueued ? "Queued for SDR" : "Send to SDR") : primaryAction.label}</Badge>
                       </div>
                       <Button
                         size="lg"
-                        disabled={dispatchingId === event.id || !hasVerifiedContact}
-                        onClick={() =>
-                          dispatchEvent(
+                        disabled={dispatchingId === event.id || sdrQueued}
+                        onClick={() => {
+                          if (researchOnly) {
+                            if (sdrQueued) return;
+                            void sendToSdr(event);
+                            return;
+                          }
+                          void dispatchEvent(
                             event,
                             primaryAction.mode,
                             primaryAction.mode === "job" ? suggestedAssigneeForEvent(event, rules) : undefined
-                          )
-                        }
+                          );
+                        }}
                         className="w-full shadow-[0_16px_30px_rgba(29,78,216,0.16)]"
                       >
                         {dispatchingId === event.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : researchOnly ? (
+                          <Settings2 className="h-4 w-4" />
                         ) : primaryAction.mode === "job" ? (
                           <BriefcaseBusiness className="h-4 w-4" />
                         ) : (
                           <Plus className="h-4 w-4" />
                         )}
-                        {showingFirstScanGuide ? "Create First Lead" : primaryAction.label}
+                        {researchOnly ? (sdrQueued ? "Queued for SDR" : "Send to SDR") : showingFirstScanGuide ? "Create First Lead" : primaryAction.label}
                       </Button>
                       <p className="rounded-[1rem] border border-semantic-border/60 bg-white/82 px-4 py-3 text-sm text-semantic-text">
-                        <span className="font-semibold">Next step:</span> {nextAction}
+                        <span className="font-semibold">Next step:</span> {researchOnly ? qualificationState.nextRecommendedAction.replace(/_/g, " ") : nextAction}
                       </p>
-                      {!hasVerifiedContact ? (
-                        <p className="rounded-[1rem] border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
-                          Research signal only. No verified owner phone is attached yet, so this stays out of the live lead queue until SDR qualifies it.
-                        </p>
-                      ) : null}
+                      <div className={`rounded-[1rem] border px-4 py-3 text-sm ${researchOnly ? "border-amber-300/70 bg-amber-50/80 text-amber-950" : "border-emerald-300/70 bg-emerald-50/80 text-emerald-950"}`}>
+                        <p className="font-semibold">Qualification</p>
+                        <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                          <p>Contact status: {hasVerifiedContact ? "verified contactable" : "no verified contact"}</p>
+                          <p>Verification: {hasVerifiedContact ? "verified" : qualificationState.status.replace(/_/g, " ")}</p>
+                          <p>Blocked reason: {(qualificationState.reasonCode || "none").replace(/_/g, " ")}</p>
+                          <p>Next allowed action: {qualificationState.nextRecommendedAction.replace(/_/g, " ")}</p>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="mt-3 grid gap-2">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={dispatchingId === event.id || !hasVerifiedContact}
-                        onClick={() => dispatchEvent(event, "job", suggestedAssigneeForEvent(event, rules))}
-                      >
-                        {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-                        Assign technician
-                      </Button>
+                      {!researchOnly ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={dispatchingId === event.id}
+                          onClick={() => dispatchEvent(event, "job", suggestedAssigneeForEvent(event, rules))}
+                        >
+                          {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                          Assign technician
+                        </Button>
+                      ) : null}
                       <Button size="sm" variant="ghost" onClick={() => setPreview(event)}>
                         <Eye className="h-4 w-4" />
                         View evidence

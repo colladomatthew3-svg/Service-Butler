@@ -1,0 +1,96 @@
+import type {
+  DataSourceSummary,
+  DataSourceTermsStatus,
+  ReadinessIssue,
+  ReadinessIssueCode,
+  ReadinessState
+} from "@/lib/control-plane/types";
+
+function issue(code: ReadinessIssueCode, message: string, detail?: string): ReadinessIssue {
+  return { code, message, detail };
+}
+
+function uniqueActions(actions: string[]) {
+  return Array.from(new Set(actions.map((value) => value.trim()).filter(Boolean)));
+}
+
+function termsBlocked(termsStatus: DataSourceTermsStatus) {
+  return termsStatus === "blocked" || termsStatus === "restricted" || termsStatus === "pending_review";
+}
+
+export function buildEnvironmentReadinessState(reason: string, detail?: string): ReadinessState {
+  return {
+    mode: "blocked",
+    live: false,
+    reason,
+    blockingIssues: [issue("not_live_in_environment", reason, detail)],
+    recommendedActions: ["Enable live v2 reads and writes for this environment.", "Sign in with a tenant-mapped account before running buyer-proof actions."]
+  };
+}
+
+export function buildDataSourceReadinessState(source: DataSourceSummary): ReadinessState {
+  const blockingIssues: ReadinessIssue[] = [];
+  const recommendedActions: string[] = [];
+
+  if (!source.configured || source.status === "not_configured") {
+    blockingIssues.push(
+      issue("not_configured", `${source.name} is not configured yet.`, "Add the source to this tenant and save the required config before using it.")
+    );
+    recommendedActions.push("Add the source to the tenant control plane.");
+  }
+
+  if (termsBlocked(source.termsStatus) || termsBlocked(source.complianceStatus)) {
+    blockingIssues.push(
+      issue(
+        "blocked_by_terms",
+        `${source.name} is not approved for live ingestion.`,
+        `Current terms/compliance status: ${source.termsStatus.replace(/_/g, " ")} / ${source.complianceStatus.replace(/_/g, " ")}.`
+      )
+    );
+    recommendedActions.push("Resolve terms and compliance approval before running this source.");
+  }
+
+  if (source.runtimeMode === "simulated") {
+    blockingIssues.push(
+      issue(
+        "simulated",
+        `${source.name} is still simulated.`,
+        "Provide the required live configuration so buyer-facing proof does not rely on synthetic or placeholder coverage."
+      )
+    );
+    recommendedActions.push("Complete the live configuration listed in Live requirements.");
+  } else if (source.runtimeMode === "live-partial") {
+    blockingIssues.push(
+      issue(
+        "live_partial",
+        `${source.name} is only partially live.`,
+        "The source is surfaced honestly, but it still has a gating issue that prevents full buyer-grade proof."
+      )
+    );
+    recommendedActions.push("Clear the remaining live gating issue before using this source in buyer-proof flows.");
+  }
+
+  return {
+    mode: blockingIssues.length > 0 ? "blocked" : "live",
+    live: blockingIssues.length === 0,
+    reason: blockingIssues[0]?.message || null,
+    blockingIssues,
+    recommendedActions: uniqueActions(recommendedActions)
+  };
+}
+
+export function buyerReadinessNoteForSource(source: Pick<DataSourceSummary, "name" | "configured" | "status" | "runtimeMode" | "termsStatus" | "complianceStatus">) {
+  if (!source.configured || source.status === "not_configured") {
+    return "Not configured in this tenant yet.";
+  }
+  if (termsBlocked(source.termsStatus) || termsBlocked(source.complianceStatus)) {
+    return `Blocked for live proof until ${source.termsStatus.replace(/_/g, " ")} terms/compliance are cleared.`;
+  }
+  if (source.runtimeMode === "simulated") {
+    return "Visible to operators, but still simulated and excluded from buyer-proof metrics.";
+  }
+  if (source.runtimeMode === "live-partial") {
+    return "Partially live. Keep it visible, but do not treat it as full buyer-proof coverage yet.";
+  }
+  return "Live-safe and eligible for buyer-proof reporting.";
+}

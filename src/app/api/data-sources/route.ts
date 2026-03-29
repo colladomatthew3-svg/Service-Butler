@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
+import { buildEnvironmentReadinessState } from "@/lib/control-plane/readiness";
 import { buildCreatePayloadFromMutation, listDataSourceSummaries } from "@/lib/control-plane/data-sources";
 import type { DataSourceMutationPayload } from "@/lib/control-plane/types";
 import { isDemoMode } from "@/lib/services/review-mode";
@@ -32,7 +33,11 @@ export async function POST(req: NextRequest) {
       {
         ok: false,
         mode: "compat",
-        reason: "Enable SB_USE_V2_WRITES to create v2 data sources"
+        reason: "Enable SB_USE_V2_WRITES to create v2 data sources",
+        readiness: buildEnvironmentReadinessState(
+          "Data-source creation is not live in this environment.",
+          "Enable SB_USE_V2_WRITES and use a tenant-mapped live account before mutating the control plane."
+        )
       },
       { status: 202 }
     );

@@ -72,6 +72,8 @@ Use this checklist before deploying Service Butler to a hosted environment.
 - Enable `SB_USE_V2_READS=true` during pilot cutover.
 - Keep `SB_USE_POLYGON_ROUTING=false` until territory geometry validation is complete.
 - Keep `SB_ENABLE_CITIZEN_CONNECTOR=false` unless legal and compliance approvals are complete.
+- Set `WEBHOOK_SHARED_SECRET` before exposing webhook endpoints outside localhost.
+- Keep `SB_TWILIO_SAFE_MODE=true` and `SB_HUBSPOT_SAFE_MODE=true` unless live outbound has been explicitly approved.
 
 ## Database and data
 
@@ -92,6 +94,7 @@ Use this checklist before deploying Service Butler to a hosted environment.
 - Run `npm run check:production`.
 - Run `npm run typecheck`.
 - Run `npm run build`.
+- Run `npm run proof:servpro` and inspect `output/proof/<timestamp>/summary.md`.
 - Smoke test `/`, `/login`, `/dashboard`, `/dashboard/scanner`, and `/api/weather`.
 - Check `/api/health/production` and confirm required checks return `pass`.
 - Perform one real scanner run with a saved service area and verify opportunities persist.

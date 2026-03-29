@@ -271,14 +271,45 @@ export function OutboundView() {
 
   async function createTriggeredList(opportunityId: string) {
     setTriggeringId(opportunityId);
-    const res = await fetch(`/api/opportunities/${opportunityId}/outbound-list`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
+    const res = await fetch(`/api/opportunities/${opportunityId}/outbound-list`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        activateFlow: true,
+        autoOutreach: true,
+        autoSync: Boolean(listForm.smartleadCampaignId),
+        smartleadCampaignId: listForm.smartleadCampaignId || null
+      })
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      buyerFlow?: {
+        matchedCount?: number;
+        leadsCreated?: number;
+        outreachSent?: number;
+        contactableSmsCount?: number;
+        contactableEmailCount?: number;
+        smartlead?: { synced?: boolean; fallback?: string; campaignId?: string | null } | null;
+      };
+    };
     setTriggeringId(null);
     if (!res.ok) {
       showToast(data.error || "Could not generate incident-triggered list");
       return;
     }
-    showToast("Incident-triggered list created");
+    const buyerFlow = data.buyerFlow;
+    if (buyerFlow) {
+      const syncSuffix = buyerFlow.smartlead?.synced
+        ? " · synced to Smartlead"
+        : buyerFlow.smartlead?.fallback === "csv_ready"
+          ? " · Smartlead fallback ready"
+          : "";
+      showToast(
+        `Buyer flow launched: ${buyerFlow.matchedCount || 0} contacts, ${buyerFlow.leadsCreated || 0} verified leads, ${buyerFlow.outreachSent || 0} outreach tasks${syncSuffix}`
+      );
+    } else {
+      showToast("Incident-triggered list created");
+    }
     loadAll();
   }
 
@@ -329,7 +360,7 @@ export function OutboundView() {
     <div className="space-y-6">
       <PageHeader
         title="Outbound Engine"
-        subtitle="Build target lists by territory, work referral relationships, and push incident-triggered outreach into Smartlead."
+        subtitle="Turn live opportunities into contactable partner and prospect motion, then push triggered outreach into Smartlead."
         actions={
           <div className="flex flex-wrap gap-2">
             <input
@@ -354,9 +385,9 @@ export function OutboundView() {
         }
       />
 
-      <section className="grid gap-4 rounded-[2rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(216,239,229,0.88),rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_18px_48px_rgba(25,112,77,0.1)] sm:grid-cols-[1.2fr_0.8fr] lg:px-6">
+      <section className="grid gap-4 rounded-[2rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.97))] px-5 py-5 shadow-[0_18px_48px_rgba(16,24,40,0.1)] sm:grid-cols-[1.2fr_0.8fr] lg:px-6">
         <div className="space-y-3">
-          <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+          <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/78 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
             Outbound Workspace
           </p>
           <p className="text-sm text-semantic-text">
@@ -372,7 +403,7 @@ export function OutboundView() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="border-semantic-border/55 bg-white/58">
+        <Card className="border-semantic-border/55 bg-white/72">
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <h2 className="dashboard-section-title text-semantic-text">Recent Opportunities To Work</h2>
@@ -435,9 +466,10 @@ export function OutboundView() {
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button size="sm" onClick={() => createTriggeredList(item.id)} disabled={triggeringId === item.id}>
                           <Plus className="h-4 w-4" />
-                          {triggeringId === item.id ? "Generating..." : "Generate Triggered List"}
+                          {triggeringId === item.id ? "Launching..." : "Launch Buyer Flow"}
                         </Button>
                         <Badge variant="default">{String(item.raw?.source || item.raw?.signal_source || "scanner")}</Badge>
+                        {item.raw?.contact_status ? <Badge variant="brand">Contact {String(item.raw.contact_status)}</Badge> : null}
                       </div>
                     </div>
                   </div>
@@ -447,7 +479,7 @@ export function OutboundView() {
           </CardBody>
         </Card>
 
-        <Card className="border-semantic-border/55 bg-white/58">
+        <Card className="border-semantic-border/55 bg-white/72">
           <CardHeader>
             <h2 className="dashboard-section-title text-semantic-text">Build New Outbound List</h2>
           </CardHeader>
@@ -507,9 +539,10 @@ export function OutboundView() {
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
-        <Card className="border-semantic-border/55 bg-white/58">
+        <Card className="border-semantic-border/55 bg-white/72">
           <CardHeader>
             <h2 className="dashboard-section-title text-semantic-text">Prospects</h2>
+            <p className="mt-1 text-sm text-semantic-muted">Capture target accounts with enough detail to route them into a list or campaign.</p>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -533,7 +566,7 @@ export function OutboundView() {
               </Button>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-hidden rounded-[1.2rem] border border-semantic-border/60 bg-white/72">
               <Table>
                 <TableHead>
                   <tr>
@@ -563,9 +596,10 @@ export function OutboundView() {
           </CardBody>
         </Card>
 
-        <Card>
+        <Card className="border-semantic-border/55 bg-white/72">
           <CardHeader>
             <h2 className="dashboard-section-title text-semantic-text">Referral Partners</h2>
+            <p className="mt-1 text-sm text-semantic-muted">Track the people and firms that can send work back into the pipeline.</p>
           </CardHeader>
           <CardBody className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -589,7 +623,7 @@ export function OutboundView() {
               </Button>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-hidden rounded-[1.2rem] border border-semantic-border/60 bg-white/72">
               <Table>
                 <TableHead>
                   <tr>
@@ -620,9 +654,10 @@ export function OutboundView() {
         </Card>
       </section>
 
-      <Card className="border-semantic-border/55 bg-white/58">
+      <Card className="border-semantic-border/55 bg-white/72">
         <CardHeader>
           <h2 className="dashboard-section-title text-semantic-text">Outbound Lists</h2>
+          <p className="mt-1 text-sm text-semantic-muted">Keep each list tied to a territory, segment, and export destination.</p>
         </CardHeader>
         <CardBody>
           {loading ? (
@@ -630,7 +665,7 @@ export function OutboundView() {
           ) : outboundLists.length === 0 ? (
             <p className="text-sm text-semantic-muted">Create a list manually or generate one from an incident opportunity.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-hidden rounded-[1.2rem] border border-semantic-border/60 bg-white/72">
               <Table>
                 <TableHead>
                   <tr>

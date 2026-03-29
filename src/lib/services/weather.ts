@@ -1,4 +1,5 @@
 import { isDemoMode } from "@/lib/services/review-mode";
+import { toUsStateCode } from "@/lib/services/us-states";
 
 type CachedEntry<T> = {
   expiresAt: number;
@@ -81,9 +82,20 @@ function envTrue(value: string | undefined) {
 function shouldUseDemoWeatherMode() {
   return isDemoMode() && !envTrue(process.env.SB_FORCE_LIVE_WEATHER_IN_DEMO);
 }
-const DEMO_LOCATION_MAP: Record<string, { label: string; lat: number; lng: number }> = {
+type KnownLocation = {
+  label: string;
+  lat: number;
+  lng: number;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+};
+
+const DEMO_LOCATION_MAP: Record<string, KnownLocation> = {
   "11717": { label: "Brentwood, NY 11717", lat: 40.7812, lng: -73.2462 },
   "11705": { label: "Bayport, NY 11705", lat: 40.7384, lng: -73.0518 },
+  "11706": { label: "Bay Shore, NY 11706", lat: 40.7251, lng: -73.2454 },
+  "11772": { label: "Patchogue, NY 11772", lat: 40.7657, lng: -73.0151 },
   "11788": { label: "Hauppauge, NY 11788", lat: 40.8257, lng: -73.2026 },
   "10019": { label: "Midtown West, NY 10019", lat: 40.7654, lng: -73.9858 },
   "33602": { label: "Tampa, FL 33602", lat: 27.9506, lng: -82.4572 },
@@ -223,6 +235,19 @@ function normalizeDemoQuery(query: string) {
   return query.toLowerCase().replace(/\s+/g, "").replace(/,+/g, ",");
 }
 
+function knownLocationFromQuery(query: string) {
+  const normalized = normalizeDemoQuery(query);
+  const mapped = DEMO_LOCATION_MAP[normalized];
+  if (mapped) return mapped;
+
+  const digits = query.match(/\b\d{5}\b/)?.[0];
+  if (digits && DEMO_LOCATION_MAP[digits]) {
+    return DEMO_LOCATION_MAP[digits];
+  }
+
+  return null;
+}
+
 function hashQuery(query: string) {
   let hash = 0;
   for (let i = 0; i < query.length; i += 1) {
@@ -336,14 +361,10 @@ export async function getForecastByLatLng(
 
 export async function geocodeLocation(query: string) {
   if (shouldUseDemoWeatherMode()) {
-    const normalized = normalizeDemoQuery(query);
-    const mapped = DEMO_LOCATION_MAP[normalized];
+    const mapped = knownLocationFromQuery(query);
     if (mapped) return mapped;
 
-    const digits = query.match(/\b\d{5}\b/)?.[0];
-    if (digits && DEMO_LOCATION_MAP[digits]) return DEMO_LOCATION_MAP[digits];
-
-    const seed = hashQuery(normalized || query);
+    const seed = hashQuery(normalizeDemoQuery(query) || query);
     const lat = 28 + (seed % 1500) / 100;
     const lng = -(81 + (seed % 900) / 100);
     return {
@@ -353,23 +374,36 @@ export async function geocodeLocation(query: string) {
     };
   }
 
+  const known = knownLocationFromQuery(query);
+  if (known) return known;
+
   const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
   url.searchParams.set("name", query);
   url.searchParams.set("count", "1");
   url.searchParams.set("language", "en");
   url.searchParams.set("format", "json");
 
-  const response = await fetchWithTimeout(url.toString());
-  if (!response.ok) throw new Error("Failed to geocode location");
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(url.toString());
+  } catch {
+    return knownLocationFromQuery(query);
+  }
+  if (!response.ok) {
+    return knownLocationFromQuery(query);
+  }
   const json = (await response.json()) as {
     results?: Array<{ name: string; admin1?: string; country?: string; latitude: number; longitude: number }>;
   };
 
   const hit = json.results?.[0];
-  if (!hit) return null;
+  if (!hit) return knownLocationFromQuery(query);
+  const state = toUsStateCode(hit.admin1);
   return {
-    label: [hit.name, hit.admin1, hit.country].filter(Boolean).join(", "),
+    label: query.trim() || [hit.name, state || hit.admin1, hit.country].filter(Boolean).join(", "),
     lat: hit.latitude,
-    lng: hit.longitude
+    lng: hit.longitude,
+    city: hit.name,
+    state: state || undefined
   };
 }

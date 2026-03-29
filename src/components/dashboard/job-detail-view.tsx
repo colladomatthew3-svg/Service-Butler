@@ -152,9 +152,9 @@ export function JobDetailView({ jobId }: { jobId: string }) {
         actions={<Badge variant="brand">Intent {job.intent_score || totalSignal}%</Badge>}
       />
 
-      <section className="grid gap-3 rounded-[2rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(216,239,229,0.88),rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_18px_48px_rgba(25,112,77,0.1)] sm:grid-cols-[1.3fr_0.7fr] sm:px-6">
+      <section className="grid gap-3 rounded-[2rem] border border-brand-500/18 bg-[linear-gradient(120deg,rgba(229,236,251,0.9),rgba(255,255,255,0.96))] px-5 py-5 shadow-[0_18px_48px_rgba(22,35,58,0.1)] sm:grid-cols-[1.3fr_0.7fr] sm:px-6">
         <div className="space-y-3">
-          <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+          <p className="inline-flex items-center rounded-full border border-brand-500/20 bg-white/78 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
             Job Command
           </p>
           <p className="text-sm text-semantic-text">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 import { dispatchDemoScannerEvent } from "@/lib/demo/store";
+import { extractVerifiedOwnerContactFromEnrichment } from "@/lib/services/contact-proof";
 import { generateSignals } from "@/lib/services/intent-engine";
 import { resolveOpportunityAddress } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
@@ -41,16 +42,6 @@ function categoryService(category: string) {
   if (c === "demolition") return "Demolition";
   if (c === "asbestos") return "Asbestos";
   return "General";
-}
-
-function randomPhone(seed: string) {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i += 1) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const n = 2000000 + (Math.abs(h >>> 0) % 7999999);
-  return `+1631${String(n).padStart(7, "0")}`;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -118,21 +109,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     serviceAreaLabel: String(event.raw?.service_area_label || event.location_text || "Service Area"),
     seed: event.id
   });
+  const verifiedOwnerContact = extractVerifiedOwnerContactFromEnrichment(event.raw?.enrichment);
+  if (!verifiedOwnerContact?.phone) {
+    return NextResponse.json(
+      {
+        error: "This scanner signal does not have a verified phone contact yet. Keep it in research mode or qualify it through SDR before creating a lead."
+      },
+      { status: 409 }
+    );
+  }
 
   const leadPayload = {
     account_id: accountId,
-    source: "import",
+    source: "scanner_verified_contact",
     stage: stageFromStatus(statusFromMode(mode)),
     status: statusFromMode(mode),
-    name: event.title,
-    phone: randomPhone(`${event.id}:${event.title}`),
+    name: verifiedOwnerContact.name || event.title,
+    phone: verifiedOwnerContact.phone,
     service_type: categoryService(event.category),
     address: addressInfo.address,
     city: addressInfo.city,
     state: addressInfo.state,
     postal_code: addressInfo.postalCode,
     requested_timeframe: Number(event.intent_score) >= 78 ? "ASAP" : "Today",
-    notes: `Scanner dispatch: ${event.description || "opportunity"}`
+    notes: `Scanner dispatch: ${event.description || "opportunity"} | contact_verification=${verifiedOwnerContact.verification}`
   };
 
   const { data: lead, error: leadError } = await supabase

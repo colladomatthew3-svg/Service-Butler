@@ -17,3 +17,4 @@ tsconfig.typecheck.tsbuildinfo
 # local env
 .env*
 !.env.example
+.codex/settings.local.json

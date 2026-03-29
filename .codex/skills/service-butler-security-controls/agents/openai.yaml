@@ -1,0 +1,4 @@
+interface:
+  display_name: "Security Controls"
+  short_description: "Security hardening and operational guardrails for Service Butler"
+  default_prompt: "Use $service-butler-security-controls to audit this Service Butler change for auth, tenant isolation, webhook safety, secrets, and dangerous operational commands."

@@ -49,6 +49,8 @@ test("sdr agent qualifies high quality multi-signal opportunities", () => {
     },
     sourceEvent: {
       compliance_status: "approved",
+      source_type: "weather.noaa",
+      source_provenance: "api.weather.gov",
       normalized_payload: {
         terms_status: "approved",
         data_freshness_score: 88
@@ -62,6 +64,40 @@ test("sdr agent qualifies high quality multi-signal opportunities", () => {
   expect(decision.qualified).toBeTruthy();
   expect(decision.score).toBeGreaterThanOrEqual(70);
   expect(decision.reasons.some((reason) => reason.includes("multi-signal"))).toBeTruthy();
+  expect(decision.reasons.some((reason) => reason.includes("live provider proof"))).toBeTruthy();
+});
+
+test("sdr agent blocks synthetic source proof even when scores are high", () => {
+  const decision = sdrAgentInternals.verifyCandidate({
+    opportunity: {
+      id: "opp-3",
+      job_likelihood_score: 88,
+      urgency_score: 82,
+      source_reliability_score: 80,
+      catastrophe_linkage_score: 64,
+      location_text: "123 Main St, Tampa, FL 33602",
+      postal_code: "33602",
+      explainability_json: {
+        signal_count: 2,
+        confidence_score: 84
+      }
+    },
+    sourceEvent: {
+      compliance_status: "approved",
+      source_provenance: "operator.synthetic.permits",
+      normalized_payload: {
+        terms_status: "approved",
+        source_provenance: "operator.synthetic.permits",
+        data_freshness_score: 91
+      }
+    },
+    minJobLikelihood: 60,
+    minUrgency: 55,
+    minSourceReliability: 50
+  });
+
+  expect(decision.qualified).toBeFalsy();
+  expect(decision.reasons.some((reason) => reason.includes("synthetic source proof"))).toBeTruthy();
 });
 
 test("sdr agent sms template and city/state parsing remain operator-readable", () => {
@@ -82,4 +118,3 @@ test("sdr agent sms template and city/state parsing remain operator-readable", (
   expect(message).toContain("plumbing");
   expect(message).toContain("Albany, NY");
 });
-

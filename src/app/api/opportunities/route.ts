@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
       let query = v2Context.supabase
         .from("v2_opportunities")
         .select(
-          "id,opportunity_type,service_line,title,description,location_text,postal_code,urgency_score,job_likelihood_score,contactability_score,source_reliability_score,revenue_band,catastrophe_linkage_score,routing_status,lifecycle_status,explainability_json,created_at"
+          "id,opportunity_type,service_line,title,description,location_text,postal_code,urgency_score,job_likelihood_score,contactability_score,source_reliability_score,revenue_band,catastrophe_linkage_score,routing_status,lifecycle_status,contact_status,explainability_json,created_at"
         )
         .eq("tenant_id", v2Context.franchiseTenantId)
         .order("created_at", { ascending: false })
@@ -82,9 +82,11 @@ export async function GET(req: NextRequest) {
           raw: {
             revenue_band: row.revenue_band,
             routing_status: row.routing_status,
+            contact_status: row.contact_status,
             catastrophe_linkage_score: row.catastrophe_linkage_score,
             contactability_score: row.contactability_score,
-            explainability: row.explainability_json
+            explainability: row.explainability_json,
+            network_activation: (row.explainability_json as Record<string, unknown> | null)?.network_activation || null
           },
           created_at: row.created_at
         }))

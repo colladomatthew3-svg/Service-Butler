@@ -4,11 +4,11 @@ import type { HTMLAttributes } from "react";
 type BadgeVariant = "default" | "success" | "warning" | "danger" | "brand";
 
 const variantClass: Record<BadgeVariant, string> = {
-  default: "bg-white/70 text-semantic-muted ring-1 ring-inset ring-semantic-border/75",
-  success: "bg-success-100/90 text-success-700 ring-1 ring-inset ring-success-500/20",
-  warning: "bg-warning-100/95 text-warning-700 ring-1 ring-inset ring-warning-500/25",
-  danger: "bg-danger-100/95 text-danger-700 ring-1 ring-inset ring-danger-500/25",
-  brand: "bg-brand-100/95 text-brand-700 ring-1 ring-inset ring-brand-500/30"
+  default: "border border-semantic-border bg-semantic-surface2 text-semantic-muted",
+  success: "border border-success-500/20 bg-success-100/90 text-success-700",
+  warning: "border border-warning-500/22 bg-warning-100/95 text-warning-700",
+  danger: "border border-danger-500/22 bg-danger-100/95 text-danger-700",
+  brand: "border border-brand-500/20 bg-brand-100/92 text-brand-700"
 };
 
 export function Badge({
@@ -20,7 +20,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.16em] whitespace-nowrap",
+        "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap",
         variantClass[variant],
         className
       )}

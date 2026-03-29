@@ -47,9 +47,9 @@ function JobsBoard({ jobs }: { jobs: JobRow[] }) {
     <div className="space-y-6">
       <PageHeader title="Jobs" subtitle="Active and upcoming jobs with value and priority." />
 
-      <section className="grid gap-3 rounded-[2rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(216,239,229,0.88),rgba(255,255,255,0.95))] px-5 py-5 shadow-[0_18px_48px_rgba(25,112,77,0.1)] sm:grid-cols-[1.25fr_0.75fr] sm:px-6">
+      <section className="grid gap-3 rounded-[2rem] border border-brand-500/18 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] px-5 py-5 shadow-[0_18px_48px_rgba(16,24,40,0.1)] sm:grid-cols-[1.25fr_0.75fr] sm:px-6">
         <div className="space-y-3">
-          <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/70 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+          <p className="inline-flex items-center rounded-full border border-brand-500/20 bg-white/78 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
             Job Control
           </p>
           <p className="text-sm text-semantic-text">
@@ -63,7 +63,7 @@ function JobsBoard({ jobs }: { jobs: JobRow[] }) {
         </div>
       </section>
 
-      <Card className="border-semantic-border/55 bg-white/58">
+      <Card className="border-semantic-border/55 bg-white/72">
         <CardHeader>
           <h2 className="dashboard-section-title text-semantic-text">Jobs Board</h2>
         </CardHeader>
@@ -81,7 +81,7 @@ function JobsBoard({ jobs }: { jobs: JobRow[] }) {
           {jobs.map((job) => (
             <article
               key={job.id}
-              className="flex flex-wrap items-start justify-between gap-4 rounded-[1.25rem] border border-semantic-border/60 bg-white/74 p-4 shadow-[0_12px_26px_rgba(31,42,36,0.07)] transition hover:-translate-y-0.5 hover:border-brand-300"
+              className="flex flex-wrap items-start justify-between gap-4 rounded-[1.25rem] border border-semantic-border/60 bg-white/82 p-4 shadow-[0_12px_26px_rgba(16,24,40,0.07)] transition hover:-translate-y-0.5 hover:border-brand-300"
             >
               <div className="flex items-start gap-4">
                 <div className="mt-1 h-12 w-1.5 shrink-0 rounded-full bg-[linear-gradient(180deg,rgb(var(--brand)),rgb(var(--accent)))]" />

@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-03-29T16:40:58.000Z",
+  "proof_timestamp": "2026-03-29T16-40-56-002Z",
+  "proof_dir": "output/proof/2026-03-29T16-40-56-002Z",
+  "status": "fail",
+  "steps": [
+    {
+      "name": "operator-healthcheck",
+      "command": "npm run operator-healthcheck",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-03-29T16:40:56.003Z",
+      "finished_at": "2026-03-29T16:40:57.030Z",
+      "duration_ms": 1027,
+      "stdout_path": "operator-healthcheck/stdout.log",
+      "stderr_path": "operator-healthcheck/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-healthcheck\n> mkdir -p .tmp/operator && npx tsc scripts/operator-healthcheck.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/operator-healthcheck.js\nService Butler Operator Healthcheck\n[PASS] supabase_env: Supabase URL + service role key present.\n[PASS] webhook_secret: WEBHOOK_SHARED_SECRET configured.\n[FAIL] supabase_connectivity: Supabase connectivity check failed (TypeError: fetch failed).\n       remediation: Confirm URL/key pair and that the target project is reachable.",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "validate-integrations",
+      "command": "npm run validate-integrations",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-03-29T16:40:57.031Z",
+      "finished_at": "2026-03-29T16:40:57.878Z",
+      "duration_ms": 847,
+      "stdout_path": "validate-integrations/stdout.log",
+      "stderr_path": "validate-integrations/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 validate-integrations\n> mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js",
+      "stderr_excerpt": "Operator tenant not found (NY Restoration Group). Run npm run operator:seed.",
+      "signal": null
+    },
+    {
+      "name": "operator-test",
+      "command": "npm run operator-test",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-03-29T16:40:57.879Z",
+      "finished_at": "2026-03-29T16:40:57.999Z",
+      "duration_ms": 120,
+      "stdout_path": "operator-test/stdout.log",
+      "stderr_path": "operator-test/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-test\n> node scripts/operator-test.mjs\n[operator-test] mode=live-partially-configured\n[operator-test] config-note: PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)\n[operator-test] config-note: Inngest keys missing",
+      "stderr_excerpt": "Operator tenant not found (NY Restoration Group). Run operator seed first.",
+      "signal": null
+    }
+  ]
+}

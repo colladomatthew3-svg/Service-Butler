@@ -311,10 +311,10 @@ export function LeadInboxView() {
         }
       />
 
-      <section className="overflow-hidden rounded-[2.1rem] border border-brand-500/24 bg-[linear-gradient(120deg,rgba(216,239,229,0.94),rgba(255,255,255,0.97))] shadow-[0_24px_64px_rgba(25,112,77,0.12)]">
+      <section className="overflow-hidden rounded-[2.1rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] shadow-[0_24px_64px_rgba(22,35,58,0.1)]">
         <div className="grid gap-6 px-5 py-6 lg:grid-cols-[1.35fr_0.95fr] lg:px-6">
           <div className="space-y-4">
-            <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/72 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
+            <p className="inline-flex items-center rounded-full border border-brand-500/20 bg-white/78 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
               Verified Lead Queue
             </p>
             <div className="space-y-2">
@@ -465,7 +465,7 @@ export function LeadInboxView() {
                     </div>
                   </div>
 
-                  <IntentMeter score={lead.intentScore} signalCount={lead.signalCount} />
+                  <IntentMeter score={lead.intentScore} signalCount={lead.signalCount} compact={isMobile} />
                   <div className="flex flex-wrap gap-2 text-xs font-semibold text-semantic-muted">
                     <span className="rounded-full bg-semantic-surface2/80 px-3 py-1">Source: {leadSourceLabel(lead.source)}</span>
                     <span className="rounded-full bg-semantic-surface2/80 px-3 py-1">Detected: {relativeTime(lead.created_at)}</span>
@@ -584,9 +584,9 @@ export function LeadInboxView() {
                     <Button size="sm" variant="secondary" onClick={() => handleTextLead(lead)}>
                       Text
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => scheduleLead(lead.id, "tomorrowAm")}>
+                    <Button size="sm" variant="secondary" onClick={() => scheduleLead(lead.id, "todayPm")}>
                       <CalendarPlus className="h-4 w-4" />
-                      Tomorrow AM
+                      Today PM
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => convertLeadToJob(lead)}>
                       {lead.converted_job_id ? "Open Job" : "Convert to Job"}
@@ -751,7 +751,7 @@ function FilterChips({
             className={cn(
               "min-h-11 shrink-0 rounded-[0.95rem] px-4 text-sm font-semibold transition",
               value === option
-                ? "bg-semantic-brand text-white shadow-[0_8px_20px_rgba(25,112,77,0.25)]"
+                ? "bg-semantic-brand text-white shadow-[0_8px_20px_rgba(29,78,216,0.25)]"
                 : "bg-semantic-surface2/85 text-semantic-muted ring-1 ring-inset ring-semantic-border hover:bg-semantic-surface"
             )}
           >

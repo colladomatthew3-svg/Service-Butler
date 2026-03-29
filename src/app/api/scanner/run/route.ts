@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 import { addDemoScannerEvents, getDemoWeatherSettings } from "@/lib/demo/store";
+import { hasVerifiedOwnerContact } from "@/lib/services/contact-proof";
 import { runScanner } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { featureFlags } from "@/lib/config/feature-flags";
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       mode: result.mode,
+      requestedMode: result.requestedMode,
+      runtimeMode: result.runtimeMode,
+      warnings: result.warnings,
       weatherRisk: result.weatherRisk,
       locationResolved: result.locationResolved,
       opportunities: result.opportunities
@@ -90,6 +94,7 @@ export async function POST(req: NextRequest) {
     campaignMode: body.campaignMode,
     triggers: Array.isArray(body.triggers) ? body.triggers : undefined
   });
+  const warnings = [...(result.warnings || [])];
 
   if (result.opportunities.length > 0) {
     const sourceRows = result.opportunities.map((op) => ({
@@ -112,7 +117,10 @@ export async function POST(req: NextRequest) {
       }
     }));
 
-    const { data: sourceEvents } = await supabase.from("source_events").insert(sourceRows).select("id");
+    const { data: sourceEvents, error: sourceEventsError } = await supabase.from("source_events").insert(sourceRows).select("id");
+    if (sourceEventsError) {
+      warnings.push("Source event persistence is unavailable right now. The live scan still completed.");
+    }
     const sourceEventIds = (sourceEvents || []).map((item) => String(item.id));
 
     const rows = result.opportunities.map((op) => ({
@@ -137,9 +145,12 @@ export async function POST(req: NextRequest) {
       }
     }));
 
-    await supabase.from("scanner_events").insert(rows);
+    const { error: scannerEventsError } = await supabase.from("scanner_events").insert(rows);
+    if (scannerEventsError) {
+      warnings.push("Scanner feed persistence is unavailable, so this run is shown directly from the live response.");
+    }
 
-    await supabase.from("opportunities").insert(
+    const { error: opportunitiesError } = await supabase.from("opportunities").insert(
       result.opportunities.map((op, index) => ({
         account_id: accountId,
         source_id: null,
@@ -174,6 +185,9 @@ export async function POST(req: NextRequest) {
         }
       }))
     );
+    if (opportunitiesError) {
+      warnings.push("Opportunity persistence is unavailable, so the live scan did not write into the legacy pipeline tables.");
+    }
 
     if (featureFlags.useV2Writes) {
       const { data: map } = await supabase
@@ -217,6 +231,7 @@ export async function POST(req: NextRequest) {
           for (const op of result.opportunities) {
             const occurredAt = op.createdAtIso || new Date().toISOString();
             const dedupeKey = `${op.id}|${occurredAt}`;
+            const hasVerifiedContact = hasVerifiedOwnerContact(op.raw?.enrichment);
 
             const { data: sourceEvent } = await supabase
               .from("v2_source_events")
@@ -234,8 +249,11 @@ export async function POST(req: NextRequest) {
                     title: op.title,
                     description: op.description,
                     category: op.category,
-                    platform: op.source
+                    platform: op.source,
+                    source_provenance: typeof op.raw?.source_provenance === "string" ? op.raw.source_provenance : op.source,
+                    connector_key: typeof op.raw?.connector_key === "string" ? op.raw.connector_key : null
                   },
+                  source_provenance: typeof op.raw?.source_provenance === "string" ? op.raw.source_provenance : null,
                   location_text: op.locationText,
                   confidence_score: op.confidence,
                   source_reliability_score: op.confidence,
@@ -256,7 +274,7 @@ export async function POST(req: NextRequest) {
               propertyTypeFit: 55,
               serviceLineFit: 78,
               priorCustomerMatch: 40,
-              contactAvailability: 45,
+              contactAvailability: hasVerifiedContact ? 78 : 18,
               supportingSignalsCount: Array.isArray(op.tags) ? op.tags.length : 1,
               catastropheSignal: Array.isArray(op.tags) && op.tags.some((tag) => /storm|flood|fire/i.test(tag)) ? 80 : 30,
               sourceReliability: op.confidence
@@ -279,10 +297,13 @@ export async function POST(req: NextRequest) {
                 catastrophe_linkage_score: score.catastropheLinkageScore,
                 location_text: op.locationText,
                 postal_code: typeof op.raw?.property_postal_code === "string" ? op.raw.property_postal_code : null,
-                contact_status: "identified",
+                contact_status: hasVerifiedContact ? "identified" : "unknown",
                 routing_status: "pending",
                 lifecycle_status: "new",
-                explainability_json: score.explainability
+                explainability_json: {
+                  ...score.explainability,
+                  contact_enrichment_available: hasVerifiedContact
+                }
               })
               .select("id")
               .single();
@@ -305,6 +326,9 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     mode: result.mode,
+    requestedMode: result.requestedMode,
+    runtimeMode: result.runtimeMode,
+    warnings,
     weatherRisk: result.weatherRisk,
     locationResolved: result.locationResolved,
     opportunities: result.opportunities

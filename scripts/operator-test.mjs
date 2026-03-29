@@ -346,6 +346,9 @@ async function main() {
 
   const pulled = await fetchPermitsSignal();
   console.log(`[operator-test] connector-input-mode=${pulled.mode}`);
+  if (envTrue("SB_REQUIRE_LIVE_PROVIDER_PROOF") && pulled.mode !== "live_provider") {
+    throw new Error(`Live-provider proof required, but connector input mode was ${pulled.mode}`);
+  }
 
   const runId = randomUUID();
   const nowIso = new Date().toISOString();
@@ -448,13 +451,14 @@ async function main() {
     location_text: locationText,
     location: `SRID=4326;POINT(${lng} ${lat})`,
     postal_code: postal,
-    contact_status: "identified",
+    contact_status: "unknown",
     routing_status: "pending",
     lifecycle_status: "new",
     explainability_json: {
       operator_test: true,
       mode: mode.mode,
-      connector_input_mode: pulled.mode
+      connector_input_mode: pulled.mode,
+      contact_proof: "synthetic_test_only"
     }
   });
 
@@ -533,14 +537,19 @@ async function main() {
     tenant_id: tenantId,
     opportunity_id: opportunityId,
     contact_name: "Operator Pilot Contact",
-    contact_channels_json: { phone: "+15555550123" },
+    contact_channels_json: {
+      verification_status: "rejected",
+      verification_score: 0,
+      verification_reasons: ["operator test synthetic contact"],
+      contact_provenance: "operator_test"
+    },
     property_address: locationText,
     city,
     state,
     postal_code: postal,
-    lead_status: "new",
+    lead_status: "research_required",
     crm_sync_status: "not_synced",
-    do_not_contact: false
+    do_not_contact: true
   });
 
   if (leadError) throw new Error(leadError.message);

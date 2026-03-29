@@ -1,17 +1,29 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
-  ChevronRight,
+  CheckCircle2,
+  Clock3,
+  MapPin,
+  Radio,
+  ShieldCheck,
+  Target,
+  TrendingUp,
   TriangleAlert
 } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { buttonStyles } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatTile } from "@/components/ui/stat-tile";
+import { Table, TableBody, TableHead, TD, TH } from "@/components/ui/table";
+import type { DataSourceSummary } from "@/lib/control-plane/types";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { WeatherTicker } from "@/components/dashboard/weather-ticker";
+import { listDataSourceSummaries } from "@/lib/control-plane/data-sources";
 import { getForecastByLatLng } from "@/lib/services/weather";
 import { getDemoDashboardSnapshot, getDemoWeatherSettings } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
+import { getV2TenantContext } from "@/lib/v2/context";
 
 type DashboardLeadRow = {
   id: string;
@@ -61,10 +73,9 @@ export default async function DashboardOverviewPage() {
   let leadRows: DashboardLeadRow[] = [];
   let jobRows: DashboardJobRow[] = [];
   let opportunities: DashboardOpportunityRow[] = [];
-  let prospects: Array<{ id: string }> = [];
-  let referralPartners: Array<{ id: string }> = [];
   let outboundLists: DashboardOutboundRow[] = [];
   let enrichedLeads: Array<DashboardLeadRow & { intent: number }> = [];
+  let sourceSummaries: DataSourceSummary[] = await listDataSourceSummaries();
   let settings:
     | {
         weather_lat?: number | null;
@@ -82,13 +93,12 @@ export default async function DashboardOverviewPage() {
     leadRows = snapshot.leads;
     jobRows = snapshot.jobs;
     opportunities = snapshot.opportunities;
-    prospects = snapshot.prospects;
-    referralPartners = snapshot.referralPartners;
     outboundLists = snapshot.outboundLists;
     enrichedLeads = snapshot.leads.map((lead) => ({
       ...lead,
       intent: Number(lead.intentScore || 0)
     }));
+    sourceSummaries = await listDataSourceSummaries();
     settings = {
       weather_lat: weather.weather_lat,
       weather_lng: weather.weather_lng,
@@ -99,8 +109,7 @@ export default async function DashboardOverviewPage() {
   } else {
     const { accountId, supabase } = await getCurrentUserContext();
 
-    const [{ data: leads }, { data: loadedSettings }, { data: jobs }, { data: loadedProspects }, { data: loadedPartners }, { data: loadedLists }] =
-      await Promise.all([
+    const [{ data: leads }, { data: loadedSettings }, { data: jobs }, { data: loadedLists }] = await Promise.all([
       supabase
         .from("leads")
         .select("id,name,service_type,city,state,status,requested_timeframe,created_at,scheduled_for")
@@ -115,10 +124,7 @@ export default async function DashboardOverviewPage() {
         .from("jobs")
         .select("id,pipeline_status,scheduled_for,estimated_value,service_type,customer_name,city,state,intent_score")
         .eq("account_id", accountId)
-        .order("scheduled_for", { ascending: true, nullsFirst: false })
-        ,
-      supabase.from("prospects").select("id").eq("account_id", accountId).limit(300),
-      supabase.from("referral_partners").select("id").eq("account_id", accountId).limit(300),
+        .order("scheduled_for", { ascending: true, nullsFirst: false }),
       supabase.from("outbound_lists").select("id,name,list_type,export_status").eq("account_id", accountId).order("created_at", { ascending: false }).limit(12)
     ]);
 
@@ -132,12 +138,10 @@ export default async function DashboardOverviewPage() {
     leadRows = leads || [];
     jobRows = jobs || [];
     opportunities = loadedOpportunities || [];
-    prospects = loadedProspects || [];
-    referralPartners = loadedPartners || [];
     outboundLists = loadedLists || [];
     settings = loadedSettings;
 
-    const leadIds = leadRows.map((l) => String(l.id));
+    const leadIds = leadRows.map((lead) => String(lead.id));
     let scoreMap: Record<string, number[]> = {};
     if (leadIds.length > 0) {
       const { data: signals } = await supabase.from("lead_intent_signals").select("lead_id,score").in("lead_id", leadIds);
@@ -154,25 +158,34 @@ export default async function DashboardOverviewPage() {
       const intent = values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
       return { ...lead, intent };
     });
+
+    const v2Context = await getV2TenantContext().catch(() => null);
+    if (v2Context) {
+      sourceSummaries = await listDataSourceSummaries({
+        supabase: v2Context.supabase as never,
+        tenantId: v2Context.franchiseTenantId
+      });
+    }
   }
 
+  const now = new Date();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const nextWeek = new Date();
   nextWeek.setDate(nextWeek.getDate() + 7);
 
-  const highIntent = enrichedLeads.filter((l) => l.intent >= 75 && l.status !== "won" && l.status !== "lost").length;
-  const scheduledToday = jobRows.filter((j) => j.scheduled_for && new Date(j.scheduled_for as string) >= startOfDay).length;
+  const highIntent = enrichedLeads.filter((lead) => lead.intent >= 75 && lead.status !== "won" && lead.status !== "lost").length;
+  const scheduledToday = jobRows.filter((job) => job.scheduled_for && new Date(job.scheduled_for as string) >= startOfDay).length;
   const jobsNextSeven = jobRows.filter(
-    (j) => j.scheduled_for && new Date(j.scheduled_for as string) >= new Date() && new Date(j.scheduled_for as string) <= nextWeek
+    (job) => job.scheduled_for && new Date(job.scheduled_for as string) >= now && new Date(job.scheduled_for as string) <= nextWeek
   ).length;
 
   const weeklyRevenue = jobRows
-    .filter((j) => j.scheduled_for && new Date(j.scheduled_for as string) >= new Date() && new Date(j.scheduled_for as string) <= nextWeek)
-    .reduce((sum, j) => sum + Number(j.estimated_value || 0), 0);
+    .filter((job) => job.scheduled_for && new Date(job.scheduled_for as string) >= now && new Date(job.scheduled_for as string) <= nextWeek)
+    .reduce((sum, job) => sum + Number(job.estimated_value || 0), 0);
 
   const nextUp = jobRows
-    .filter((j) => j.scheduled_for && new Date(j.scheduled_for as string) >= new Date())
+    .filter((job) => job.scheduled_for && new Date(job.scheduled_for as string) >= now)
     .sort((a, b) => new Date(a.scheduled_for as string).getTime() - new Date(b.scheduled_for as string).getTime())
     .slice(0, 5);
 
@@ -183,213 +196,352 @@ export default async function DashboardOverviewPage() {
     : [settings?.home_base_city, settings?.home_base_state].filter(Boolean).join(", ");
 
   let weatherHighRisk = false;
-  let weatherActionText = "Conditions stable. Focus on scheduled jobs and high-intent callbacks.";
   if (lat != null && lng != null) {
     try {
       const forecast = await getForecastByLatLng(lat, lng);
       const precip = forecast.current.precipitationChance ?? 0;
       const wind = forecast.current.windKph ?? 0;
-      const nextWet = forecast.next6Hours.some((h) => h.precipChance >= 45);
+      const nextWet = forecast.next6Hours.some((hour) => hour.precipChance >= 45);
       weatherHighRisk = precip >= 55 || wind >= 30 || nextWet;
-      if (weatherHighRisk) {
-        weatherActionText = "Storm/high-wind pressure expected. Launch Storm Response scan and pre-book emergency slots.";
-      }
     } catch {
       weatherHighRisk = false;
     }
   }
 
-  const openJobs = jobRows.filter((j) => !["WON", "LOST", "COMPLETED"].includes(String(j.pipeline_status))).length;
+  const bookedJobs = jobRows.filter((job) =>
+    ["WON", "COMPLETED", "SCHEDULED", "IN_PROGRESS"].includes(String(job.pipeline_status || "").toUpperCase())
+  ).length;
   const syncedLists = outboundLists.filter((item) => String(item.export_status) === "synced").length;
   const priorityLeads = [...enrichedLeads]
     .filter((lead) => !["won", "lost"].includes(String(lead.status || "").toLowerCase()))
     .sort((a, b) => Number(b.intent || 0) - Number(a.intent || 0))
     .slice(0, 5);
+  const highestUrgencyOpportunities = [...opportunities]
+    .sort((a, b) => Number(b.intent_score || 0) - Number(a.intent_score || 0))
+    .slice(0, 5);
+  const latestOpportunity = opportunities[0] || null;
+
+  const territorySummary = buildTerritorySummary({
+    opportunities,
+    leads: leadRows,
+    jobs: jobRows,
+    fallbackMarket: weatherLabel || "Core market"
+  });
+  const activeMarkets = Math.max(territorySummary.length, weatherLabel ? 1 : 0);
+  const latestSignalAge = latestOpportunity ? formatRelativeTime(latestOpportunity.created_at) : "No signals";
+  const queueReadyLeads = priorityLeads.filter((lead) => !lead.scheduled_for).length || priorityLeads.length;
 
   return (
-    <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-[2.15rem] border border-brand-500/25 bg-[linear-gradient(120deg,rgba(216,239,229,0.92),rgba(255,255,255,0.95))] px-5 py-6 shadow-[0_24px_64px_rgba(25,112,77,0.12)] sm:px-7 sm:py-8">
-        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-brand-100/65 blur-3xl" />
-        <div className="pointer-events-none absolute bottom-0 left-0 h-24 w-24 rounded-full bg-white/45 blur-2xl" />
-        <div className="relative grid gap-5 xl:grid-cols-[1.08fr_0.92fr] xl:items-stretch">
-          <div className="flex flex-col justify-between gap-5">
-            <div className="space-y-4">
-              <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/65 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
-                Command Center
-              </p>
-              <div className="max-w-3xl">
-                <h1 className="dashboard-page-title text-semantic-text">Find and claim jobs before your competitors.</h1>
-                <p className="mt-3 text-base text-semantic-muted">
-                  {demoMode
-                    ? "Demo-ready Scanner and Weather signals using saved service-area data. Try storm response in Brentwood, Hauppauge, or Midtown."
-                    : "Scanner intelligence aligned to your saved service area. Run weather-led scans and route urgent opportunities first."}
-                </p>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Operator"
+        title="Operator Command Center"
+        subtitle="Real-time view of demand, verified leads, booked work, and local market pressure."
+      />
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Opportunities" value={String(opportunities.length)} icon={<Target className="h-4 w-4" />} tone="brand" />
+        <StatTile label="Needs action" value={String(queueReadyLeads)} icon={<TriangleAlert className="h-4 w-4" />} tone="warning" />
+        <StatTile label="Jobs booked" value={String(bookedJobs)} icon={<CheckCircle2 className="h-4 w-4" />} tone="success" />
+        <StatTile label="Outreach sync" value={String(syncedLists)} icon={<Radio className="h-4 w-4" />} />
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Week revenue" value={formatCurrency(weeklyRevenue)} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
+        <StatTile label="Jobs next 7 days" value={String(jobsNextSeven)} icon={<Clock3 className="h-4 w-4" />} />
+        <StatTile label="Active markets" value={String(activeMarkets)} icon={<MapPin className="h-4 w-4" />} />
+        <StatTile label="Latest signal" value={latestSignalAge} icon={<Radio className="h-4 w-4" />} />
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+        <WeatherTicker lat={lat} lng={lng} locationLabel={weatherLabel} />
+
+        <SourceHealthSnapshotCard sources={sourceSummaries} ctaHref="/dashboard/settings#data-sources" />
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Highest urgency</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Signals to work first</h2>
+            </div>
+            <Link href="/dashboard/scanner" className={buttonStyles({ size: "sm", variant: "secondary" })}>
+              View scanner
+            </Link>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            {highestUrgencyOpportunities.length === 0 ? (
+              <EmptyPanel title="No opportunities detected yet." body="Run the scanner to load the first demand signals into the command center." />
+            ) : (
+              <Table className="border-spacing-y-0">
+                <TableHead>
+                  <tr>
+                    <TH>Opportunity</TH>
+                    <TH>Territory</TH>
+                    <TH className="text-right">Intent</TH>
+                  </tr>
+                </TableHead>
+                <TableBody>
+                  {highestUrgencyOpportunities.map((item) => (
+                    <tr key={item.id}>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 first:rounded-none last:rounded-none">
+                        <Link href="/dashboard/scanner" className="text-sm font-medium text-semantic-text transition hover:text-brand-700">
+                          {item.title || "Untitled opportunity"}
+                        </Link>
+                        <p className="mt-1 text-xs text-semantic-muted">{item.category ? toTitleCase(item.category) : "Restoration signal"}</p>
+                      </TD>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 first:rounded-none last:rounded-none text-xs text-semantic-muted">
+                        {item.location_text || weatherLabel || "Core market"}
+                      </TD>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 text-right first:rounded-none last:rounded-none">
+                        <Badge variant={Number(item.intent_score || 0) >= 75 ? "warning" : "default"}>{Number(item.intent_score || 0)}%</Badge>
+                      </TD>
+                    </tr>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Needs action</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Verified leads to contact next</h2>
+            </div>
+            <Link href="/dashboard/leads" className={buttonStyles({ size: "sm", variant: "secondary" })}>
+              Open leads
+            </Link>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            {priorityLeads.length === 0 ? (
+              <EmptyPanel title="No active lead queue yet." body="Run the scanner and convert the strongest signal into a verified lead." />
+            ) : (
+              <Table className="border-spacing-y-0">
+                <TableHead>
+                  <tr>
+                    <TH>Lead</TH>
+                    <TH>Service line</TH>
+                    <TH className="text-right">Queue status</TH>
+                  </tr>
+                </TableHead>
+                <TableBody>
+                  {priorityLeads.map((lead) => (
+                    <tr key={lead.id}>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 first:rounded-none last:rounded-none">
+                        <Link href={`/dashboard/leads/${lead.id}`} className="text-sm font-medium text-semantic-text transition hover:text-brand-700">
+                          {lead.name || "Unknown lead"}
+                        </Link>
+                        <p className="mt-1 text-xs text-semantic-muted">{[lead.city, lead.state].filter(Boolean).join(", ") || weatherLabel || "Core market"}</p>
+                      </TD>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 first:rounded-none last:rounded-none">
+                        <p className="text-sm text-semantic-text">{lead.service_type || "Restoration service"}</p>
+                        <p className="mt-1 text-xs text-semantic-muted">{lead.requested_timeframe || "Immediate follow-up recommended"}</p>
+                      </TD>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 text-right first:rounded-none last:rounded-none">
+                        <Badge variant={Number(lead.intent || 0) >= 75 ? "warning" : "default"}>{Number(lead.intent || 0)}%</Badge>
+                        <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.12em] text-semantic-muted">
+                          {lead.scheduled_for ? "Scheduled follow-up" : "Call now"}
+                        </p>
+                      </TD>
+                    </tr>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Territory summary</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Where demand is stacking up</h2>
+            </div>
+            <Badge variant="brand">{activeMarkets} active</Badge>
+          </CardHeader>
+          <CardBody className="space-y-4">
+            {territorySummary.length === 0 ? (
+              <EmptyPanel title="No territory view yet." body="Signals, leads, and jobs will start grouping by market once activity arrives." />
+            ) : (
+              <Table className="border-spacing-y-0">
+                <TableHead>
+                  <tr>
+                    <TH>Market</TH>
+                    <TH className="text-right">Signals</TH>
+                    <TH className="text-right">Leads</TH>
+                    <TH className="text-right">Jobs</TH>
+                  </tr>
+                </TableHead>
+                <TableBody>
+                  {territorySummary.map((territory) => (
+                    <tr key={territory.label}>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 first:rounded-none last:rounded-none">
+                        <p className="text-sm font-medium text-semantic-text">{territory.label}</p>
+                      </TD>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 text-right first:rounded-none last:rounded-none">
+                        {territory.opportunities}
+                      </TD>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 text-right first:rounded-none last:rounded-none">
+                        {territory.leads}
+                      </TD>
+                      <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 text-right first:rounded-none last:rounded-none">
+                        {territory.jobs}
+                      </TD>
+                    </tr>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Revenue proof</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Why this reads like a lead engine</h2>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              <MetricRow
+                label="Booked revenue"
+                value={formatCurrency(weeklyRevenue)}
+                helper="Booked work scheduled in the next seven days."
+                icon={<TrendingUp className="h-4 w-4" />}
+              />
+              <MetricRow
+                label="High-intent leads"
+                value={String(highIntent)}
+                helper="Verified demand that should be worked before it cools off."
+                icon={<TriangleAlert className="h-4 w-4" />}
+              />
+              <MetricRow
+                label="Jobs on board today"
+                value={String(scheduledToday)}
+                helper="Proof that the workflow is turning signal into actual scheduled work."
+                icon={<Clock3 className="h-4 w-4" />}
+              />
+              <MetricRow
+                label="Operating posture"
+                value={weatherHighRisk ? "Elevated weather pressure" : "Stable market conditions"}
+                helper="The service area, weather feed, and queue should read like one connected operating system."
+                icon={<ShieldCheck className="h-4 w-4" />}
+              />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Scheduled work</p>
+                <h2 className="mt-1 text-base font-semibold text-semantic-text">Upcoming jobs</h2>
               </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Link href="/dashboard/scanner">
-                <Button size="lg" fullWidth>Run Scanner</Button>
+              <Link href="/dashboard/jobs" className={buttonStyles({ size: "sm", variant: "secondary" })}>
+                Open jobs
               </Link>
-              <Link href="/dashboard/leads">
-                <Button size="lg" variant="secondary" fullWidth>Open Leads</Button>
-              </Link>
-              <Link href="/dashboard/pipeline">
-                <Button size="lg" variant="secondary" fullWidth>Open Pipeline</Button>
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid gap-3 rounded-[1.55rem] border border-semantic-border/60 bg-white/72 p-4 shadow-[0_12px_34px_rgba(31,42,36,0.08)] sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Dispatch Pulse</p>
-              <Badge variant={weatherHighRisk ? "warning" : "brand"}>{weatherHighRisk ? "High risk" : "Steady"}</Badge>
-            </div>
-            <p className="inline-flex items-center gap-2 text-sm font-semibold text-semantic-text">
-              <TriangleAlert className={`h-4 w-4 ${weatherHighRisk ? "text-warning-500" : "text-brand-600"}`} />
-              {weatherHighRisk ? "Weather pressure is building" : "Normal operating window"}
-            </p>
-            <p className="text-sm text-semantic-muted">{weatherActionText}</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Link href="/dashboard/scanner">
-                <Button size="sm" fullWidth>Start high-priority scan</Button>
-              </Link>
-              <Link href="/dashboard/schedule">
-                <Button size="sm" variant="secondary" fullWidth>Open schedule</Button>
-              </Link>
-            </div>
-            <div className="rounded-[1.15rem] border border-semantic-border/60 bg-white/70 p-3">
-              <WeatherTicker lat={lat} lng={lng} compact locationLabel={weatherLabel} />
-            </div>
-          </div>
+            </CardHeader>
+            <CardBody className="space-y-2">
+              {nextUp.length === 0 ? (
+                <EmptyPanel title="No booked visits yet." body="Once a lead converts, the upcoming work queue will appear here." />
+              ) : (
+                nextUp.map((job) => (
+                  <Link
+                    key={job.id}
+                    href={`/dashboard/jobs/${job.id}`}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-semantic-border bg-semantic-surface px-4 py-3 transition hover:border-brand-300 hover:bg-white"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-semantic-text">{job.customer_name || "Unknown customer"}</p>
+                      <p className="mt-1 text-xs text-semantic-muted">
+                        {job.service_type || "Service"} · {[job.city, job.state].filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xs font-medium text-semantic-text">{formatScheduled(job.scheduled_for as string)}</p>
+                      <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-semantic-muted">{job.pipeline_status || "NEW"}</p>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </CardBody>
+          </Card>
         </div>
       </section>
+    </div>
+  );
+}
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageHeader
-          title="Dispatch Dashboard"
-          subtitle="See the jobs, know the pressure, and move the next call forward."
-          actions={<Badge variant="brand">Booked-job focus</Badge>}
-        />
-      </div>
+function SourceHealthSnapshotCard({
+  sources,
+  ctaHref
+}: {
+  sources: DataSourceSummary[];
+  ctaHref: string;
+}) {
+  const liveCount = sources.filter((source) => source.runtimeMode === "fully-live").length;
+  const partialCount = sources.filter((source) => source.runtimeMode === "live-partial").length;
+  const visibleSources = sources
+    .filter((source) => source.configured || source.runtimeMode !== "simulated")
+    .slice(0, 4);
 
-      <section className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <SnapshotStat label="Open jobs" value={String(openJobs)} helper="Jobs still in play" />
-        <SnapshotStat label="Scheduled today" value={String(scheduledToday)} helper="Visits on the board" />
-        <SnapshotStat label="High intent" value={String(highIntent)} helper="Leads to call first" />
-        <SnapshotStat label="Week revenue" value={`$${Math.round(weeklyRevenue).toLocaleString()}`} helper="Booked this week" />
-        <SnapshotStat label="Next 7 days" value={String(jobsNextSeven)} helper="Jobs scheduled ahead" />
-        <SnapshotStat label="Prospects" value={String(prospects.length)} helper="Outbound-ready records" />
-        <SnapshotStat label="Partners" value={String(referralPartners.length)} helper="Referral relationships" />
-        <SnapshotStat label="Lists" value={String(outboundLists.length)} helper="Target lists built" />
-        <SnapshotStat label="Synced lists" value={String(syncedLists)} helper="Automation health" />
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="flex-1 border-semantic-border/55 bg-white/58">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="dashboard-section-title text-semantic-text">Opportunity Feed</h2>
-              <span className="hidden rounded-full border border-semantic-border/70 bg-white/75 px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-semantic-muted sm:inline-flex">
-                Signal stream
-              </span>
-              <Link href="/dashboard/scanner">
-                <Button size="sm" variant="secondary">Open Scanner</Button>
-              </Link>
-            </div>
-          </CardHeader>
-          <CardBody className="space-y-3">
-            {(opportunities || []).slice(0, 6).map((item) => (
-              <Link
-                key={item.id}
-                href="/dashboard/scanner"
-                className="block rounded-[1.2rem] border border-semantic-border/60 bg-white/72 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-white"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="mt-1 h-12 w-1.5 shrink-0 rounded-full bg-[linear-gradient(180deg,rgb(var(--brand)),rgb(var(--accent)))]" />
+  return (
+    <Card className="h-full">
+      <CardHeader className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Source health</p>
+          <h2 className="mt-1 text-base font-semibold text-semantic-text">Live ingestion snapshot</h2>
+        </div>
+        <Link href={ctaHref} className={buttonStyles({ size: "sm", variant: "secondary" })}>
+          Open data sources
+        </Link>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <div className="grid grid-cols-3 gap-2">
+          <MiniSourceStat label="Live" value={String(liveCount)} />
+          <MiniSourceStat label="Partial" value={String(partialCount)} />
+          <MiniSourceStat label="Total" value={String(sources.length)} />
+        </div>
+        {visibleSources.length === 0 ? (
+          <EmptyPanel
+            title="No active data sources yet."
+            body="Open settings to configure NOAA, permits, Open311, and the other connector families in the acquisition-ready control plane."
+          />
+        ) : (
+          <div className="space-y-2">
+            {visibleSources.map((source) => (
+              <div key={source.id || source.catalogKey} className="rounded-lg border border-semantic-border bg-semantic-surface p-3">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-semantic-text">{item.title}</p>
-                    <p className="mt-1 text-sm text-semantic-muted">{item.location_text || "Service area"}</p>
-                    <p className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">
-                      {item.category} opportunity
+                    <p className="text-sm font-medium text-semantic-text">{source.name}</p>
+                    <p className="mt-1 text-xs text-semantic-muted">
+                      {source.family} · {source.freshnessLabel}
                     </p>
-                    <p className="mt-1 text-xs text-semantic-muted">Open Scanner to create a lead, assign follow-up, or schedule the inspection.</p>
                   </div>
-                  <Badge variant={Number(item.intent_score) >= 75 ? "warning" : "default"}>{Number(item.intent_score) || 0}</Badge>
+                  <Badge variant={source.runtimeMode === "fully-live" ? "success" : source.runtimeMode === "live-partial" ? "warning" : "default"}>
+                    {source.runtimeMode}
+                  </Badge>
                 </div>
-              </Link>
-            ))}
-            {(opportunities || []).length === 0 && (
-              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
-                <p className="text-sm font-semibold text-semantic-text">Run the Lead Scanner to generate opportunities.</p>
-                <p className="mt-1 text-sm text-semantic-muted">Weather and service-demand signals will appear here once the first scan is complete.</p>
+                <p className="mt-2 text-xs text-semantic-muted">
+                  {source.latestRunStatus || "not run"} · {source.recordsCreated.toLocaleString()} created · {source.recordsSeen.toLocaleString()} seen
+                </p>
               </div>
-            )}
-          </CardBody>
-        </Card>
-        <Card className="border-semantic-border/55 bg-white/58">
-          <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="dashboard-section-title text-semantic-text">Priority Queue</h2>
-              <span className="hidden rounded-full border border-semantic-border/70 bg-white/75 px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-semantic-muted sm:inline-flex">
-                Next actions
-              </span>
-              <Link href="/dashboard/leads" className="text-sm font-semibold text-brand-700">
-                Open leads
-              </Link>
-            </div>
-          </CardHeader>
-          <CardBody className="space-y-3">
-            {priorityLeads.length === 0 && (
-              <div className="rounded-xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
-                <p className="text-sm font-semibold text-semantic-text">No active lead queue yet.</p>
-                <p className="mt-1 text-sm text-semantic-muted">Run the scanner and claim opportunities to fill your call list.</p>
-              </div>
-            )}
-            {priorityLeads.map((lead) => (
-              <Link
-                key={lead.id}
-                href={`/dashboard/leads/${lead.id}`}
-                className="block rounded-[1.15rem] border border-semantic-border/60 bg-white/74 p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:bg-white"
-              >
-                <div className="flex items-start gap-4">
-                  <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700">
-                    {String(lead.intent || 0)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-semantic-text">{lead.name || "Unknown lead"}</p>
-                        <p className="text-sm text-semantic-muted">
-                          {lead.service_type || "Service"} · {[lead.city, lead.state].filter(Boolean).join(", ")}
-                        </p>
-                      </div>
-                      <Badge variant={Number(lead.intent || 0) >= 75 ? "warning" : "default"}>{Number(lead.intent || 0)}%</Badge>
-                    </div>
-                    <p className="mt-2 text-sm text-semantic-muted">{lead.scheduled_for ? `Scheduled ${formatScheduled(lead.scheduled_for)}` : "Needs first contact"}</p>
-                  </div>
-                </div>
-              </Link>
             ))}
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
 
-            <div className="rounded-[1.15rem] border border-semantic-border/60 bg-white/70 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next scheduled jobs</p>
-              <div className="mt-2 space-y-2">
-                {nextUp.length === 0 && <p className="text-sm text-semantic-muted">No booked visits yet for the next window.</p>}
-                {nextUp.map((job) => (
-                  <Link key={job.id} href={`/dashboard/jobs/${job.id}`} className="flex items-center justify-between rounded-lg px-2 py-1.5 transition hover:bg-semantic-surface2/70">
-                    <span className="text-sm font-medium text-semantic-text">{job.customer_name || "Unknown customer"}</span>
-                    <span className="inline-flex items-center text-xs text-semantic-muted">
-                      {formatScheduled(job.scheduled_for as string)}
-                      <ChevronRight className="ml-1 h-4 w-4" />
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-      </section>
+function MiniSourceStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-semantic-border bg-semantic-surface p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-semantic-text">{value}</p>
     </div>
   );
 }
@@ -404,12 +556,106 @@ function formatScheduled(date: string) {
   });
 }
 
-function SnapshotStat({ label, value, helper }: { label: string; value: string; helper: string }) {
+function MetricRow({
+  label,
+  value,
+  helper,
+  icon
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  icon: ReactNode;
+}) {
   return (
-    <div className="min-w-[188px] shrink-0 rounded-[1.1rem] border border-semantic-border/60 bg-white/72 px-4 py-3 shadow-[0_10px_26px_rgba(31,42,36,0.08)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-semantic-text">{value}</p>
-      <p className="text-xs text-semantic-muted">{helper}</p>
+    <div className="flex items-start gap-3 rounded-lg border border-semantic-border bg-semantic-surface p-3">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-100 text-brand-700">{icon}</div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-semantic-muted">{label}</p>
+        <p className="mt-1 text-sm font-medium text-semantic-text">{value}</p>
+        <p className="mt-1 text-xs leading-5 text-semantic-muted">{helper}</p>
+      </div>
     </div>
   );
+}
+
+function EmptyPanel({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-semantic-border bg-semantic-surface p-4">
+      <p className="text-sm font-medium text-semantic-text">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-semantic-muted">{body}</p>
+    </div>
+  );
+}
+
+function formatCurrency(value: number) {
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function formatRelativeTime(value: string) {
+  const target = new Date(value);
+  if (!Number.isFinite(target.getTime())) return "No signals";
+
+  const delta = Date.now() - target.getTime();
+  const minutes = Math.max(1, Math.round(delta / 60000));
+
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function toTitleCase(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function buildTerritorySummary({
+  opportunities,
+  leads,
+  jobs,
+  fallbackMarket
+}: {
+  opportunities: DashboardOpportunityRow[];
+  leads: DashboardLeadRow[];
+  jobs: DashboardJobRow[];
+  fallbackMarket: string;
+}) {
+  const markets = new Map<string, { label: string; opportunities: number; leads: number; jobs: number }>();
+
+  const getBucket = (label: string) => {
+    if (!markets.has(label)) {
+      markets.set(label, { label, opportunities: 0, leads: 0, jobs: 0 });
+    }
+    return markets.get(label)!;
+  };
+
+  for (const item of opportunities) {
+    const label = normalizeMarketLabel(item.location_text, fallbackMarket);
+    getBucket(label).opportunities += 1;
+  }
+
+  for (const item of leads) {
+    const label = normalizeMarketLabel([item.city, item.state].filter(Boolean).join(", "), fallbackMarket);
+    getBucket(label).leads += 1;
+  }
+
+  for (const item of jobs) {
+    const label = normalizeMarketLabel([item.city, item.state].filter(Boolean).join(", "), fallbackMarket);
+    getBucket(label).jobs += 1;
+  }
+
+  return Array.from(markets.values())
+    .sort((a, b) => b.opportunities + b.leads + b.jobs - (a.opportunities + a.leads + a.jobs))
+    .slice(0, 5);
+}
+
+function normalizeMarketLabel(value: string | null | undefined, fallbackMarket: string) {
+  return String(value || "").trim() || fallbackMarket;
 }

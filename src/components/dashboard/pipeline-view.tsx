@@ -96,7 +96,7 @@ export function PipelineView() {
         }
       />
 
-      <section className="overflow-hidden rounded-[1.75rem] border border-semantic-border/60 bg-white/72 shadow-[0_18px_60px_rgba(31,42,36,0.08)]">
+      <section className="overflow-hidden rounded-[1.75rem] border border-semantic-border/60 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] shadow-[0_18px_60px_rgba(16,24,40,0.08)]">
         <div className="grid gap-6 px-5 py-6 lg:grid-cols-[1.4fr_1fr] lg:px-6">
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand-800">
@@ -139,7 +139,7 @@ export function PipelineView() {
       </section>
 
       {loading ? (
-        <Card className="border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(31,42,36,0.06)]">
+        <Card className="border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(16,24,40,0.06)]">
           <CardBody className="space-y-3">
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
@@ -148,7 +148,7 @@ export function PipelineView() {
         </Card>
       ) : (
         <>
-          <div className="flex gap-2 overflow-x-auto rounded-2xl border border-semantic-border/60 bg-white/70 p-2 pb-2 lg:hidden">
+          <div className="flex gap-2 overflow-x-auto rounded-2xl border border-semantic-border/60 bg-white/78 p-2 pb-2 lg:hidden">
             {columns.map((col) => (
               <button
                 key={col}
@@ -209,7 +209,7 @@ function PipelineColumn({
   onMove: (job: JobRow) => void;
 }) {
   return (
-    <Card className="min-w-[290px] border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(31,42,36,0.06)]">
+    <Card className="min-w-[290px] border-semantic-border/60 bg-white/82 shadow-[0_14px_45px_rgba(16,24,40,0.06)]">
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -221,7 +221,7 @@ function PipelineColumn({
       </CardHeader>
       <CardBody className="space-y-3.5">
         {items.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-semantic-border bg-semantic-surface2/70 p-4">
+          <div className="rounded-2xl border border-dashed border-semantic-border bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(241,246,253,0.92))] p-4">
             <p className="text-sm font-semibold text-semantic-text">{emptyStateTitle(title)}</p>
             <p className="mt-1 text-sm text-semantic-muted">{emptyStateDescription(title)}</p>
           </div>
@@ -229,7 +229,7 @@ function PipelineColumn({
         {items.map((job) => (
           <article
             key={job.id}
-            className="rounded-2xl border border-semantic-border/70 bg-white/82 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.06)] transition hover:border-semantic-border hover:bg-white"
+            className="rounded-2xl border border-semantic-border/70 bg-white/88 p-4 shadow-[0_10px_24px_rgba(16,24,40,0.06)] transition hover:border-semantic-border hover:bg-white"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1">

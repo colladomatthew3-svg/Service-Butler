@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const supabase_js_1 = require("@supabase/supabase-js");
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
-const node_net_1 = __importDefault(require("node:net"));
 function loadEnvFromFile(filePath) {
     if (!node_fs_1.default.existsSync(filePath))
         return;
@@ -49,47 +48,6 @@ function envTrue(name) {
 function pushResult(list, result) {
     list.push(result);
 }
-function parseSupabaseHost(url) {
-    try {
-        return new URL(url).hostname;
-    }
-    catch {
-        return "";
-    }
-}
-function parseSupabasePort(url) {
-    try {
-        const parsed = new URL(url);
-        if (parsed.port)
-            return Number(parsed.port);
-        return parsed.protocol === "https:" ? 443 : 80;
-    }
-    catch {
-        return null;
-    }
-}
-function isLocalSupabaseUrl(url) {
-    const hostname = parseSupabaseHost(url);
-    return hostname === "127.0.0.1" || hostname === "localhost";
-}
-async function isPortListening(host, port) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    return new Promise((resolve) => {
-        const socket = node_net_1.default.createConnection({ host, port });
-        let settled = false;
-        const finish = (result) => {
-            if (settled)
-                return;
-            settled = true;
-            socket.destroy();
-            resolve(result);
-        };
-        socket.setTimeout(1_000);
-        socket.once("connect", () => finish(true));
-        socket.once("timeout", () => finish(false));
-        socket.once("error", () => finish(false));
-    });
-}
 async function checkTableExists(supabase, table) {
     const { error } = await supabase.from(table).select("id", { head: true, count: "exact" }).limit(1);
     if (error) {
@@ -111,7 +69,6 @@ async function main() {
     const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
     const serviceRole = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
     const webhookSecret = String(process.env.WEBHOOK_SHARED_SECRET || "").trim();
-    const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim();
     if (!supabaseUrl || !serviceRole) {
         pushResult(results, {
             name: "supabase_env",
@@ -127,35 +84,12 @@ async function main() {
         status: "PASS",
         detail: "Supabase URL + service role key present."
     });
-    if (!appUrl) {
-        pushResult(results, {
-            name: "app_url",
-            status: "FAIL",
-            detail: "NEXT_PUBLIC_APP_URL is not set.",
-            remediation: "Set NEXT_PUBLIC_APP_URL to the public app origin before pilot activation."
-        });
-    }
-    else if (!/^https?:\/\//i.test(appUrl)) {
-        pushResult(results, {
-            name: "app_url",
-            status: "FAIL",
-            detail: `NEXT_PUBLIC_APP_URL must start with http:// or https:// (got ${appUrl}).`,
-            remediation: "Set NEXT_PUBLIC_APP_URL to a valid origin such as https://app.example.com."
-        });
-    }
-    else {
-        pushResult(results, {
-            name: "app_url",
-            status: "PASS",
-            detail: `NEXT_PUBLIC_APP_URL configured (${appUrl}).`
-        });
-    }
     if (!webhookSecret) {
         pushResult(results, {
             name: "webhook_secret",
-            status: "FAIL",
+            status: "WARN",
             detail: "WEBHOOK_SHARED_SECRET is not set.",
-            remediation: "Set WEBHOOK_SHARED_SECRET. Mutating webhook routes now fail closed without it."
+            remediation: "Set WEBHOOK_SHARED_SECRET before exposing webhook endpoints publicly."
         });
     }
     else {
@@ -170,16 +104,11 @@ async function main() {
     });
     const { error: connectivityError } = await supabase.from("accounts").select("id", { head: true, count: "exact" }).limit(1);
     if (connectivityError) {
-        const host = parseSupabaseHost(supabaseUrl);
-        const port = parseSupabasePort(supabaseUrl);
-        const localDbDown = isLocalSupabaseUrl(supabaseUrl) && port !== null && !(await isPortListening(host, port));
         pushResult(results, {
             name: "supabase_connectivity",
             status: "FAIL",
             detail: `Supabase connectivity check failed (${connectivityError.message}).`,
-            remediation: localDbDown
-                ? "Local Supabase does not appear to be running. Start it with `npm run db:start`, then run `npm run db:push` and retry."
-                : "Confirm URL/key pair and that the target project is reachable."
+            remediation: "Confirm URL/key pair and that the target project is reachable."
         });
         printReport(results);
         process.exit(1);
@@ -260,26 +189,6 @@ async function main() {
         }
     }
     if (tenantId) {
-        const { count: membershipCount, error: membershipError } = await supabase
-            .from("v2_tenant_memberships")
-            .select("id", { count: "exact", head: true })
-            .eq("tenant_id", tenantId)
-            .eq("is_active", true);
-        if (membershipError || !Number(membershipCount || 0)) {
-            pushResult(results, {
-                name: "tenant_memberships",
-                status: "FAIL",
-                detail: membershipError?.message || "No active tenant memberships found.",
-                remediation: "Seed the operator with OPERATOR_USER_ID so at least one active user is wired to the tenant."
-            });
-        }
-        else {
-            pushResult(results, {
-                name: "tenant_memberships",
-                status: "PASS",
-                detail: `Active tenant memberships: ${membershipCount}.`
-            });
-        }
         const { count: territoryCount, error: territoryError } = await supabase
             .from("v2_territories")
             .select("id", { count: "exact", head: true })
@@ -369,6 +278,7 @@ async function main() {
             remediation: "Set HUBSPOT_ACCESS_TOKEN or SB_DISABLE_HUBSPOT=true."
         });
     }
+    const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim();
     const inngestConfigured = Boolean(process.env.INNGEST_EVENT_KEY && process.env.INNGEST_SIGNING_KEY);
     const inngestEndpointConfigured = Boolean(appUrl);
     if (inngestConfigured && inngestEndpointConfigured) {
@@ -381,9 +291,9 @@ async function main() {
     else {
         pushResult(results, {
             name: "inngest",
-            status: "FAIL",
+            status: "WARN",
             detail: "Inngest config is incomplete (missing keys and/or NEXT_PUBLIC_APP_URL).",
-            remediation: "Set INNGEST_EVENT_KEY, INNGEST_SIGNING_KEY, and NEXT_PUBLIC_APP_URL before live pilot activation."
+            remediation: "Set INNGEST_EVENT_KEY, INNGEST_SIGNING_KEY, and NEXT_PUBLIC_APP_URL."
         });
     }
     const failCount = results.filter((r) => r.status === "FAIL").length;

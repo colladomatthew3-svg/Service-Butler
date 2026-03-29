@@ -16,10 +16,14 @@ export async function GET() {
       jobs: [],
       lead_quality_proof: {
         verified_lead_count: 0,
+        network_verified_lead_count: 0,
         review_lead_count: 0,
         rejected_lead_count: 0,
         contactable_lead_count: 0,
         booked_jobs_from_verified_leads: 0,
+        booked_jobs_from_network_leads: 0,
+        network_activated_opportunity_count: 0,
+        network_outreach_event_count: 0,
         booked_jobs_from_review_leads: 0,
         source_quality_preview: [],
         proof_samples: []

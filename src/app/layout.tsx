@@ -1,14 +1,27 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { DM_Sans, Inter } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toast";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap"
+});
+
+const manrope = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+  display: "swap"
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://servicebutler.ai"),
   title: {
-    default: "Service Butler | AI Lead and Job Management for Contractors",
+    default: "Service Butler | Operator Command Center",
     template: "%s | Service Butler"
   },
-  description: "Premium AI lead intake, dispatch, scheduling, and follow-up software for home service businesses.",
+  description: "Premium operator command center for home service businesses, built for lead intake, dispatch, scheduling, and booked-job proof.",
   keywords: [
     "home service software",
     "contractor CRM",
@@ -22,8 +35,8 @@ export const metadata: Metadata = {
     canonical: "/"
   },
   openGraph: {
-    title: "Service Butler | AI Lead and Job Management for Contractors",
-    description: "Run a tighter home service business with faster lead response, cleaner scheduling, and polished customer follow-up.",
+    title: "Service Butler | Operator Command Center",
+    description: "Run a tighter home service business with faster lead response, cleaner scheduling, and booked-job proof.",
     url: "/",
     siteName: "Service Butler",
     locale: "en_US",
@@ -39,8 +52,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Service Butler | AI Lead and Job Management for Contractors",
-    description: "Lead intake, dispatch, scheduling, and follow-up software for premium home service teams.",
+    title: "Service Butler | Operator Command Center",
+    description: "Lead intake, dispatch, scheduling, and booked-job proof for premium home service teams.",
     images: ["/brand/servicebutler_logo.svg"]
   },
   robots: {
@@ -56,16 +69,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      style={
-        {
-          "--font-inter": '"Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          "--font-manrope": '"Manrope", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-        } as React.CSSProperties
-      }
-    >
-      <body>
+    <html lang="en" className={`${inter.variable} ${manrope.variable} scroll-smooth`}>
+      <body className="min-h-screen bg-semantic-bg text-semantic-text antialiased">
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

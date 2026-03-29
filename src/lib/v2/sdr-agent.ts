@@ -10,6 +10,7 @@ import {
   verifyLeadContactCandidate
 } from "@/lib/v2/lead-verification";
 import { dispatchOutreach } from "@/lib/v2/outreach-orchestrator";
+import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { routeOpportunityV2 } from "@/lib/v2/routing-engine";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -170,6 +171,25 @@ function verifyCandidate({
   } else {
     score += 24;
     reasons.push("compliance approved");
+  }
+
+  const proofAuthenticity = classifyProofAuthenticity({
+    sourceType: sourceEvent?.source_type,
+    sourceName: sourceEvent?.source_name,
+    sourceProvenance: sourceEvent?.source_provenance,
+    normalizedPayload: normalizedSource
+  });
+  if (proofAuthenticity === "synthetic") {
+    blocked = true;
+    reasons.push("blocked: synthetic source proof");
+  } else if (proofAuthenticity === "live_provider") {
+    score += 10;
+    reasons.push("live provider proof");
+  } else if (proofAuthenticity === "live_derived") {
+    score += 4;
+    reasons.push("live derived proof");
+  } else {
+    reasons.push("proof authenticity unknown");
   }
 
   const jobLikelihood = toNumber(opportunity.job_likelihood_score, 0);
@@ -456,7 +476,7 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
     sourceEventIds.length > 0
       ? supabase
           .from("v2_source_events")
-          .select("id,compliance_status,normalized_payload")
+          .select("id,compliance_status,source_type,source_name,source_provenance,normalized_payload")
           .in("id", sourceEventIds)
       : Promise.resolve({ data: [] }),
     supabase

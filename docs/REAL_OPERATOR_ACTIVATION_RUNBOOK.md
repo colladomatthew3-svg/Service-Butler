@@ -235,4 +235,7 @@ npm run operator:seed
 npm run operator-healthcheck
 npm run validate-integrations
 npm run operator-test
+npm run proof:servpro
 ```
+
+The proof bundle will land under `output/proof/<timestamp>/` with markdown and JSON summaries you can hand to a buyer or use in a demo review.

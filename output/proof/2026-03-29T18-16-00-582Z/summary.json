@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-03-29T18:16:03.195Z",
+  "proof_timestamp": "2026-03-29T18-16-00-582Z",
+  "proof_dir": "output/proof/2026-03-29T18-16-00-582Z",
+  "status": "fail",
+  "steps": [
+    {
+      "name": "operator-healthcheck",
+      "command": "npm run operator-healthcheck",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-03-29T18:16:00.582Z",
+      "finished_at": "2026-03-29T18:16:01.639Z",
+      "duration_ms": 1057,
+      "stdout_path": "operator-healthcheck/stdout.log",
+      "stderr_path": "operator-healthcheck/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-healthcheck\n> mkdir -p .tmp/operator && npx tsc scripts/operator-healthcheck.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/operator-healthcheck.js\nService Butler Operator Healthcheck\n[PASS] supabase_env: Supabase URL + service role key present.\n[PASS] webhook_secret: WEBHOOK_SHARED_SECRET configured.\n[FAIL] supabase_connectivity: Supabase connectivity check failed (TypeError: fetch failed).\n       remediation: Confirm URL/key pair and that the target project is reachable.",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "validate-integrations",
+      "command": "npm run validate-integrations",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-03-29T18:16:01.641Z",
+      "finished_at": "2026-03-29T18:16:02.786Z",
+      "duration_ms": 1145,
+      "stdout_path": "validate-integrations/stdout.log",
+      "stderr_path": "validate-integrations/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 validate-integrations\n> mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js",
+      "stderr_excerpt": "Operator tenant not found (NY Restoration Group). Run npm run operator:seed.",
+      "signal": null
+    },
+    {
+      "name": "operator-test",
+      "command": "npm run operator-test",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-03-29T18:16:02.787Z",
+      "finished_at": "2026-03-29T18:16:02.967Z",
+      "duration_ms": 180,
+      "stdout_path": "operator-test/stdout.log",
+      "stderr_path": "operator-test/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-test\n> node scripts/operator-test.mjs\n[operator-test] mode=live-partially-configured\n[operator-test] config-note: PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)\n[operator-test] config-note: Inngest keys missing",
+      "stderr_excerpt": "Operator tenant not found (NY Restoration Group). Run operator seed first.",
+      "signal": null
+    },
+    {
+      "name": "qualify-real-leads",
+      "command": "node scripts/qualify-real-leads.mjs",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-03-29T18:16:02.968Z",
+      "finished_at": "2026-03-29T18:16:03.040Z",
+      "duration_ms": 72,
+      "stdout_path": "qualify-real-leads/stdout.log",
+      "stderr_path": "qualify-real-leads/stderr.log",
+      "stdout_excerpt": "",
+      "stderr_excerpt": "real-lead-qualification=FAIL\nOperator tenant not found (NY Restoration Group)",
+      "signal": null
+    }
+  ],
+  "production_readiness": {
+    "name": "production-readiness",
+    "command": "npm run check:production",
+    "status": "pass",
+    "exit_code": 0,
+    "started_at": "2026-03-29T18:16:03.040Z",
+    "finished_at": "2026-03-29T18:16:03.194Z",
+    "duration_ms": 154,
+    "stdout_path": "production-readiness.stdout.log",
+    "stderr_path": "production-readiness.stderr.log",
+    "stdout_excerpt": "> service-butler-ai@0.1.0 check:production\n> bash scripts/production-readiness.sh\nService Butler production readiness\nChecked at 2026-03-29T18:16:03Z\nPASS  NEXT_PUBLIC_APP_URL looks valid\nPASS  NEXT_PUBLIC_SUPABASE_URL is set\nPASS  NEXT_PUBLIC_SUPABASE_ANON_KEY is set\nPASS  SUPABASE_SERVICE_ROLE_KEY is set\nPASS  WEBHOOK_SHARED_SECRET is set\nPASS  V2 rollout flags are enabled (reads + writes)\nWARN  DEMO_MODE is enabled in development\nWARN  BILLING_MODE is disabled",
+    "stderr_excerpt": "",
+    "signal": null
+  }
+}

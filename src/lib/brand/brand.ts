@@ -8,46 +8,47 @@ export const manrope = {
 
 export const brand = {
   colors: {
-    brandGreen: "#82B43D",
-    brandGreenDark: "#6F9935",
-    brandGreenSoft: "#E7F3D1",
-    brandOrange: "#D99D72",
-    brandOrangeSoft: "#F5E0D1",
+    brandGreen: "#2166D9",
+    brandGreenDark: "#184FB4",
+    brandGreenSoft: "#E0ECFF",
+    brandOrange: "#18A68C",
+    brandOrangeSoft: "#DCF5EF",
     neutral: {
-      bg: "#F6F8F7",
+      bg: "#F7F9FC",
       surface: "#FFFFFF",
-      surface2: "#F2F5F3",
-      border: "#D8E0DB",
-      text: "#1E2A24",
-      muted: "#5B6C64"
+      surface2: "#F3F7FC",
+      surface3: "#ECF2F9",
+      border: "#DAE2EC",
+      text: "#18233A",
+      muted: "#64748B"
     },
-    success: "#1F9D55",
-    warning: "#D99100",
-    danger: "#D64545"
+    success: "#1A8E50",
+    warning: "#C98A14",
+    danger: "#C84A4A"
   },
   typography: {
-    body: "Space Grotesk",
-    heading: "Sora",
+    body: "Inter",
+    heading: "DM Sans",
     sizes: {
-      display: "clamp(3.5rem, 5vw, 5.5rem)",
-      h1: "clamp(2.75rem, 4vw, 4.5rem)",
-      h2: "clamp(2rem, 3vw, 3.25rem)",
-      h3: "clamp(1.4rem, 2vw, 1.85rem)",
-      bodyLg: "1.125rem",
+      display: "clamp(3.35rem, 4.9vw, 5.2rem)",
+      h1: "clamp(2.4rem, 3.8vw, 4.15rem)",
+      h2: "clamp(1.8rem, 2.7vw, 2.9rem)",
+      h3: "clamp(1.2rem, 1.75vw, 1.6rem)",
+      bodyLg: "1.08rem",
       body: "1rem",
-      button: "0.95rem",
-      label: "0.82rem"
+      button: "0.93rem",
+      label: "0.8rem"
     }
   },
   radii: {
-    card: "16px",
-    panel: "20px",
-    control: "12px"
+    card: "20px",
+    panel: "28px",
+    control: "14px"
   },
   shadows: {
-    soft: "0 6px 20px rgba(30, 42, 36, 0.08)",
-    card: "0 14px 36px rgba(30, 42, 36, 0.12)",
-    lift: "0 24px 64px rgba(30, 42, 36, 0.16)"
+    soft: "0 1px 2px rgba(15, 23, 42, 0.06)",
+    card: "0 12px 30px rgba(15, 23, 42, 0.08)",
+    lift: "0 18px 44px rgba(15, 23, 42, 0.12)"
   },
   spacing: {
     xs: 8,
@@ -59,6 +60,6 @@ export const brand = {
     "3xl": 72
   },
   layout: {
-    containerMax: "1240px"
+    containerMax: "1440px"
   }
 } as const;

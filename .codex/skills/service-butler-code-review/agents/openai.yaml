@@ -1,0 +1,4 @@
+interface:
+  display_name: "Service Butler Review"
+  short_description: "Code review and regression gate for operator-critical changes"
+  default_prompt: "Use $service-butler-code-review to review this Service Butler change for regressions, trust issues, security risk, and missing tests."

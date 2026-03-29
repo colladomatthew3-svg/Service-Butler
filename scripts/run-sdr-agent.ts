@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { classifyProofAuthenticity } from "../src/lib/v2/proof-authenticity";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -188,6 +189,25 @@ function verifyCandidate({
     reasons.push("compliance approved");
   }
 
+  const proofAuthenticity = classifyProofAuthenticity({
+    sourceType: sourceEvent?.source_type,
+    sourceName: sourceEvent?.source_name,
+    sourceProvenance: sourceEvent?.source_provenance,
+    normalizedPayload: normalized
+  });
+  if (proofAuthenticity === "synthetic") {
+    blocked = true;
+    reasons.push("blocked: synthetic source proof");
+  } else if (proofAuthenticity === "live_provider") {
+    score += 10;
+    reasons.push("live provider proof");
+  } else if (proofAuthenticity === "live_derived") {
+    score += 4;
+    reasons.push("live derived proof");
+  } else {
+    reasons.push("proof authenticity unknown");
+  }
+
   const jobLikelihood = toNumber(opportunity.job_likelihood_score);
   const urgency = toNumber(opportunity.urgency_score);
   const reliability = toNumber(opportunity.source_reliability_score);
@@ -349,7 +369,7 @@ async function main() {
           .in("opportunity_id", opportunityIds)
       : Promise.resolve({ data: [] }),
     sourceEventIds.length > 0
-      ? supabase.from("v2_source_events").select("id,compliance_status,normalized_payload").in("id", sourceEventIds)
+      ? supabase.from("v2_source_events").select("id,compliance_status,source_type,source_name,source_provenance,normalized_payload").in("id", sourceEventIds)
       : Promise.resolve({ data: [] })
   ]);
 

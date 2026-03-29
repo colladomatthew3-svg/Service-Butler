@@ -1,89 +1,81 @@
-import { PageHeader } from "@/components/ui/page-header";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { buttonStyles } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { DataSourcesControlPanel, IntegrationReadinessPanel } from "@/components/dashboard/data-sources-control-panel";
 import { WeatherSettingsForm } from "@/components/dashboard/weather-settings-form";
-import { IntegrationsComingSoon } from "@/components/dashboard/integrations-coming-soon";
-import type { ReactNode } from "react";
+import { PageHeader } from "@/components/ui/page-header";
+
+const readinessHighlights = [
+  {
+    label: "Data source truth",
+    detail: "Every connector family is surfaced here, including partial and simulated feeds."
+  },
+  {
+    label: "Live-safe integrations",
+    detail: "Twilio, HubSpot, Smartlead, Inngest, Stripe, Supabase, and webhook auth are disclosed honestly."
+  },
+  {
+    label: "Service area control",
+    detail: "Weather and territory configuration stay visible because they shape routing and urgency."
+  }
+];
 
 export default function DashboardSettingsPage() {
   return (
     <div className="space-y-6">
-      <PageHeader title="Settings" subtitle="Set defaults once so dispatch and follow-up run faster every day." />
+      <PageHeader
+        eyebrow="System Controls"
+        title="Settings"
+        subtitle="Configure the acquisition-ready control plane, live-safe integrations, and service-area intelligence from one operator surface."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="brand">Pilot ready</Badge>
+            <Link href="/dashboard/network" className={buttonStyles({ size: "sm", variant: "secondary" })}>
+              Open network overview
+            </Link>
+          </div>
+        }
+      />
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">Business Profile</h2>
-          </CardHeader>
-          <CardBody className="space-y-4">
-            <Field label="Business name">
-              <Input defaultValue="ServiceButler Demo Plumbing" />
-            </Field>
-            <Field label="Primary phone">
-              <Input defaultValue="+1 (813) 555-0182" />
-            </Field>
-            <Field label="Review link">
-              <Input defaultValue="https://g.page/r/example/review" />
-            </Field>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h2 className="dashboard-section-title text-semantic-text">Dispatch Rules</h2>
-          </CardHeader>
-          <CardBody className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Quiet hours start">
-                <Input type="time" defaultValue="20:00" />
-              </Field>
-              <Field label="Quiet hours end">
-                <Input type="time" defaultValue="07:00" />
-              </Field>
-            </div>
-            <Field label="Default response channel">
-              <Select defaultValue="SMS">
-                <option value="SMS">SMS first</option>
-                <option value="EMAIL">Email first</option>
-              </Select>
-            </Field>
-            <Field label="Dispatcher notes template">
-              <Textarea rows={5} defaultValue={"Issue:\nUrgency:\nBest arrival window:\nSpecial access instructions:"} />
-            </Field>
-          </CardBody>
-        </Card>
+      <section className="grid gap-4 xl:grid-cols-3">
+        {readinessHighlights.map((item) => (
+          <Card key={item.label}>
+            <CardBody className="px-5 py-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">{item.label}</p>
+              <p className="mt-2 text-sm leading-6 text-semantic-text">{item.detail}</p>
+            </CardBody>
+          </Card>
+        ))}
       </section>
 
-      <Card>
-        <CardHeader>
-          <h2 className="dashboard-section-title text-semantic-text">Weather Preferences</h2>
-          <p className="mt-1 text-sm text-semantic-muted">Forecast data drives urgency and demand signals on lead records.</p>
-        </CardHeader>
-        <CardBody>
-          <WeatherSettingsForm />
-        </CardBody>
-      </Card>
+      <section id="data-sources" className="space-y-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Data sources</p>
+          <h2 className="mt-1 text-base font-semibold text-semantic-text">Restoration intelligence control plane</h2>
+          <p className="mt-1 text-sm text-semantic-muted">
+            Operators can add, inspect, test, and run sources here while buyers see the same runtime truth reflected in the network proof view.
+          </p>
+        </div>
+        <DataSourcesControlPanel />
+      </section>
 
-      <IntegrationsComingSoon />
+      <section id="integrations" className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+        <Card className="border-brand-500/18 bg-[linear-gradient(120deg,rgba(229,236,251,0.92),rgba(255,255,255,0.98))]">
+          <CardHeader>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Service area</p>
+            <h2 className="mt-1 text-base font-semibold text-semantic-text">Weather and routing context</h2>
+            <p className="mt-1 text-sm text-semantic-muted">
+              Forecast inputs still drive urgency and demand scoring, so the operator setup stays close to the live data-source controls.
+            </p>
+          </CardHeader>
+          <CardBody>
+            <WeatherSettingsForm />
+          </CardBody>
+        </Card>
 
-      <div className="flex flex-wrap gap-3">
-        <Button size="lg">Save Changes</Button>
-        <Button variant="secondary" size="lg">
-          Test Auto Follow-Up
-        </Button>
-      </div>
+        <IntegrationReadinessPanel />
+      </section>
     </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-semantic-muted">{label}</span>
-      {children}
-    </label>
   );
 }

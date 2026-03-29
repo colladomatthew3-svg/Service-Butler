@@ -70,6 +70,13 @@ fi
 require_env "NEXT_PUBLIC_SUPABASE_URL"
 require_env "NEXT_PUBLIC_SUPABASE_ANON_KEY"
 require_env "SUPABASE_SERVICE_ROLE_KEY"
+require_env "WEBHOOK_SHARED_SECRET"
+
+if is_enabled "${SB_USE_V2_WRITES:-off}" && is_enabled "${SB_USE_V2_READS:-off}"; then
+  pass "V2 rollout flags are enabled (reads + writes)"
+else
+  fail "V2 rollout flags must both be enabled: SB_USE_V2_READS=true and SB_USE_V2_WRITES=true"
+fi
 
 if is_enabled "${DEMO_MODE:-off}"; then
   if [[ "${NODE_ENV:-development}" == "development" ]]; then
@@ -93,7 +100,7 @@ else
 fi
 
 if [[ -n "${SERVICE_BUTLER_ENRICHMENT_URL:-}" ]]; then
-  pass "Premium enrichment endpoint is configured"
+  pass "Premium enrichment endpoint is configured for live-safe enrichment fallback"
   if [[ -n "${SERVICE_BUTLER_ENRICHMENT_PROVIDER:-}" ]]; then
     pass "Premium enrichment provider label is configured"
   else
@@ -112,9 +119,47 @@ elif [[ -z "${POSTMARK_SERVER_TOKEN:-}" ]]; then
   warn "No SendGrid fallback configured"
 fi
 
-optional_group "Twilio" "TWILIO_ACCOUNT_SID" "TWILIO_AUTH_TOKEN" "TWILIO_PHONE_NUMBER"
+if is_enabled "${SB_DISABLE_TWILIO:-off}"; then
+  pass "Twilio is explicitly disabled for live-safe production"
+elif [[ -n "${TWILIO_ACCOUNT_SID:-}" && -n "${TWILIO_AUTH_TOKEN:-}" && -n "${TWILIO_PHONE_NUMBER:-}" ]]; then
+  if is_enabled "${SB_TWILIO_SAFE_MODE:-off}"; then
+    pass "Twilio is configured in safe mode"
+  else
+    warn "Twilio credentials are present but SB_TWILIO_SAFE_MODE is not enabled"
+  fi
+else
+  warn "Twilio is not configured; outbound SMS/voice stays disabled"
+fi
+
+if is_enabled "${SB_DISABLE_HUBSPOT:-off}"; then
+  pass "HubSpot is explicitly disabled for live-safe production"
+elif [[ -n "${HUBSPOT_ACCESS_TOKEN:-}" ]]; then
+  if is_enabled "${SB_HUBSPOT_SAFE_MODE:-off}"; then
+    pass "HubSpot is configured in safe mode"
+  else
+    warn "HubSpot access token is present but SB_HUBSPOT_SAFE_MODE is not enabled"
+  fi
+else
+  warn "HubSpot is not configured; CRM sync stays disabled"
+fi
+
 optional_group "Smartlead" "SMARTLEAD_API_KEY"
 optional_group "Inngest" "INNGEST_EVENT_KEY" "INNGEST_SIGNING_KEY"
+
+tenant_report="$(node scripts/production-readiness-tenant.mjs 2>&1 || true)"
+if [[ -n "${tenant_report}" ]]; then
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    level="${line%%|*}"
+    message="${line#*|}"
+    case "${level}" in
+      pass) pass "${message}" ;;
+      warn) warn "${message}" ;;
+      fail) fail "${message}" ;;
+      *) warn "Tenant readiness probe output: ${line}" ;;
+    esac
+  done <<< "${tenant_report}"
+fi
 
 printf '\nSummary: %d pass, %d warn, %d fail\n' "$pass_count" "$warn_count" "$fail_count"
 

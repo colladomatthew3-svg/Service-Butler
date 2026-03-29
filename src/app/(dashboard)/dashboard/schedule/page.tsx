@@ -61,7 +61,7 @@ export default async function SchedulePage() {
     <div className="space-y-6">
       <PageHeader title="Schedule" subtitle="Keep your crew booked, visible, and on time." />
 
-      <section className="overflow-hidden rounded-[1.75rem] border border-semantic-border/60 bg-white/72 shadow-[0_18px_60px_rgba(31,42,36,0.08)]">
+      <section className="overflow-hidden rounded-[1.75rem] border border-brand-500/18 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
         <div className="grid gap-6 px-5 py-6 lg:grid-cols-[1.4fr_1fr] lg:px-6">
           <div className="space-y-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand-800">
@@ -115,7 +115,7 @@ export default async function SchedulePage() {
         ]}
       />
 
-      <Card className="overflow-hidden border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(31,42,36,0.06)]">
+      <Card className="overflow-hidden border-semantic-border/60 bg-white/72 shadow-[0_14px_45px_rgba(16,24,40,0.06)]">
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -139,7 +139,7 @@ export default async function SchedulePage() {
             />
           )}
           {Object.entries(groups).map(([day, items]) => (
-            <section key={day} className="space-y-3 rounded-2xl border border-semantic-border/60 bg-semantic-surface2/35 p-4">
+            <section key={day} className="space-y-3 rounded-2xl border border-semantic-border/60 bg-white/68 p-4">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-semantic-muted">{day}</h3>
                 <Badge variant="default">{items.length}</Badge>

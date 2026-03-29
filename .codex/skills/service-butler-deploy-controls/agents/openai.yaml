@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy Controls"
+  short_description: "Release gate and deployment workflow for Service Butler"
+  default_prompt: "Use $service-butler-deploy-controls to run the right release gate for this Service Butler change and decide whether it is safe to deploy."

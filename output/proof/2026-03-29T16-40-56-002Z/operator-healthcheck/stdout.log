@@ -1,0 +1,11 @@
+
+> service-butler-ai@0.1.0 operator-healthcheck
+> mkdir -p .tmp/operator && npx tsc scripts/operator-healthcheck.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/operator-healthcheck.js
+
+
+Service Butler Operator Healthcheck
+
+[PASS] supabase_env: Supabase URL + service role key present.
+[PASS] webhook_secret: WEBHOOK_SHARED_SECRET configured.
+[FAIL] supabase_connectivity: Supabase connectivity check failed (TypeError: fetch failed).
+       remediation: Confirm URL/key pair and that the target project is reachable.

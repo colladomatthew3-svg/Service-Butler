@@ -2,6 +2,9 @@ import { generateSignals } from "@/lib/services/intent-engine";
 import { enrichOpportunityLive, getEnrichmentProvider } from "@/lib/services/enrichment";
 import { distanceToMarketMiles, floodProneTriStateMarkets, getTriStateMarketsForSignal } from "@/lib/services/tri-state-markets";
 import { geocodeLocation, getForecastByLatLng, type ForecastSummary } from "@/lib/services/weather";
+import { toUsStateCode } from "@/lib/services/us-states";
+import { getConnectorByKey } from "@/lib/v2/connectors/registry";
+import type { ConnectorNormalizedEvent, ConnectorPullInput } from "@/lib/v2/connectors/types";
 
 export type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
 export type ScannerMode = "demo" | "live";
@@ -35,6 +38,22 @@ export type OpportunityAddress = {
   postalCode: string;
   display: string;
   quality: "exact" | "approximate";
+};
+
+export type ScannerRuntimeMode = "fully-live" | "live-partial" | "simulated";
+
+type SignalMarket = {
+  id: string;
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  county: string;
+  neighborhood: string;
+  floodProfile: string;
+  lat: number;
+  lon: number;
+  aliases: string[];
 };
 
 type DemoIncidentTemplate = {
@@ -252,21 +271,54 @@ function distanceSummary(index: number, locationText: string) {
   return `${miles} mi from ${locationText}`;
 }
 
+function inferStateCodeFromLocation(value: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return null;
+
+  const commaParts = normalized
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  for (const part of [...commaParts].reverse()) {
+    const explicitCode = toUsStateCode(part);
+    if (explicitCode) return explicitCode;
+
+    const chunkCode = part
+      .split(/\s+/)
+      .map((piece) => toUsStateCode(piece))
+      .find(Boolean);
+    if (chunkCode) return chunkCode;
+  }
+
+  const uppercaseMatch = normalized.match(/\b([A-Z]{2})\b/);
+  return toUsStateCode(uppercaseMatch?.[1] || null);
+}
+
 function parseMarketLocation(location: string) {
   const normalized = String(location || "").trim();
   const zipMatch = normalized.match(/\b\d{5}\b/);
   if (zipMatch?.[0] && DEMO_MARKET_LOOKUP[zipMatch[0]]) {
     return DEMO_MARKET_LOOKUP[zipMatch[0]];
   }
-  const stateMatch = normalized.match(/\b([A-Z]{2})\b/);
-  const firstPart = normalized.split(",")[0]?.trim() || "Brentwood";
-  const city = /^\d{5}$/.test(firstPart) ? "Brentwood" : firstPart;
+  const state = inferStateCodeFromLocation(normalized) || "";
+  const parts = normalized.split(",").map((part) => part.trim()).filter(Boolean);
+  const firstPart = parts[0] || "Service Area";
+  const city = /^\d{5}$/.test(firstPart) ? "Service Area" : firstPart;
 
   return {
     city,
-    state: stateMatch?.[1] || "NY",
-    postalCode: zipMatch?.[0] || "11717"
+    state,
+    postalCode: zipMatch?.[0] || ""
   };
+}
+
+function formatRegion(state: string, postalCode: string) {
+  return [state, postalCode].filter(Boolean).join(" ");
+}
+
+function formatStreetAddress(address: string, city: string, state: string, postalCode: string) {
+  return [address, city, formatRegion(state, postalCode)].filter(Boolean).join(", ");
 }
 
 function generateDemoAddress(seed: string, location: string) {
@@ -276,17 +328,17 @@ function generateDemoAddress(seed: string, location: string) {
   const suffixes = ["Drive", "Lane", "Avenue", "Court", "Road", "Place"];
   const street = streets[hash(`${seed}:street`) % streets.length];
   const suffix = suffixes[hash(`${seed}:suffix`) % suffixes.length];
-  return `${number} ${street} ${suffix}, ${city}, ${state} ${postalCode}`;
+  return formatStreetAddress(`${number} ${street} ${suffix}`, city, state, postalCode);
 }
 
 function parseAddressParts(address: string) {
   const [street = "", city = "", region = ""] = address.split(",").map((part) => part.trim());
-  const regionMatch = region.match(/^([A-Z]{2})\s+(\d{5})$/);
+  const regionMatch = region.match(/^([A-Z]{2})(?:\s+(\d{5}))?$/);
   return {
     street,
     city,
-    state: regionMatch?.[1] || "NY",
-    postalCode: regionMatch?.[2] || "11717"
+    state: regionMatch?.[1] || inferStateCodeFromLocation(region) || "",
+    postalCode: regionMatch?.[2] || region.match(/\b\d{5}\b/)?.[0] || ""
   };
 }
 
@@ -312,18 +364,93 @@ function parseMarketLocationParts(value: string) {
     return DEMO_MARKET_LOOKUP[zipMatch[0]];
   }
   const stateZipMatch = last.match(/^([A-Z]{2})(?:\s+(\d{5}))?$/);
-  const state = stateZipMatch?.[1] || normalized.match(/\b([A-Z]{2})\b/)?.[1] || "NY";
-  const postalCode = stateZipMatch?.[2] || zipMatch?.[0] || parseMarketLocation(normalized).postalCode;
+  const market = parseMarketLocation(normalized);
+  const state = stateZipMatch?.[1] || inferStateCodeFromLocation(normalized) || market.state;
+  const postalCode = stateZipMatch?.[2] || zipMatch?.[0] || market.postalCode;
   const city =
     parts.length >= 2
-      ? parts[parts.length - 2] || parseMarketLocation(normalized).city
-      : parseMarketLocation(normalized).city;
+      ? parts[parts.length - 2] || market.city
+      : market.city;
 
   return {
     city,
     state,
     postalCode
   };
+}
+
+function isTriStateServiceArea(serviceAreaLabel: string, lat?: number | null, lon?: number | null) {
+  const state = inferStateCodeFromLocation(serviceAreaLabel);
+  if (state && ["NY", "NJ", "CT"].includes(state)) return true;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  return Number(lat) >= 39 && Number(lat) <= 42.8 && Number(lon) >= -75.6 && Number(lon) <= -71.4;
+}
+
+function buildServiceAreaMarkets({
+  serviceAreaLabel,
+  lat,
+  lon,
+  limit
+}: {
+  serviceAreaLabel: string;
+  lat: number;
+  lon: number;
+  limit: number;
+}): SignalMarket[] {
+  if (isTriStateServiceArea(serviceAreaLabel, lat, lon)) {
+    return getTriStateMarketsForSignal({
+      serviceAreaLabel,
+      serviceLat: lat,
+      serviceLon: lon,
+      limit
+    });
+  }
+
+  const generated = Array.from({ length: Math.min(limit, 3) }, (_, index) => {
+    const latOffset = [0, 0.0115, -0.013][index] ?? 0.0075 * index;
+    const lonOffset = [0, 0.014, -0.016][index] ?? -0.009 * index;
+    const addressInfo = resolveOpportunityAddress({
+      locationText: "",
+      lat: lat + latOffset,
+      lon: lon + lonOffset,
+      serviceAreaLabel,
+      seed: `${serviceAreaLabel}:${index}`
+    });
+    const marketCity = addressInfo.city || parseMarketLocationParts(serviceAreaLabel).city || "Service Area";
+
+    return {
+      id: `service-area-${index}`,
+      address: addressInfo.address,
+      city: marketCity,
+      state: addressInfo.state || parseMarketLocationParts(serviceAreaLabel).state || "",
+      postalCode: addressInfo.postalCode || parseMarketLocationParts(serviceAreaLabel).postalCode || "",
+      county: `${marketCity} market`,
+      neighborhood: index === 0 ? `${marketCity} core` : index === 1 ? `North ${marketCity}` : `South ${marketCity}`,
+      floodProfile: "Storm runoff and localized water intrusion exposure",
+      lat: Number((lat + latOffset).toFixed(4)),
+      lon: Number((lon + lonOffset).toFixed(4)),
+      aliases: [marketCity.toLowerCase(), serviceAreaLabel.toLowerCase()]
+    } satisfies SignalMarket;
+  });
+
+  return generated;
+}
+
+function buildFloodSignalMarkets({
+  serviceAreaLabel,
+  lat,
+  lon,
+  limit
+}: {
+  serviceAreaLabel: string;
+  lat: number;
+  lon: number;
+  limit: number;
+}) {
+  if (isTriStateServiceArea(serviceAreaLabel, lat, lon)) {
+    return floodProneTriStateMarkets(lat, lon, limit);
+  }
+  return buildServiceAreaMarkets({ serviceAreaLabel, lat, lon, limit });
 }
 
 export function resolveOpportunityAddress({
@@ -727,6 +854,179 @@ function createDemoOpportunities({
   }
 
   return out.sort((a, b) => b.intentScore - a.intentScore).slice(0, limit);
+}
+
+function categoryFromConnectorEvent(event: ConnectorNormalizedEvent, serviceLine?: string) {
+  const haystack = `${event.eventCategory || ""} ${event.likelyJobType || ""} ${serviceLine || event.serviceLine || ""}`.toLowerCase();
+  if (haystack.includes("restor") || haystack.includes("water") || haystack.includes("flood") || haystack.includes("fire")) {
+    return "restoration" as ScannerCategory;
+  }
+  if (haystack.includes("plumb") || haystack.includes("freeze") || haystack.includes("pipe") || haystack.includes("sewer")) {
+    return "plumbing" as ScannerCategory;
+  }
+  if (haystack.includes("demo") || haystack.includes("collapse") || haystack.includes("board-up")) {
+    return "demolition" as ScannerCategory;
+  }
+  if (haystack.includes("asbestos") || haystack.includes("hazmat") || haystack.includes("smoke")) {
+    return "asbestos" as ScannerCategory;
+  }
+  return "general" as ScannerCategory;
+}
+
+function tagsFromConnectorEvent(event: ConnectorNormalizedEvent) {
+  const tags = [
+    event.eventCategory,
+    event.eventType,
+    event.sourceName,
+    event.likelyJobType,
+    ...(event.serviceLineCandidates || [])
+  ]
+    .map((value) => String(value || "").trim().toLowerCase().replace(/\s+/g, "-"))
+    .filter(Boolean);
+
+  return Array.from(new Set(tags));
+}
+
+function connectorEventToOpportunity({
+  connectorKey,
+  event,
+  serviceAreaLabel,
+  forecast
+}: {
+  connectorKey: string;
+  event: ConnectorNormalizedEvent;
+  serviceAreaLabel: string;
+  forecast?: ForecastSummary | null;
+}) {
+  const connector = getConnectorByKey(connectorKey);
+  if (!connector) return null;
+
+  const classification = connector.classify(event);
+  const category = categoryFromConnectorEvent(event, classification.serviceLine);
+  const tags = tagsFromConnectorEvent(event);
+  const addressInfo = resolveOpportunityAddress({
+    locationText: event.addressText || event.locationText || "",
+    lat: event.latitude ?? null,
+    lon: event.longitude ?? null,
+    serviceAreaLabel,
+    seed: event.dedupeKey
+  });
+
+  const locationText =
+    addressInfo.display ||
+    event.locationText ||
+    formatStreetAddress(addressInfo.address, addressInfo.city, addressInfo.state, addressInfo.postalCode) ||
+    serviceAreaLabel;
+  const serviceType = displayService(category);
+  const eventSeverity = Math.max(
+    Number(event.severityHint || event.urgencyHint || event.severity || 0),
+    Number(event.sourceReliability || 0) * 0.6
+  );
+  const score = scoreOpportunity(category, tags, forecast, Math.max(56, Math.round(eventSeverity || 58)));
+  const intentScore = clamp(score.intentScore + Math.round(eventSeverity * 0.18));
+  const confidence = clamp(Math.max(score.confidence, Number(event.sourceReliability || 60)));
+  const reasonSummary = `${event.title} from ${event.sourceName || connectorKey} indicates ${String(
+    classification.serviceLine || event.serviceLine || "general"
+  ).toLowerCase()} demand near ${addressInfo.city || serviceAreaLabel}.`;
+
+  return {
+    id: mkId([connectorKey, event.dedupeKey, event.occurredAt]),
+    source: connectorKey === "weather.noaa" ? "weather" : "public_feed",
+    category,
+    title: event.title,
+    description: event.description || `${event.eventType.replace(/_/g, " ")} detected`,
+    locationText,
+    lat: event.latitude ?? null,
+    lon: event.longitude ?? null,
+    intentScore,
+    priorityLabel: priorityLabelForOpportunity({
+      intentScore,
+      tags,
+      title: event.title,
+      description: event.description || "",
+      reasonSummary,
+      raw: {
+        event_category: event.eventCategory,
+        urgency: event.urgencyHint,
+        service_type: serviceType
+      }
+    }),
+    confidence,
+    tags,
+    nextAction: suggestedNextAction(category, intentScore, locationText),
+    reasonSummary,
+    recommendedCreateMode: intentScore >= 80 ? "job" : "lead",
+    recommendedScheduleIso: intentScore >= 72 ? suggestedSchedule(intentScore, 75) : null,
+    raw: {
+      connector_key: connectorKey,
+      event_type: event.eventType,
+      event_category: event.eventCategory,
+      signal_source: event.sourceName || connectorKey,
+      source_provenance: event.sourceProvenance,
+      service_type: serviceType,
+      urgency_window: event.estimatedResponseWindow || "Today",
+      distance_miles: null,
+      property_address: addressInfo.address,
+      property_city: addressInfo.city,
+      property_state: addressInfo.state,
+      property_postal_code: addressInfo.postalCode,
+      address_quality: addressInfo.quality,
+      service_area_label: serviceAreaLabel,
+      neighborhood: event.city || addressInfo.city,
+      weather_signal: event.eventCategory || event.eventType,
+      demand_signal: event.likelyJobType || classification.opportunityType,
+      demand_explanation: event.distressContextSummary || reasonSummary,
+      normalized_payload: event.normalizedPayload,
+      raw_payload: event.rawPayload
+    },
+    createdAtIso: event.occurredAt
+  } satisfies ScannerOpportunity;
+}
+
+async function fetchOpenFemaOpportunities({
+  serviceAreaLabel,
+  categories,
+  forecast,
+  limit
+}: {
+  serviceAreaLabel: string;
+  categories: ScannerCategory[];
+  forecast?: ForecastSummary | null;
+  limit: number;
+}): Promise<ScannerOpportunity[]> {
+  const connector = getConnectorByKey("disaster.openfema");
+  const stateCode = inferStateCodeFromLocation(serviceAreaLabel);
+  if (!connector || !stateCode) return [];
+
+  const endpoint = new URL("https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries");
+  endpoint.searchParams.set("$top", String(Math.max(10, limit)));
+  endpoint.searchParams.set("$orderby", "declarationDate desc");
+  endpoint.searchParams.set("$filter", `state eq '${stateCode}'`);
+
+  const input: ConnectorPullInput = {
+    tenantId: "scanner",
+    sourceId: `scanner-openfema-${stateCode.toLowerCase()}`,
+    sourceType: "disaster",
+    config: {
+      endpoint: endpoint.toString(),
+      source_name: `${stateCode} OpenFEMA Disaster Declarations`,
+      source_provenance: "fema.gov/api/open",
+      terms_status: "approved"
+    }
+  };
+
+  const records = await connector.pull(input).catch(() => []);
+  if (records.length === 0) return [];
+
+  const normalized = await connector.normalize(records, input).catch(() => []);
+  const opportunities: ScannerOpportunity[] = [];
+  for (const event of normalized) {
+    const opportunity = connectorEventToOpportunity({ connectorKey: connector.key, event, serviceAreaLabel, forecast });
+    if (!opportunity || !categories.includes(opportunity.category)) continue;
+    opportunities.push(opportunity);
+    if (opportunities.length >= limit) break;
+  }
+  return opportunities;
 }
 
 type NwsAlertsResponse = {
@@ -1382,11 +1682,10 @@ async function fetchForecastDrivenOpportunities({
 
   if (signals.length === 0) return [];
 
-  const markets = getTriStateMarketsForSignal({
-    areaDesc: serviceAreaLabel,
+  const markets = buildServiceAreaMarkets({
     serviceAreaLabel,
-    serviceLat: lat,
-    serviceLon: lon,
+    lat,
+    lon,
     limit: Math.min(3, limit)
   });
 
@@ -1490,7 +1789,12 @@ async function fetchFloodClusterOpportunities({
   const thresholdActive = precipNow >= 60 || wetHours >= 2;
   if (!thresholdActive) return [];
 
-  const markets = floodProneTriStateMarkets(lat, lon, Math.min(3, limit));
+  const markets = buildFloodSignalMarkets({
+    serviceAreaLabel,
+    lat,
+    lon,
+    limit: Math.min(3, limit)
+  });
   const out: ScannerOpportunity[] = [];
 
   for (const market of markets) {
@@ -1595,22 +1899,41 @@ export async function runScanner({
   const pickedCategories = normalizeCategories(categories);
   const safeLimit = Math.max(1, Math.min(50, Number(limit) || 20));
   const radiusMiles = Math.max(1, Math.min(250, Number(radius) || 25));
+  const warnings: string[] = [];
 
   let resolved = parseLatLon(location, lat ?? null, lon ?? null);
   if (!resolved && location.trim()) {
     const geo = await geocodeLocation(location.trim()).catch(() => null);
     if (geo) {
-      resolved = { lat: geo.lat, lon: geo.lng, label: geo.label };
+      resolved = { lat: geo.lat, lon: geo.lng, label: location.trim() || geo.label };
     }
+  }
+  if (mode === "live" && !resolved) {
+    warnings.push("Scanner could not resolve the service area, so live public feeds may be incomplete.");
   }
 
   let forecast: ForecastSummary | null = null;
   if (resolved) {
     forecast = await getForecastByLatLng(resolved.lat, resolved.lon).catch(() => null);
   }
+  if (mode === "live" && resolved && !forecast) {
+    warnings.push("Weather forecast is temporarily unavailable, so only direct public incident feeds are being used.");
+  }
+
+  if (mode === "live" && !resolved) {
+    return {
+      mode,
+      requestedMode: mode,
+      runtimeMode: "live-partial" as ScannerRuntimeMode,
+      warnings,
+      weatherRisk: weatherRisk(forecast),
+      opportunities: [] as ScannerOpportunity[],
+      locationResolved: null
+    };
+  }
 
   if (mode === "live" && resolved) {
-    const [nws, forecastDriven, floodClusters, fdnyFire, usgs, eonet] = await Promise.all([
+    const [nws, forecastDriven, floodClusters, fdnyFire, usgs, eonet, openFema] = await Promise.all([
       fetchNwsOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
@@ -1660,12 +1983,23 @@ export async function runScanner({
         categories: pickedCategories,
         forecast,
         limit: safeLimit
+      }),
+      fetchOpenFemaOpportunities({
+        serviceAreaLabel: resolved.label,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
       })
     ]);
 
-    const merged = [...nws, ...forecastDriven, ...floodClusters, ...fdnyFire, ...usgs, ...eonet]
+    const merged = [...nws, ...forecastDriven, ...floodClusters, ...fdnyFire, ...usgs, ...eonet, ...openFema]
       .sort((a, b) => b.intentScore - a.intentScore)
       .slice(0, safeLimit);
+
+    const directLiveCount = nws.length + fdnyFire.length + usgs.length + eonet.length + openFema.length;
+    const derivedLiveCount = forecastDriven.length + floodClusters.length;
+    const runtimeMode: ScannerRuntimeMode =
+      directLiveCount > 0 ? "fully-live" : derivedLiveCount > 0 ? "live-partial" : "live-partial";
 
     if (merged.length > 0) {
       const enriched = await Promise.all(
@@ -1683,7 +2017,10 @@ export async function runScanner({
             city: propertyCity,
             state: propertyState,
             postalCode: propertyPostalCode,
-            serviceType: String(opportunity.raw?.service_type || displayCampaignService(opportunity.category, campaignMode))
+            serviceType: String(opportunity.raw?.service_type || displayCampaignService(opportunity.category, campaignMode)),
+            lat: opportunity.lat,
+            lon: opportunity.lon,
+            county: typeof opportunity.raw?.county === "string" ? opportunity.raw.county : null
           }).catch(() => null);
 
           if (!enrichment) return opportunity;
@@ -1700,11 +2037,26 @@ export async function runScanner({
 
       return {
         mode,
+        requestedMode: mode,
+        runtimeMode,
+        warnings,
         weatherRisk: weatherRisk(forecast),
         opportunities: enriched,
         locationResolved: resolved
       };
     }
+
+    warnings.push("No live public incident signals were returned for this scan, so the queue is empty instead of showing synthetic demo leads.");
+
+    return {
+      mode,
+      requestedMode: mode,
+      runtimeMode,
+      warnings,
+      weatherRisk: weatherRisk(forecast),
+      opportunities: [] as ScannerOpportunity[],
+      locationResolved: resolved
+    };
   }
 
   const opportunities = createDemoOpportunities({
@@ -1718,6 +2070,9 @@ export async function runScanner({
 
   return {
     mode: "demo" as ScannerMode,
+    requestedMode: mode,
+    runtimeMode: "simulated" as ScannerRuntimeMode,
+    warnings,
     weatherRisk: weatherRisk(forecast),
     opportunities,
     locationResolved: resolved

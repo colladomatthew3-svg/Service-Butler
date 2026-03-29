@@ -188,7 +188,7 @@ function neighborhoodFromAddress(address: string, city: string) {
   return city ? `${city} service area` : "Service area";
 }
 
-function buildUsgsAerialImageUrl(lat?: number | null, lon?: number | null) {
+export function buildUsgsAerialImageUrl(lat?: number | null, lon?: number | null) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
   const lng = Number(lon);
@@ -209,48 +209,90 @@ function buildUsgsAerialImageUrl(lat?: number | null, lon?: number | null) {
   return url.toString();
 }
 
+function publicAddressLabel(input: {
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}) {
+  return [input.address, input.city, [input.state, input.postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+}
+
+export function buildPublicPropertyFallback(input: {
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  serviceType: string;
+  lat?: number | null;
+  lon?: number | null;
+  county?: string | null;
+  propertyValueEstimate?: string | null;
+  propertyValueVerification?: EnrichmentVerification;
+}) {
+  const normalizedAddress = publicAddressLabel(input);
+  if (!normalizedAddress) return null;
+
+  const propertyImageUrl = buildUsgsAerialImageUrl(input.lat, input.lon);
+
+  return {
+    provider: "US Census geocoder + ACS + USGS imagery",
+    simulated: false,
+    propertyAddress: normalizedAddress,
+    city: input.city,
+    state: input.state,
+    postalCode: input.postalCode,
+    neighborhood: neighborhoodFromAddress(normalizedAddress, input.city),
+    propertyImageLabel: propertyImageUrl ? "USGS aerial image" : `${input.serviceType} property context`,
+    propertyImageUrl,
+    propertyImageSource: propertyImageUrl ? "USGS The National Map imagery" : "Public property context",
+    propertyValueEstimate: input.propertyValueEstimate ?? null,
+    propertyValueVerification: input.propertyValueVerification || "public-record",
+    ownerContact: null,
+    notes: [
+      input.county ? `County context: ${input.county}.` : "Address context is based on the live service-area signal.",
+      propertyImageUrl
+        ? "Property imagery is sourced from public USGS aerial imagery."
+        : "No public aerial image was available for this signal, so only address-level context is shown.",
+      input.propertyValueEstimate
+        ? "Property value is a public ACS estimate, not a parcel-level appraisal."
+        : "No public ZIP-level valuation estimate was available for this address.",
+      "No verified homeowner contact data is shown because only free public sources are enabled."
+    ]
+  } satisfies EnrichmentRecord;
+}
+
 export async function enrichOpportunityLive(input: {
   address: string;
   city: string;
   state: string;
   postalCode: string;
   serviceType: string;
+  lat?: number | null;
+  lon?: number | null;
+  county?: string | null;
 }) : Promise<EnrichmentRecord | null> {
   const geocoded = await geocodeWithCensus(input.address, input.city, input.state, input.postalCode);
   const normalizedAddress = geocoded?.matchedAddress || [input.address, input.city, input.state, input.postalCode].filter(Boolean).join(", ");
   const normalizedCity = geocoded?.city || input.city;
   const normalizedState = geocoded?.state || input.state;
   const normalizedPostal = geocoded?.postalCode || input.postalCode;
-  const county = geocoded?.county || null;
+  const county = geocoded?.county || input.county || null;
   const zipValue = await fetchZipMedianHomeValue(normalizedPostal);
-
-  if (!normalizedAddress) return null;
-
-  const publicRecord: EnrichmentRecord = {
-    provider: "US Census geocoder + ACS",
-    simulated: false,
-    propertyAddress: normalizedAddress,
+  const publicRecord = buildPublicPropertyFallback({
+    address: normalizedAddress,
     city: normalizedCity,
     state: normalizedState,
     postalCode: normalizedPostal,
-    neighborhood: neighborhoodFromAddress(normalizedAddress, normalizedCity),
-    propertyImageLabel: "USGS aerial image",
-    propertyImageUrl: buildUsgsAerialImageUrl(geocoded?.lat, geocoded?.lon),
-    propertyImageSource: "USGS NAIP imagery",
+    serviceType: input.serviceType,
+    lat: geocoded?.lat ?? input.lat,
+    lon: geocoded?.lon ?? input.lon,
+    county,
     propertyValueEstimate: formatCurrency(zipValue),
-    propertyValueVerification: zipValue != null ? "estimated" : "public-record",
-    ownerContact: null,
-    notes: [
-      county ? `County confirmed from Census geocoder: ${county}.` : "Address normalized through Census geocoder.",
-      geocoded?.lat != null && geocoded?.lon != null
-        ? "Aerial property context is sourced from public USGS imagery."
-        : "Aerial imagery is unavailable until a precise public geocode is returned.",
-      zipValue != null
-        ? `Property value is a ZIP-level ACS median owner-occupied home value estimate for ${normalizedPostal}.`
-        : "No public ZIP-level home value estimate was returned for this address.",
-      "No verified homeowner contact data is shown because a licensed contact-data provider is not connected yet."
-    ]
-  };
+    propertyValueVerification: zipValue != null ? "estimated" : "public-record"
+  });
+
+  if (!publicRecord) return null;
 
   const premium = await fetchPremiumEnrichment({
     address: normalizedAddress,

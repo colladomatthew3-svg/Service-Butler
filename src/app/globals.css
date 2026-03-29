@@ -3,18 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --sb-primary: 18 133 111;
-  --sb-primary-hover: 13 102 85;
-  --sb-bg: 245 246 242;
-  --sb-card: 255 255 254;
-  --sb-border: 200 210 203;
-  --sb-text: 28 39 34;
-  --sb-muted: 82 94 87;
-  --sb-primary-soft: 211 238 228;
-  --sb-surface-alt: 237 241 236;
-  --sb-surface-subtle: 226 232 226;
-  --sb-copper: 193 118 77;
-  --sb-copper-soft: 244 222 205;
+  --sb-primary: 33 102 217;
+  --sb-primary-hover: 24 79 180;
+  --sb-bg: 247 249 252;
+  --sb-card: 255 255 255;
+  --sb-border: 218 226 236;
+  --sb-text: 24 35 58;
+  --sb-muted: 100 116 139;
+  --sb-primary-soft: 224 236 255;
+  --sb-surface-alt: 243 247 252;
+  --sb-surface-subtle: 236 242 249;
+  --sb-copper: 24 166 140;
+  --sb-copper-soft: 220 245 239;
+  --sb-sidebar: 20 29 47;
+  --sb-sidebar-border: 47 63 89;
+  --sb-sidebar-text: 223 228 239;
+  --sb-sidebar-muted: 133 148 173;
   --font-inter: "Inter";
   --font-manrope: "Manrope";
   --bg: var(--sb-bg);
@@ -32,11 +36,11 @@
   --success: 31 157 85;
   --warning: 217 145 0;
   --danger: 214 69 69;
-  --radius-control: 12px;
-  --radius-card: 16px;
-  --shadow-soft: 0 16px 38px rgba(30, 42, 36, 0.08);
-  --shadow-card: 0 28px 72px rgba(30, 42, 36, 0.14);
-  --shadow-lift: 0 48px 120px rgba(30, 42, 36, 0.18);
+  --radius-control: 10px;
+  --radius-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 10px 24px rgba(15, 23, 42, 0.06);
+  --shadow-lift: 0 16px 34px rgba(15, 23, 42, 0.08);
   --space-1: 0.5rem;
   --space-2: 0.75rem;
   --space-3: 1rem;
@@ -51,10 +55,31 @@
   --text-body-lg: 1.125rem;
   --text-body: 1rem;
   --text-label: 0.875rem;
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
+}
+
+* {
+  scrollbar-color: rgb(var(--sb-border) / 0.92) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgb(var(--sb-border) / 0.92);
+  background-clip: content-box;
 }
 
 *,
@@ -73,6 +98,7 @@
   body {
     @apply bg-semantic-bg text-semantic-text font-sans;
     font-size: var(--text-body);
+    line-height: 1.5;
     margin: 0;
     min-height: 100dvh;
   }
@@ -82,6 +108,7 @@
   h3,
   h4 {
     @apply font-heading tracking-tight text-semantic-text;
+    text-wrap: balance;
   }
 
   a {
@@ -102,22 +129,8 @@
 }
 
 body {
-  background:
-    radial-gradient(1200px 520px at 4% -12%, rgb(var(--sb-primary-soft) / 0.95), transparent 62%),
-    radial-gradient(980px 440px at 98% 6%, rgb(var(--sb-copper-soft) / 0.8), transparent 58%),
-    linear-gradient(180deg, rgb(var(--bg) / 0.98), rgb(238 240 234));
+  background: rgb(var(--bg));
   color: rgb(var(--text));
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image: radial-gradient(circle at center, rgb(var(--sb-border) / 0.18) 1px, transparent 1px);
-  background-size: 24px 24px;
-  mask-image: radial-gradient(circle at center, black 28%, transparent 84%);
 }
 
 @keyframes toast-in {
@@ -134,55 +147,53 @@ body::before {
 
 .panel {
   background: rgb(var(--sb-card));
-  border: 1px solid rgb(var(--sb-border) / 0.72);
-  border-radius: 1.25rem;
+  border: 1px solid rgb(var(--sb-border) / 0.9);
+  border-radius: 0.9rem;
   box-shadow: var(--shadow-soft);
-  padding: 1.15rem;
+  padding: 1rem;
 }
 
 .section-title {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.12rem;
   font-weight: 700;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 1.1;
 }
 
 .eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  border-radius: 999px;
-  background: rgb(var(--brandSoft));
-  color: rgb(var(--brandHover));
-  padding: 0.45rem 0.85rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  gap: 0.35rem;
+  color: rgb(var(--muted));
+  padding: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .display-title {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: clamp(2.5rem, 5vw, 3rem);
+  font-size: clamp(2.75rem, 5vw, 3.45rem);
   font-weight: 800;
-  letter-spacing: -0.06em;
-  line-height: 0.94;
+  letter-spacing: -0.07em;
+  line-height: 0.92;
 }
 
 .title-hero {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: clamp(2.5rem, 5vw, 3rem);
+  font-size: clamp(2.65rem, 5vw, 3.35rem);
   font-weight: 700;
-  letter-spacing: -0.05em;
-  line-height: 1.02;
+  letter-spacing: -0.06em;
+  line-height: 1;
 }
 
 .title-card {
   font-family: var(--font-manrope), Manrope, sans-serif;
   font-size: var(--text-h3);
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   line-height: 1.05;
 }
 
@@ -193,28 +204,29 @@ body::before {
 
 .dashboard-page-title {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: 1.5rem;
+  font-size: clamp(1.6rem, 2.2vw, 2.2rem);
   font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
+  line-height: 1;
+  letter-spacing: -0.04em;
 }
 
 .dashboard-section-title {
   font-family: var(--font-manrope), Manrope, sans-serif;
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 
 .dashboard-body {
-  font-size: 1rem;
-  line-height: 1.6;
+  font-size: 0.95rem;
+  line-height: 1.55;
 }
 
 .sidebar-label {
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .page-section {
@@ -223,7 +235,7 @@ body::before {
 
 .section-shell {
   border: 1px solid rgb(var(--border) / 0.6);
-  border-radius: 1.5rem;
+  border-radius: 1.75rem;
   background: linear-gradient(170deg, rgb(var(--sb-card) / 0.93), rgb(var(--sb-surface-alt) / 0.82));
   box-shadow: var(--shadow-soft);
 }
@@ -236,7 +248,7 @@ body::before {
 
 .brand-gradient {
   background:
-    linear-gradient(135deg, rgb(var(--brandSoft) / 0.92), transparent 45%),
+    linear-gradient(135deg, rgb(var(--brandSoft) / 0.9), transparent 45%),
     linear-gradient(135deg, rgb(var(--surface)), rgb(var(--surface2)));
 }
 
@@ -251,8 +263,8 @@ body::before {
 
 .weather-ticker-strip {
   overflow: hidden;
-  border: 1px solid rgb(var(--border) / 0.8);
-  border-radius: 1.25rem;
+  border: 1px solid rgb(var(--border) / 0.72);
+  border-radius: 1.35rem;
   background: linear-gradient(135deg, rgb(var(--surface2)), rgb(var(--sb-card)));
   padding: 0.6rem 0;
 }
@@ -313,13 +325,8 @@ body::before {
 }
 
 @media (max-width: 767px) {
-  body::before {
-    background-size: 28px 28px;
-    mask-image: radial-gradient(circle at center, black 22%, transparent 88%);
-  }
-
   .dashboard-page-title {
-    font-size: 1.32rem;
+    font-size: 1.52rem;
     line-height: 1.18;
     letter-spacing: -0.02em;
   }

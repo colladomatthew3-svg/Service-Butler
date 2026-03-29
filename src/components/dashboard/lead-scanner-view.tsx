@@ -2,7 +2,22 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Play, Radar, MapPin, Eye, Plus, BriefcaseBusiness, Loader2, Wrench, X, Settings2 } from "lucide-react";
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  CheckCircle2,
+  Eye,
+  MapPin,
+  Play,
+  Plus,
+  Radar,
+  Settings2,
+  Loader2,
+  Sparkles,
+  TrendingUp,
+  Wrench,
+  X
+} from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,10 +27,12 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
+import { hasVerifiedOwnerContact } from "@/lib/services/contact-proof";
 import { isDemoMode } from "@/lib/services/review-mode";
 import type { EnrichmentRecord } from "@/lib/services/enrichment";
 
 type Mode = "demo" | "live";
+type ScannerRuntimeMode = "fully-live" | "live-partial" | "simulated";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
 type Tab = "feed" | "rules";
 type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
@@ -110,6 +127,15 @@ const marketPresets = [
   { label: "Tampa, FL", value: "Tampa, FL 33602" }
 ] as const;
 
+function mergeScannerEvents(primary: ScannerEvent[], secondary: ScannerEvent[] = []) {
+  const seen = new Set<string>();
+  return [...primary, ...secondary].filter((event) => {
+    if (seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  });
+}
+
 function ScannerMetric({ label, value, helper }: { label: string; value: string; helper: string }) {
   return (
     <div className="rounded-[1.1rem] border border-semantic-border/60 bg-white/74 px-4 py-3 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
@@ -120,7 +146,13 @@ function ScannerMetric({ label, value, helper }: { label: string; value: string;
   );
 }
 
-export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
+export function LeadScannerView({
+  initialTab = "feed",
+  onboardingMode
+}: {
+  initialTab?: Tab;
+  onboardingMode?: "first-scan";
+}) {
   const [mode] = useState<Mode>(isDemoMode() ? "demo" : "live");
   const [tab, setTab] = useState<Tab>(initialTab);
   const [location, setLocation] = useState("Hauppauge, NY 11788");
@@ -133,6 +165,10 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   const [selectedTriggers, setSelectedTriggers] = useState<Trigger[]>(["storm", "heavy-rain"]);
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<ScannerEvent[]>([]);
+  const [captured, setCaptured] = useState<ScannerEvent[]>([]);
+  const [scannerWarning, setScannerWarning] = useState<string | null>(null);
+  const [feedWarning, setFeedWarning] = useState<string | null>(null);
+  const [runtimeMode, setRuntimeMode] = useState<ScannerRuntimeMode>(mode === "demo" ? "simulated" : "fully-live");
   const [preview, setPreview] = useState<ScannerEvent | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const [demoActionMessage, setDemoActionMessage] = useState<string | null>(null);
@@ -149,8 +185,6 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     enabled: true
   });
 
-  const [, setCaptured] = useState<ScannerEvent[]>([]);
-
   const { showToast } = useToast();
 
   const sortedEvents = useMemo(
@@ -162,6 +196,18 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
     const pick = selectedCategories[0] || "general";
     return rules.find((rule) => rule.category === pick && rule.enabled) || null;
   }, [rules, selectedCategories]);
+  const showingFirstScanGuide = onboardingMode === "first-scan";
+  const priorityEvent = sortedEvents[0] || null;
+  const triggerSummary = selectedTriggers
+    .map((triggerId) => triggerOptions.find((option) => option.id === triggerId)?.label || triggerId)
+    .join(" · ");
+  const sourceMixCount = new Set(sortedEvents.map((event) => event.source)).size;
+  const highIntentCount = sortedEvents.filter((event) => event.intent_score >= 75).length;
+  const queueDepth = sortedEvents.length;
+  const activeWarnings = useMemo(
+    () => Array.from(new Set([scannerWarning, feedWarning].filter((value): value is string => Boolean(value)))),
+    [feedWarning, scannerWarning]
+  );
 
   useEffect(() => {
     setTab(initialTab);
@@ -169,13 +215,19 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
   const loadEvents = useCallback(async () => {
     const res = await fetch("/api/scanner/events?limit=100");
-    const data = (await res.json().catch(() => ({}))) as { events?: ScannerEvent[]; error?: string };
+    const data = (await res.json().catch(() => ({}))) as { events?: ScannerEvent[]; error?: string; warning?: string };
     if (!res.ok) {
       showToast(data.error || "Could not load scanner feed");
       return;
     }
-    setEvents(data.events || []);
-  }, [showToast]);
+    setFeedWarning(data.warning || null);
+    setEvents((prev) => {
+      if (data.warning && (!data.events || data.events.length === 0)) {
+        return mergeScannerEvents(prev, captured);
+      }
+      return mergeScannerEvents(data.events || [], captured);
+    });
+  }, [captured, showToast]);
 
   const loadRules = useCallback(async () => {
     setRulesLoading(true);
@@ -259,6 +311,8 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       }>;
       weatherRisk?: { label?: string };
       mode?: Mode;
+      runtimeMode?: ScannerRuntimeMode;
+      warnings?: string[];
       error?: string;
     };
 
@@ -284,22 +338,23 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       created_at: new Date().toISOString()
     }));
 
-    setCaptured((prev) => {
-      const merged = [...batch, ...prev];
-      const seen = new Set<string>();
-      return merged.filter((e) => {
-        if (seen.has(e.id)) return false;
-        seen.add(e.id);
-        return true;
-      });
-    });
+    const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+    setScannerWarning(warnings[0] || null);
+    setRuntimeMode(data.runtimeMode || (data.mode === "demo" ? "simulated" : "fully-live"));
+    setCaptured((prev) => mergeScannerEvents(batch, prev));
+    setEvents((prev) => mergeScannerEvents(batch, prev));
 
     await loadEvents();
     setLoading(false);
 
     if (manual) {
       const risk = data.weatherRisk?.label ? ` · ${data.weatherRisk.label}` : "";
-      showToast(`Scanner captured ${batch.length} opportunities${risk}`);
+      if (batch.length === 0 && warnings[0]) {
+        showToast(warnings[0]);
+      } else {
+        const runtimeSuffix = data.runtimeMode === "live-partial" ? " · partial live coverage" : "";
+        showToast(`Scanner captured ${batch.length} opportunities${risk}${runtimeSuffix}`);
+      }
     }
   }
 
@@ -417,173 +472,266 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Opportunity Scanner"
-        subtitle="Pick your market, scan for jobs, and work the best calls first."
+        title="Lead Signal Command Center"
+        subtitle="Tune the market, surface the best opportunities, and move only the calls worth making."
       />
 
-      <section className="overflow-hidden rounded-[2.1rem] border border-brand-500/24 bg-[linear-gradient(120deg,rgba(216,239,229,0.94),rgba(255,255,255,0.97))] shadow-[0_24px_64px_rgba(25,112,77,0.12)]">
-        <div className="grid gap-6 px-5 py-6 lg:grid-cols-[1.25fr_0.95fr] lg:px-6">
-          <div className="space-y-4">
-            <p className="inline-flex items-center rounded-full border border-brand-500/25 bg-white/72 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-brand-700">
-              Lead Engine Flow
-            </p>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight text-semantic-text sm:text-3xl">Rank the market, surface the job, and hand off only the calls worth making.</h2>
-              <p className="max-w-2xl text-sm text-semantic-text sm:text-base">
-                Scanner prioritizes contactable opportunities first. Signals are ranked, verified, and routed so your team spends time on real bookable jobs.
+      <section className="overflow-hidden rounded-[2.25rem] border border-semantic-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(240,246,242,0.92))] shadow-[0_24px_68px_rgba(30,42,36,0.12)]">
+        <div className="grid gap-0 lg:grid-cols-[1.25fr_0.75fr]">
+          <div className="space-y-6 px-6 py-7 sm:px-8 sm:py-9 lg:px-10 lg:py-10">
+            <p className="eyebrow">Live demand command center</p>
+            <div className="space-y-4">
+              <h2 className="display-title max-w-3xl text-semantic-text">
+                Rank the market, surface the best lead, and hand off only the calls worth making.
+              </h2>
+              <p className="dashboard-body max-w-2xl text-semantic-muted">
+                Scanner keeps the first look calm and decision-ready. Signals are ranked, verified, and routed so your team spends
+                time on bookable work, not noisy records.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setTab("feed")}>
-                Signal Feed
+            <div className="flex flex-wrap gap-3">
+              <Button size="lg" data-testid="scanner-run" onClick={() => runScan(true)} disabled={loading} className="shadow-[0_16px_30px_rgba(29,78,216,0.18)]">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Scan now
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => setTab("rules")}>
-                Routing Rules
+              <Button size="lg" variant="secondary" onClick={() => setTab("feed")}>
+                Open leads
+              </Button>
+              <Button size="lg" variant="ghost" onClick={() => setTab("rules")}>
+                Routing rules
               </Button>
             </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="brand">{location}</Badge>
+              <Badge variant="success">{triggerSummary || "All signals"}</Badge>
+              <Badge variant={runtimeMode === "simulated" || runtimeMode === "live-partial" ? "warning" : "default"}>
+                {runtimeMode === "simulated" ? "Demo" : runtimeMode === "live-partial" ? "Partial live" : "Live"} scanning
+              </Badge>
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <ScannerMetric label="Active market" value={location} helper="Target geography" />
-            <ScannerMetric label="Signals" value={`${selectedTriggers.length} enabled`} helper="Signal filters on" />
-            <ScannerMetric label="Radius" value={`${radius} miles`} helper="Coverage window" />
+
+          <div className="border-t border-semantic-border/60 bg-white/78 px-6 py-6 lg:border-l lg:border-t-0 lg:px-6 lg:py-7">
+            <div className="rounded-[1.65rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(229,236,251,0.12),rgba(255,255,255,0.96))] p-5 shadow-[0_18px_44px_rgba(16,24,40,0.08)]">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">Command summary</p>
+                <Badge variant={showingFirstScanGuide ? "brand" : "success"}>{showingFirstScanGuide ? "First run" : "Active scan"}</Badge>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <ScannerMetric label="Active market" value={location} helper="Saved service area" />
+                <ScannerMetric label="Signal mix" value={`${sourceMixCount} sources`} helper="Channels represented" />
+                <ScannerMetric label="Queue depth" value={`${queueDepth} results`} helper="Lead candidates" />
+                <ScannerMetric label="High intent" value={`${highIntentCount}`} helper="Ready to work now" />
+              </div>
+
+              <div className="mt-4 rounded-[1.35rem] border border-semantic-border/60 bg-white/88 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Priority lead</p>
+                  <Badge variant={priorityEvent ? sourceBadgeVariant(priorityEvent) : "default"}>
+                    {priorityEvent ? recommendedActionLabel(priorityEvent.intent_score) : "Waiting for scan"}
+                  </Badge>
+                </div>
+                {priorityEvent ? (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-semibold text-semantic-text">{priorityEvent.title}</p>
+                    <p className="text-sm text-semantic-muted">{formatOpportunityAddress(priorityEvent, location)}</p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Badge variant="default">{freshnessLabel(priorityEvent.created_at)}</Badge>
+                      <Badge variant="brand">{priorityEvent.intent_score} score</Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-semibold text-semantic-text">Run the first scan to surface a buyer-ready lead.</p>
+                    <p className="text-sm text-semantic-muted">
+                      The command center will highlight the highest-confidence result and keep the next step obvious.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <Card className="overflow-hidden border-semantic-border/55 bg-white/62 shadow-[0_16px_42px_rgba(31,42,36,0.06)]">
-        <CardBody className="space-y-5 p-5 sm:p-6">
-          {demoActionMessage && (
-            <div className="rounded-[1.1rem] border border-brand-500/20 bg-brand-50/70 px-4 py-3 text-sm font-medium text-brand-700">
-              {demoActionMessage}
-            </div>
-          )}
+      <section className="panel space-y-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <p className="eyebrow">Scan controls</p>
+            <h3 className="section-title text-semantic-text">Tune the market before you scan</h3>
+            <p className="dashboard-body max-w-2xl text-semantic-muted">
+              Keep the service area, signal filters, and scan radius tight so the board stays close to the work your crews can actually take.
+            </p>
+          </div>
+          <div className="rounded-[1.25rem] border border-semantic-border/60 bg-white/80 px-4 py-3 shadow-[0_12px_30px_rgba(31,42,36,0.06)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Current focus</p>
+            <p className="mt-1 text-sm font-semibold text-semantic-text">{campaignOptions.find((option) => option.value === campaignMode)?.label}</p>
+            <p className="mt-1 text-xs text-semantic-muted">Radius {radius} miles · {selectedTriggers.length} signals selected</p>
+          </div>
+        </div>
 
-          <div className="grid gap-3 xl:grid-cols-[1.3fr_1fr_120px_160px]">
-            <div className="rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Market</p>
-              <Input
-                data-testid="scanner-location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="City, state, or ZIP"
-              />
+        {showingFirstScanGuide && (
+          <div className="rounded-[1.25rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] px-4 py-4 text-sm text-semantic-text shadow-[0_12px_30px_rgba(16,24,40,0.06)]">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 text-success-600" />
+              <div className="space-y-2">
+                <p className="font-semibold text-semantic-text">Service area saved. Now run your first scan.</p>
+                <p className="text-semantic-muted">
+                  This is the first-value step for pilots: pull in local demand, review the strongest opportunity, and create a lead only if it looks credible.
+                </p>
+              </div>
             </div>
+          </div>
+        )}
 
-            <div className="rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Job Type</p>
-              <Select
-                value={campaignMode}
-                onChange={(e) => {
-                  const next = e.target.value as CampaignMode;
-                  const preset = campaignOptions.find((option) => option.value === next);
-                  setCampaignMode(next);
-                  if (preset) {
-                    setSelectedCategories(preset.categories);
-                    setSelectedTriggers(preset.triggers);
-                  }
-                }}
-              >
-                {campaignOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+        {demoActionMessage && (
+          <div className="rounded-[1.25rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] px-4 py-3 text-sm font-medium text-brand-700 shadow-[0_10px_24px_rgba(16,24,40,0.05)]">
+            {demoActionMessage}
+          </div>
+        )}
+
+        {activeWarnings.length > 0 && (
+          <div className="rounded-[1.25rem] border border-amber-300/70 bg-[linear-gradient(120deg,rgba(255,251,235,0.98),rgba(255,255,255,0.98))] px-4 py-4 text-sm text-amber-900 shadow-[0_10px_24px_rgba(120,53,15,0.08)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Scanner warnings</p>
+            <div className="mt-2 space-y-1.5">
+              {activeWarnings.map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr_120px_auto]">
+          <label className="rounded-[1.35rem] border border-semantic-border/60 bg-white/84 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">Market</span>
+            <Input
+              data-testid="scanner-location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="City, state, or ZIP"
+            />
+          </label>
+
+          <label className="rounded-[1.35rem] border border-semantic-border/60 bg-white/84 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">Job type</span>
+            <Select
+              value={campaignMode}
+              onChange={(e) => {
+                const next = e.target.value as CampaignMode;
+                const preset = campaignOptions.find((option) => option.value === next);
+                setCampaignMode(next);
+                if (preset) {
+                  setSelectedCategories(preset.categories);
+                  setSelectedTriggers(preset.triggers);
+                }
+              }}
+            >
+              {campaignOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+
+          <label className="rounded-[1.35rem] border border-semantic-border/60 bg-white/84 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">Radius</span>
+            <Select data-testid="scanner-radius" value={radius} onChange={(e) => setRadius(e.target.value)}>
+              {["5", "10", "25", "50", "100"].map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+          </label>
+
+          <div className="self-end rounded-[1.35rem] border border-semantic-border/60 bg-white/84 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+            <Button data-testid="scanner-run" onClick={() => runScan(true)} disabled={loading} fullWidth className="h-12 shadow-[0_16px_28px_rgba(29,78,216,0.16)]">
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Scan now
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto rounded-[1.35rem] border border-semantic-border/60 bg-white/72 px-3 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {marketPresets.map((market) => (
+            <Button
+              key={market.value}
+              size="sm"
+              variant={location === market.value ? "primary" : "secondary"}
+              className="shrink-0"
+              onClick={() => setLocation(market.value)}
+            >
+              {market.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="rounded-[1.35rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.86),rgba(241,245,240,0.84))] p-4">
+          <p className="text-sm font-semibold text-semantic-text">
+            {campaignOptions.find((option) => option.value === campaignMode)?.helper}
+          </p>
+          <p className="mt-1 text-sm text-semantic-muted">
+            We use your saved service area first so the jobs stay close to where your crews actually work.
+          </p>
+        </div>
+
+        <details className="rounded-[1.35rem] border border-semantic-border/60 bg-white/72 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
+          <summary className="cursor-pointer text-sm font-semibold text-semantic-text">More scan options</summary>
+          <p className="mt-2 text-sm text-semantic-muted">Use these only if you need to fine-tune the scan.</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_120px]">
+            <label className="rounded-[1rem] border border-semantic-border/55 bg-white/80 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Signals</span>
+              <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0">
+                {triggerOptions.map((trigger) => {
+                  const active = selectedTriggers.includes(trigger.id);
+                  return (
+                    <button
+                      key={trigger.id}
+                      type="button"
+                      data-testid={`scanner-trigger-${trigger.id}`}
+                      onClick={() =>
+                        setSelectedTriggers((prev) =>
+                          prev.includes(trigger.id) ? prev.filter((item) => item !== trigger.id) : [...prev, trigger.id]
+                        )
+                      }
+                      className={cn(
+                        "min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold transition",
+                        active ? "bg-semantic-brand text-white shadow-[0_10px_20px_rgba(29,78,216,0.18)]" : "bg-semantic-surface2 text-semantic-muted"
+                      )}
+                    >
+                      {trigger.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </label>
+            <div className="grid grid-cols-2 gap-2 rounded-[1rem] border border-semantic-border/55 bg-white/80 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat</p>
+                <Input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="40.7812" />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lon</p>
+                <Input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="-73.2462" />
+              </div>
+            </div>
+            <label className="rounded-[1rem] border border-semantic-border/55 bg-white/80 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Results</span>
+              <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
+                {["8", "12", "20", "30", "50"].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
                   </option>
                 ))}
               </Select>
-            </div>
-
-            <div className="rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)]">
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Radius (mi)</p>
-              <Select data-testid="scanner-radius" value={radius} onChange={(e) => setRadius(e.target.value)}>
-                {["5", "10", "25", "50", "100"].map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="self-end rounded-[1.35rem] border border-semantic-border/60 bg-white/78 p-4 shadow-[0_10px_24px_rgba(31,42,36,0.05)] xl:col-span-1">
-              <Button data-testid="scanner-run" onClick={() => runScan(true)} disabled={loading} fullWidth>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                Scan Now
-              </Button>
-            </div>
+            </label>
           </div>
-
-          <div className="flex gap-2 overflow-x-auto rounded-[1.25rem] border border-semantic-border/60 bg-white/68 px-3 py-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {marketPresets.map((market) => (
-              <Button
-                key={market.value}
-                size="sm"
-                variant={location === market.value ? "primary" : "secondary"}
-                className="shrink-0"
-                onClick={() => setLocation(market.value)}
-              >
-                {market.label}
-              </Button>
-            ))}
-          </div>
-
-          <div className="rounded-[1.25rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(241,245,240,0.8))] p-4">
-            <p className="text-sm font-semibold text-semantic-text">
-              {campaignOptions.find((option) => option.value === campaignMode)?.helper}
-            </p>
-            <p className="mt-1 text-sm text-semantic-muted">We use your saved service area first so the jobs stay close to where your crews actually work.</p>
-          </div>
-
-          <details className="rounded-[1.25rem] border border-semantic-border/60 bg-white/68 p-4">
-            <summary className="cursor-pointer text-sm font-semibold text-semantic-text">More scan options</summary>
-            <p className="mt-2 text-sm text-semantic-muted">Use these only if you need to fine-tune the scan.</p>
-            <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_120px]">
-              <label className="rounded-[1rem] border border-semantic-border/55 bg-white/74 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Signals</span>
-                <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:overflow-visible md:pb-0">
-                  {triggerOptions.map((trigger) => {
-                    const active = selectedTriggers.includes(trigger.id);
-                    return (
-                      <button
-                        key={trigger.id}
-                        type="button"
-                        data-testid={`scanner-trigger-${trigger.id}`}
-                        onClick={() =>
-                          setSelectedTriggers((prev) =>
-                            prev.includes(trigger.id) ? prev.filter((item) => item !== trigger.id) : [...prev, trigger.id]
-                          )
-                        }
-                        className={cn(
-                          "min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold",
-                          active ? "bg-semantic-brand text-white" : "bg-semantic-surface2 text-semantic-muted"
-                        )}
-                      >
-                        {trigger.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </label>
-              <div className="grid grid-cols-2 gap-2 rounded-[1rem] border border-semantic-border/55 bg-white/74 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
-                <div>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lat</p>
-                  <Input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="40.7812" />
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Lon</p>
-                  <Input value={lon} onChange={(e) => setLon(e.target.value)} placeholder="-73.2462" />
-                </div>
-              </div>
-              <label className="rounded-[1rem] border border-semantic-border/55 bg-white/74 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
-                <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Results</span>
-                <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
-                  {["8", "12", "20", "30", "50"].map((value) => (
-                    <option key={value} value={value}>{value}</option>
-                  ))}
-                </Select>
-              </label>
-            </div>
-          </details>
-        </CardBody>
-      </Card>
+        </details>
+      </section>
 
       {tabs.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-2 overflow-x-auto rounded-[1.35rem] border border-semantic-border/60 bg-white/70 px-2 py-2 shadow-[0_12px_28px_rgba(31,42,36,0.05)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((item) => {
             const Icon = item.icon;
             return (
@@ -591,10 +739,10 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
                 key={item.id}
                 onClick={() => setTab(item.id)}
                 className={cn(
-                  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-[0.95rem] px-4 text-sm font-semibold",
+                  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-semibold transition",
                   tab === item.id
-                    ? "bg-semantic-brand text-white shadow-[0_10px_24px_rgba(25,112,77,0.18)]"
-                    : "bg-semantic-surface2/80 text-semantic-muted ring-1 ring-inset ring-semantic-border hover:bg-semantic-surface"
+                    ? "bg-semantic-brand text-white shadow-[0_10px_24px_rgba(29,78,216,0.18)]"
+                    : "bg-semantic-surface2/80 text-semantic-muted hover:bg-semantic-surface"
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -608,145 +756,247 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
       {tab === "feed" && (
         <section className="space-y-4">
           {!loading && sortedEvents.length > 0 && (
-            <div className="rounded-[1rem] border border-semantic-border/60 bg-white/70 px-4 py-3 text-sm text-semantic-text">
-              <span className="font-semibold">{sortedEvents.length} jobs found.</span> Start with the closest high-urgency calls and book the inspection.
+            <div className="flex flex-col gap-2 rounded-[1.1rem] border border-semantic-border/60 bg-white/78 px-4 py-4 text-sm text-semantic-text shadow-[0_10px_24px_rgba(31,42,36,0.05)] sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Ranked queue</p>
+                <p className="mt-1 text-sm font-semibold text-semantic-text">
+                  {sortedEvents.length} opportunities surfaced.
+                  {showingFirstScanGuide
+                    ? " Work the strongest result first and create a lead only if you would actually call it."
+                    : " Work the strongest result first and keep the queue moving."}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="brand">{highIntentCount} high intent</Badge>
+                <Badge variant="default">{sourceMixCount} sources</Badge>
+              </div>
             </div>
           )}
 
           {loading && (
-            <Card className="border-semantic-border/55 bg-white/58">
-              <CardBody className="space-y-3">
-                <p className="text-sm font-semibold text-semantic-text">Scanning live signals and local incident pressure...</p>
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-24 w-full" />
-                <Skeleton className="h-24 w-full" />
+            <Card className="border-semantic-border/55 bg-white/72 shadow-[0_16px_42px_rgba(31,42,36,0.06)]">
+              <CardBody className="space-y-5 p-5 sm:p-6">
+                <div className="flex items-start gap-3">
+                  <Loader2 className="mt-0.5 h-5 w-5 animate-spin text-brand-700" />
+                  <div>
+                    <p className="text-sm font-semibold text-semantic-text">Scanning live signals and local incident pressure...</p>
+                    <p className="mt-1 text-sm text-semantic-muted">
+                      We are ranking opportunities by confidence, freshness, and service area fit.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <Skeleton className="h-28 rounded-[1.1rem]" />
+                  <Skeleton className="h-28 rounded-[1.1rem]" />
+                  <Skeleton className="h-28 rounded-[1.1rem]" />
+                </div>
               </CardBody>
             </Card>
           )}
 
           {!loading && sortedEvents.length === 0 && (
-            <Card className="border-semantic-border/55 bg-white/58">
-              <CardBody className="py-12 text-center">
-                <Radar className="mx-auto h-10 w-10 text-brand-700" />
-                <p className="mt-3 text-lg font-semibold text-semantic-text">Scanner is listening</p>
-                <p className="mt-1 text-sm text-semantic-muted">
-                  Run a scan to surface storm damage, water loss, freeze risk, and emergency service demand in your service area.
-                </p>
+            <Card className="overflow-hidden border-semantic-border/55 bg-white/78 shadow-[0_18px_44px_rgba(31,42,36,0.07)]">
+              <CardBody className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-4">
+                  <p className="eyebrow">No scan results yet</p>
+                  <h3 className="section-title max-w-2xl text-semantic-text">
+                    {showingFirstScanGuide ? "Your market is ready for its first scan." : "Scanner is listening for new demand."}
+                  </h3>
+                  <p className="dashboard-body max-w-2xl text-semantic-muted">
+                    {showingFirstScanGuide
+                      ? "Run the first scan to surface storm damage, water loss, freeze risk, and emergency demand in the service area you just saved."
+                      : "Run a scan to surface storm damage, water loss, freeze risk, and emergency service demand in your service area."}
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button size="lg" onClick={() => runScan(true)} disabled={loading} className="shadow-[0_16px_30px_rgba(29,78,216,0.18)]">
+                      <Sparkles className="h-4 w-4" />
+                      Run scan
+                    </Button>
+                    <Button size="lg" variant="secondary" onClick={() => setTab("rules")}>
+                      Review routing
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.5rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(229,236,251,0.12),rgba(255,255,255,0.96))] p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">First-value path</p>
+                  <div className="mt-4 space-y-3">
+                    {[
+                      ["1", "Set service area", "Ground demand in the market your crews actually cover."],
+                      ["2", "Run first scan", "Surface the strongest signal and review why it matters."],
+                      ["3", "Create first lead", "Only work the result if your team would actually call it."]
+                    ].map(([number, title, text]) => (
+                      <div key={title} className="flex items-start gap-3 rounded-[1rem] border border-semantic-border/60 bg-white/84 p-3">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
+                          {number}
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-semantic-text">{title}</p>
+                          <p className="mt-1 text-sm text-semantic-muted">{text}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </CardBody>
             </Card>
           )}
 
-          {sortedEvents.map((event) => {
+          {sortedEvents.map((event, index) => {
             const nextAction = String(event.raw?.next_action || event.raw?.recommended_action || "Dispatch within SLA and send first contact.");
             const reasonDetails = getOpportunityReasonDetails(event);
             const displayAddress = formatOpportunityAddress(event, location);
             const addressParts = splitDisplayAddress(displayAddress);
             const bullets = opportunityBullets(reasonDetails);
             const enrichment = getEventEnrichment(event);
+            const hasVerifiedContact = hasVerifiedOwnerContact(event.raw?.enrichment);
             const areaContext = [String(event.raw?.neighborhood || "").trim(), String(event.raw?.county || "").trim()].filter(Boolean).join(" · ");
+            const primaryAction = getPrimaryAction(event.intent_score, showingFirstScanGuide);
+            const isFeatured = index === 0;
 
             return (
-              <Card key={event.id} className="overflow-hidden border-semantic-border/55 bg-white/74 transition hover:-translate-y-0.5 hover:shadow-card" data-testid="scanner-result-card">
-                <CardBody className="grid gap-5 xl:grid-cols-[220px_1fr_220px] xl:items-start">
+              <Card
+                key={event.id}
+                className={cn(
+                  "overflow-hidden border-semantic-border/60 bg-white/84 shadow-[0_18px_44px_rgba(31,42,36,0.08)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(31,42,36,0.12)]",
+                  isFeatured && "ring-1 ring-brand-300"
+                )}
+                data-testid="scanner-result-card"
+              >
+                <CardBody className="grid gap-5 p-5 xl:grid-cols-[240px_1fr_240px] xl:items-stretch">
                   <OpportunityPropertyVisual event={event} address={displayAddress} addressLine={addressParts.streetLine} enrichment={enrichment} />
 
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant={sourceBadgeVariant(event)}>
-                          {reasonDetails.signalSource}
-                        </Badge>
-                        <Badge variant={addressQualityVariant(event)}>
-                          {addressQualityLabel(event)}
-                        </Badge>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={sourceBadgeVariant(event)}>{reasonDetails.signalSource}</Badge>
+                        <Badge variant={addressQualityVariant(event)}>{addressQualityLabel(event)}</Badge>
                         <Badge variant="default">{freshnessLabel(event.created_at)}</Badge>
+                        {isFeatured && <Badge variant="brand">Top result</Badge>}
                       </div>
-                      <p className="text-xl font-semibold text-semantic-text">{event.title}</p>
-                      <p className="inline-flex items-center gap-2 text-base font-medium text-semantic-text">
-                        <MapPin className="h-4 w-4" />
-                        {addressParts.streetLine}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-semantic-muted">
-                        <span>{addressParts.marketLine}</span>
-                        {areaContext ? <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" /> : null}
-                        {areaContext ? <span>{areaContext}</span> : null}
-                        <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
-                        <span>{reasonDetails.distance}</span>
-                        <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
-                        <span>{reasonDetails.signalSource}</span>
-                      </div>
-                    </div>
 
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                      <MetricStat label="Job Type" value={reasonDetails.serviceType} />
-                      <MetricStat label="Urgency" value={reasonDetails.urgencyWindow} />
-                      <MetricStat label="Confidence" value={`${event.confidence}`} emphasize />
-                      <MetricStat label="Job score" value={`${event.intent_score}`} emphasize />
-                    </div>
-
-                    <div className="rounded-[1.15rem] border border-semantic-border/60 bg-white/70 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this job is showing up</p>
-                      <ul className="mt-3 grid gap-2 text-sm text-semantic-text">
-                        {bullets.map((bullet, index) => (
-                          <li key={`${event.id}-reason-${index}`} className="flex items-start gap-2">
-                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-brand-700" />
-                            <span>{bullet}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {enrichment && (
-                      <details className="rounded-[1.15rem] border border-semantic-border/60 bg-white/68 p-4">
-                        <summary className="cursor-pointer text-sm font-semibold text-semantic-text">Property details</summary>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                          <MetricStat label="Neighborhood" value={enrichment.neighborhood} />
-                          <MetricStat label="Lead source" value={reasonDetails.signalSource} />
-                          <MetricStat label="Property value" value={enrichment.propertyValueEstimate || "Unavailable"} />
-                          <MetricStat
-                            label={enrichment.simulated ? "Contact status" : "Owner contact"}
-                            value={
-                              enrichment.ownerContact
-                                ? `${enrichment.ownerContact.name} · ${enrichment.ownerContact.confidenceLabel}`
-                                : enrichment.simulated
-                                  ? "Demo only"
-                                  : "Not available"
-                            }
-                          />
+                      <div className="space-y-2">
+                        <p className="text-2xl font-semibold tracking-tight text-semantic-text">{event.title}</p>
+                        <p className="inline-flex items-center gap-2 text-base font-medium text-semantic-text">
+                          <MapPin className="h-4 w-4 text-brand-700" />
+                          {addressParts.streetLine}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-semantic-muted">
+                          <span>{addressParts.marketLine}</span>
+                          {areaContext ? <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" /> : null}
+                          {areaContext ? <span>{areaContext}</span> : null}
+                          <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
+                          <span>{reasonDetails.distance}</span>
+                          <span className="hidden h-1 w-1 rounded-full bg-semantic-border sm:inline-block" />
+                          <span>{reasonDetails.signalSource}</span>
                         </div>
-                      </details>
-                    )}
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        <MetricStat label="Job Type" value={reasonDetails.serviceType} />
+                        <MetricStat label="Urgency" value={reasonDetails.urgencyWindow} />
+                        <MetricStat label="Confidence" value={`${event.confidence}`} emphasize />
+                        <MetricStat label="Job score" value={`${event.intent_score}`} emphasize />
+                      </div>
+
+                      <div className="rounded-[1.25rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(244,248,244,0.92))] p-4">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-brand-700" />
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Why this lead matters</p>
+                        </div>
+                        <ul className="mt-3 grid gap-2 text-sm text-semantic-text">
+                          {bullets.map((bullet, bulletIndex) => (
+                            <li key={`${event.id}-reason-${bulletIndex}`} className="flex items-start gap-2">
+                              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-brand-700" />
+                              <span>{bullet}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {enrichment && (
+                        <details className="rounded-[1.25rem] border border-semantic-border/60 bg-white/78 p-4">
+                          <summary className="cursor-pointer text-sm font-semibold text-semantic-text">Property details</summary>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                            <MetricStat label="Neighborhood" value={enrichment.neighborhood} />
+                            <MetricStat label="Lead source" value={reasonDetails.signalSource} />
+                            <MetricStat label="Property value" value={enrichment.propertyValueEstimate || "Unavailable"} />
+                            <MetricStat
+                              label={enrichment.simulated ? "Contact status" : "Owner contact"}
+                              value={
+                                enrichment.ownerContact
+                                  ? `${enrichment.ownerContact.name} · ${enrichment.ownerContact.confidenceLabel}`
+                                  : enrichment.simulated
+                                    ? "Demo only"
+                                    : "Not available"
+                              }
+                            />
+                          </div>
+                        </details>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 xl:rounded-[1.15rem] xl:border xl:border-semantic-border/60 xl:bg-white/68 xl:p-3">
-                    <Button size="lg" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "job")}>
-                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <BriefcaseBusiness className="h-4 w-4" />}
-                      Schedule Inspection
-                    </Button>
-                    <p className="rounded-[1rem] border border-semantic-border/60 bg-white/72 px-4 py-3 text-sm text-semantic-text sm:col-span-2 xl:col-span-1">
-                      <span className="font-semibold">Next step:</span> {nextAction}
-                    </p>
-                    <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event, "lead")}>
-                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                      Create Lead
-                    </Button>
-                    <Button
-                      size="lg"
-                      variant="secondary"
-                      disabled={dispatchingId === event.id}
-                      onClick={() => dispatchEvent(event, "job", suggestedAssigneeForEvent(event, rules))}
-                    >
-                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
-                      Assign Technician
-                    </Button>
-                    <Button size="lg" variant="secondary" disabled={dispatchingId === event.id} onClick={() => dispatchEvent(event)}>
-                      {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
-                      {recommendedActionLabel(event.intent_score)}
-                    </Button>
-                    <Button size="lg" variant="ghost" className="sm:col-span-2 xl:col-span-1" onClick={() => setPreview(event)}>
-                      <Eye className="h-4 w-4" />
-                      View details
-                    </Button>
+                  <div className="rounded-[1.35rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,248,244,0.9))] p-4 xl:flex xl:flex-col xl:justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Decision rail</p>
+                        <Badge variant="brand">{primaryAction.label}</Badge>
+                      </div>
+                      <Button
+                        size="lg"
+                        disabled={dispatchingId === event.id || !hasVerifiedContact}
+                        onClick={() =>
+                          dispatchEvent(
+                            event,
+                            primaryAction.mode,
+                            primaryAction.mode === "job" ? suggestedAssigneeForEvent(event, rules) : undefined
+                          )
+                        }
+                        className="w-full shadow-[0_16px_30px_rgba(29,78,216,0.16)]"
+                      >
+                        {dispatchingId === event.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : primaryAction.mode === "job" ? (
+                          <BriefcaseBusiness className="h-4 w-4" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                        {showingFirstScanGuide ? "Create First Lead" : primaryAction.label}
+                      </Button>
+                      <p className="rounded-[1rem] border border-semantic-border/60 bg-white/82 px-4 py-3 text-sm text-semantic-text">
+                        <span className="font-semibold">Next step:</span> {nextAction}
+                      </p>
+                      {!hasVerifiedContact ? (
+                        <p className="rounded-[1rem] border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
+                          Research signal only. No verified owner phone is attached yet, so this stays out of the live lead queue until SDR qualifies it.
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 grid gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={dispatchingId === event.id || !hasVerifiedContact}
+                        onClick={() => dispatchEvent(event, "job", suggestedAssigneeForEvent(event, rules))}
+                      >
+                        {dispatchingId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wrench className="h-4 w-4" />}
+                        Assign technician
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setPreview(event)}>
+                        <Eye className="h-4 w-4" />
+                        View evidence
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    {showingFirstScanGuide && isFeatured ? (
+                      <div className="mt-3 rounded-[1rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] px-4 py-3 text-sm text-brand-800 shadow-[0_10px_24px_rgba(16,24,40,0.05)]">
+                        <span className="font-semibold">First-run move:</span> review the top result, then create a lead only if this
+                        is something your team would actually work.
+                      </div>
+                    ) : null}
                   </div>
                 </CardBody>
               </Card>
@@ -757,7 +1007,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
 
       {tab === "rules" && (
         <section className="grid gap-5 xl:grid-cols-[1.2fr_1fr]">
-          <Card className="border-semantic-border/55 bg-white/58">
+          <Card className="border-semantic-border/55 bg-white/72">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">Routing Rules</h2>
             </CardHeader>
@@ -801,7 +1051,7 @@ export function LeadScannerView({ initialTab = "feed" }: { initialTab?: Tab }) {
             </CardBody>
           </Card>
 
-          <Card className="border-semantic-border/55 bg-white/58">
+          <Card className="border-semantic-border/55 bg-white/72">
             <CardHeader>
               <h2 className="dashboard-section-title text-semantic-text">{editing ? "Edit Rule" : "Add Rule"}</h2>
             </CardHeader>
@@ -1056,6 +1306,49 @@ function MetricStat({ label, value, emphasize }: { label: string; value: string;
   );
 }
 
+function buildPublicPropertyImageUrl(lat?: number | null, lon?: number | null) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const lng = Number(lon);
+  const latitude = Number(lat);
+  const span = 0.0022;
+  const url = new URL("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export");
+  url.searchParams.set("bbox", `${lng - span},${latitude - span},${lng + span},${latitude + span}`);
+  url.searchParams.set("bboxSR", "4326");
+  url.searchParams.set("imageSR", "4326");
+  url.searchParams.set("size", "640,420");
+  url.searchParams.set("format", "jpg");
+  url.searchParams.set("transparent", "false");
+  url.searchParams.set("f", "image");
+  return url.toString();
+}
+
+function fallbackEnrichmentFromEvent(event: ScannerEvent) {
+  const address = String(event.raw?.property_address || "").trim();
+  const city = String(event.raw?.property_city || "").trim();
+  const state = String(event.raw?.property_state || "").trim();
+  const postalCode = String(event.raw?.property_postal_code || "").trim();
+  const propertyAddress = [address, city, [state, postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  if (!propertyAddress) return null;
+
+  return {
+    provider: "Public signal context",
+    simulated: false,
+    propertyAddress,
+    city,
+    state,
+    postalCode,
+    neighborhood: String(event.raw?.neighborhood || city || "Service area"),
+    propertyImageLabel: "USGS aerial image",
+    propertyImageUrl: buildPublicPropertyImageUrl(event.lat, event.lon),
+    propertyImageSource: event.lat != null && event.lon != null ? "USGS The National Map imagery" : "Property context unavailable",
+    propertyValueEstimate: null,
+    propertyValueVerification: "public-record",
+    ownerContact: null,
+    notes: ["Built from free public signal context because no richer enrichment record was stored with the event."]
+  } satisfies EnrichmentRecord;
+}
+
 function OpportunityPropertyVisual({
   event,
   address,
@@ -1068,15 +1361,17 @@ function OpportunityPropertyVisual({
   enrichment: EnrichmentRecord | null;
 }) {
   return (
-    <div className="overflow-hidden rounded-[1.4rem] border border-semantic-border bg-[linear-gradient(160deg,rgba(29,38,34,0.98),rgba(79,95,87,0.92))] p-4 text-white shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-white/80">
+    <div className="overflow-hidden rounded-[1.65rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(229,236,251,0.12),rgba(255,255,255,0.98))] p-4 shadow-[0_12px_28px_rgba(16,24,40,0.08)]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">
           {String(event.raw?.incident_type || categoryLabel[event.category])}
         </span>
-        <span className="text-sm font-semibold text-brand-200">{categoryLabel[event.category]}</span>
+        <span className="rounded-full border border-semantic-border/60 bg-white/75 px-3 py-1 text-xs font-semibold text-brand-700">
+          {categoryLabel[event.category]}
+        </span>
       </div>
-      <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))] p-4">
-        <div className="relative h-40 overflow-hidden rounded-[1rem]">
+      <div className="mt-4 overflow-hidden rounded-[1.35rem] border border-semantic-border/60 bg-white/80 p-3">
+        <div className="relative h-40 overflow-hidden rounded-[1rem] bg-semantic-surface2">
           {enrichment?.propertyImageUrl ? (
             <Image
               src={enrichment.propertyImageUrl}
@@ -1095,8 +1390,8 @@ function OpportunityPropertyVisual({
               sizes="(max-width: 1280px) 280px, 320px"
             />
           )}
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(22,29,26,0.04),rgba(22,29,26,0.28))]" />
-          <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85">
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(22,29,26,0.02),rgba(22,29,26,0.22))]" />
+          <div className="absolute left-3 top-3 rounded-full bg-black/20 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/90">
             {enrichment?.propertyImageLabel || "Property image"}
           </div>
           {enrichment?.ownerContact && (
@@ -1106,21 +1401,21 @@ function OpportunityPropertyVisual({
           )}
         </div>
       </div>
-      <p className="mt-4 text-sm font-semibold text-white">{addressLine}</p>
-      <p className="mt-1 text-sm text-white/70">{address}</p>
+      <p className="mt-4 text-sm font-semibold text-semantic-text">{addressLine}</p>
+      <p className="mt-1 text-sm text-semantic-muted">{address}</p>
       {enrichment && (
-        <div className="mt-4 grid gap-2 text-xs text-white/80">
+        <div className="mt-4 grid gap-2 text-xs text-semantic-muted">
           <p>
-            <span className="font-semibold text-white">Neighborhood:</span> {enrichment.neighborhood}
+            <span className="font-semibold text-semantic-text">Neighborhood:</span> {enrichment.neighborhood}
           </p>
           <p>
-            <span className="font-semibold text-white">Value:</span> {enrichment.propertyValueEstimate || "Unavailable"}
+            <span className="font-semibold text-semantic-text">Value:</span> {enrichment.propertyValueEstimate || "Unavailable"}
           </p>
           <p>
-            <span className="font-semibold text-white">Owner:</span> {enrichment.ownerContact?.name || "Unavailable"}
+            <span className="font-semibold text-semantic-text">Owner:</span> {enrichment.ownerContact?.name || "Unavailable"}
           </p>
           <p>
-            <span className="font-semibold text-white">Image source:</span> {enrichment.propertyImageSource || "Placeholder"}
+            <span className="font-semibold text-semantic-text">Image source:</span> {enrichment.propertyImageSource || "Placeholder"}
           </p>
         </div>
       )}
@@ -1149,6 +1444,30 @@ function recommendedActionLabel(intentScore: number) {
   return "Add to Pipeline";
 }
 
+function getPrimaryAction(intentScore: number, onboardingMode?: boolean) {
+  if (onboardingMode) {
+    return {
+      label: "Create lead",
+      mode: "lead" as const,
+      note: "First-run value comes from getting one credible lead into the queue."
+    };
+  }
+
+  if (intentScore >= 82) {
+    return {
+      label: "Schedule inspection",
+      mode: "job" as const,
+      note: "High-confidence result. Move it toward a booked visit."
+    };
+  }
+
+  return {
+    label: "Create lead",
+    mode: "lead" as const,
+    note: "Keep the board moving and capture the opportunity in the queue."
+  };
+}
+
 function suggestedAssigneeForEvent(event: ScannerEvent, rules: RoutingRule[]) {
   const rule = rules.find((item) => item.category === event.category && item.enabled);
   return rule?.default_assignee || (event.category === "demolition" ? "Mitigation Crew" : event.category === "restoration" ? "Storm Desk" : "Dispatch Queue");
@@ -1165,6 +1484,6 @@ function conversationStylePost(event: ScannerEvent) {
 
 function getEventEnrichment(event: ScannerEvent) {
   const enrichment = event.raw?.enrichment;
-  if (!enrichment || typeof enrichment !== "object") return null;
-  return enrichment as EnrichmentRecord;
+  if (enrichment && typeof enrichment === "object") return enrichment as EnrichmentRecord;
+  return fallbackEnrichmentFromEvent(event);
 }

@@ -1,0 +1,4 @@
+
+> service-butler-ai@0.1.0 validate-integrations
+> mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js
+

@@ -1,4 +1,9 @@
 import type { V2OpportunityScoreVector, V2RevenueBand } from "@/lib/v2/types";
+import {
+  type FranchiseVertical,
+  applyVerticalModifiers,
+  getConnectorWeight,
+} from "@/lib/v2/franchise-verticals";
 
 type ScoreInput = {
   sourceType: string;
@@ -14,6 +19,10 @@ type ScoreInput = {
   sourceReliability: number;
   signalAgreement?: number;
   geographyPrecision?: number;
+  /** Optional: franchise vertical for vertical-aware scoring */
+  vertical?: FranchiseVertical;
+  /** Optional: signal category for preferred-signal boost */
+  signalCategory?: string;
 };
 
 function clamp(value: number, min = 0, max = 100) {
@@ -36,14 +45,20 @@ function sourceUrgencyBoost(sourceType: string) {
 }
 
 export function computeOpportunityScores(input: ScoreInput): V2OpportunityScoreVector {
+  // Apply connector-level weight from vertical before scoring
+  const connectorWeight = input.vertical
+    ? getConnectorWeight(input.vertical, input.sourceType)
+    : 1.0;
+
+  const adjustedSeverity = clamp(input.severity * connectorWeight);
   const recencyScore = clamp(100 - Math.min(100, input.eventRecencyMinutes / 1.8));
-  const severityScore = clamp(input.severity);
+  const severityScore = clamp(adjustedSeverity + (input.vertical?.scoreModifiers.severityBoost ?? 0));
   const geographyScore = clamp(input.geographyMatch);
   const geographyPrecision = clamp(input.geographyPrecision ?? input.geographyMatch);
   const contactabilityScore = clamp(input.contactAvailability * 0.75 + input.priorCustomerMatch * 0.25);
   const signalAgreementScore = clamp(input.signalAgreement ?? Math.min(100, input.supportingSignalsCount * 16));
 
-  const jobLikelihoodScore = clamp(
+  const baseJobLikelihood = clamp(
     severityScore * 0.24 +
       recencyScore * 0.19 +
       geographyScore * 0.14 +
@@ -53,12 +68,24 @@ export function computeOpportunityScores(input: ScoreInput): V2OpportunityScoreV
       clamp(input.priorCustomerMatch) * 0.06
   );
 
-  const urgencyScore = clamp(
+  const baseUrgency = clamp(
     severityScore * 0.42 +
       recencyScore * 0.3 +
       clamp(input.catastropheSignal) * 0.18 +
       sourceUrgencyBoost(input.sourceType)
   );
+
+  // Apply vertical modifiers (seasonal, preferred signal boost, multipliers)
+  const verticalAdjusted = input.vertical
+    ? applyVerticalModifiers(
+        input.vertical,
+        { urgencyScore: baseUrgency, jobLikelihoodScore: baseJobLikelihood, severityScore },
+        { signalCategory: input.signalCategory }
+      )
+    : { urgencyScore: baseUrgency, jobLikelihoodScore: baseJobLikelihood, preferredSignal: false, seasonalMultiplier: 1.0 };
+
+  const urgencyScore = verticalAdjusted.urgencyScore;
+  const jobLikelihoodScore = verticalAdjusted.jobLikelihoodScore;
 
   const catastropheLinkageScore = clamp(input.catastropheSignal * 0.8 + severityScore * 0.2);
   const sourceReliabilityScore = clamp(input.sourceReliability);
@@ -93,7 +120,12 @@ export function computeOpportunityScores(input: ScoreInput): V2OpportunityScoreV
       supporting_signals_count: input.supportingSignalsCount,
       catastrophe_signal: clamp(input.catastropheSignal),
       signal_agreement: signalAgreementScore,
-      confidence_score: confidenceScore
+      confidence_score: confidenceScore,
+      // Vertical context for explainability
+      vertical_key: input.vertical?.key ?? null,
+      connector_weight: connectorWeight,
+      preferred_signal: verticalAdjusted.preferredSignal,
+      seasonal_multiplier: verticalAdjusted.seasonalMultiplier,
     }
   };
 }

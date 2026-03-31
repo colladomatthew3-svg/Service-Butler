@@ -8,6 +8,7 @@ import {
   validateQualificationMutation
 } from "@/lib/v2/opportunity-qualification";
 import { getV2TenantContext } from "@/lib/v2/context";
+import { maybeQueueQualificationOutreach } from "@/lib/v2/qualification-outreach-bridge";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AccountRole } from "@/types/domain";
 
@@ -129,6 +130,25 @@ export async function POST(req: NextRequest, { params }: Params) {
     contactStatus: updated.contact_status
   });
 
+  // When an opportunity becomes contactable, queue a first-touch outreach
+  let outreachResult: { triggered: boolean; channel?: string | null } = { triggered: false };
+  if (qualification.qualificationStatus === "qualified_contactable") {
+    const explainJson = (updated.explainability_json as Record<string, unknown> | null) ?? {};
+    const bridge = await maybeQueueQualificationOutreach(context.supabase, {
+      opportunityId: opportunityId,
+      tenantId: context.franchiseTenantId,
+      actorUserId: context.userId,
+      franchiseVerticalKey: context.franchiseVertical ?? null,
+      urgencyScore: typeof explainJson.urgency_score === "number" ? explainJson.urgency_score : null,
+      contactName: qualification.contactName,
+      phone: qualification.phone,
+      email: qualification.email,
+      address: typeof explainJson.address === "string" ? explainJson.address : null,
+      serviceType: qualification.sourceType,
+    }).catch(() => ({ triggered: false }));
+    outreachResult = bridge;
+  }
+
   return NextResponse.json({
     opportunity: {
       id: updated.id,
@@ -150,6 +170,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     qualified_at: qualification.qualifiedAt,
     qualified_by: qualification.qualifiedBy,
     research_only: qualification.researchOnly,
-    requires_sdr_qualification: qualification.requiresSdrQualification
+    requires_sdr_qualification: qualification.requiresSdrQualification,
+    outreach_queued: outreachResult.triggered,
+    outreach_channel: outreachResult.triggered ? (outreachResult as { channel?: string | null }).channel ?? null : null,
   });
 }

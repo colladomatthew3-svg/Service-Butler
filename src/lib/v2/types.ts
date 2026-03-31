@@ -33,6 +33,8 @@ export type V2TenantContext = {
   role: string;
   franchiseTenantId: string;
   enterpriseTenantId: string;
+  /** Franchise vertical key stored in tenant settings_json.vertical */
+  franchiseVertical?: string | null;
 };
 
 export type V2AssignmentDecision = {

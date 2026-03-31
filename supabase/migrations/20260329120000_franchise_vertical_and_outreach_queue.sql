@@ -41,20 +41,14 @@ create index if not exists v2_outreach_queue_opportunity_idx
 -- RLS: tenant isolation
 alter table public.v2_outreach_queue enable row level security;
 
-create policy "v2_outreach_queue_tenant_isolation" on public.v2_outreach_queue
-  for all using (
-    tenant_id in (
-      select franchise_tenant_id from public.v2_account_tenant_map
-      where account_id = (
-        select id from public.accounts where id = auth.uid()
-      )
-      union
-      select franchise_tenant_id from public.v2_account_tenant_map
-      where account_id in (
-        select account_id from public.users where id = auth.uid()
-      )
-    )
-  );
+drop policy if exists "v2_outreach_queue_tenant_isolation" on public.v2_outreach_queue;
+
+create policy v2_outreach_queue_select on public.v2_outreach_queue
+  for select using (public.v2_tenant_can_read(tenant_id));
+
+create policy v2_outreach_queue_write on public.v2_outreach_queue
+  for all using (public.v2_tenant_can_write(tenant_id))
+  with check (public.v2_tenant_can_write(tenant_id));
 
 -- ---------------------------------------------------------------------------
 -- 2. GIN index on v2_opportunities.explainability_json for dedup key lookups

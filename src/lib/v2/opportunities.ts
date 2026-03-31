@@ -1,8 +1,28 @@
+import { getVertical } from "@/lib/v2/franchise-verticals";
 import { computeOpportunityScores } from "@/lib/v2/scoring";
 import { logV2AuditEvent } from "@/lib/v2/audit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-function deriveScoreInputFromSourceEvent(sourceEvent: Record<string, unknown>, opportunity: Record<string, unknown>) {
+async function resolveTenantVertical(supabase: SupabaseClient, tenantId: string) {
+  const { data: tenantRow } = await supabase
+    .from("v2_tenants")
+    .select("settings_json")
+    .eq("id", tenantId)
+    .maybeSingle();
+
+  const settings =
+    tenantRow?.settings_json && typeof tenantRow.settings_json === "object"
+      ? (tenantRow.settings_json as Record<string, unknown>)
+      : null;
+
+  return getVertical(typeof settings?.vertical === "string" ? settings.vertical : null);
+}
+
+function deriveScoreInputFromSourceEvent(
+  sourceEvent: Record<string, unknown>,
+  opportunity: Record<string, unknown>,
+  vertical: ReturnType<typeof getVertical>
+) {
   const normalized = (sourceEvent.normalized_payload || {}) as Record<string, unknown>;
   const occurredAt = new Date(String(sourceEvent.occurred_at || sourceEvent.ingested_at || new Date().toISOString())).getTime();
   const ageMinutes = Math.max(0, Math.round((Date.now() - occurredAt) / 60000));
@@ -21,7 +41,9 @@ function deriveScoreInputFromSourceEvent(sourceEvent: Record<string, unknown>, o
     contactAvailability: Number(normalized.contact_availability || 45),
     supportingSignalsCount: Number(normalized.supporting_signals_count || 1),
     catastropheSignal: Number(normalized.catastrophe_signal || opportunity.catastrophe_linkage_score || 0),
-    sourceReliability: Number(sourceEvent.source_reliability_score || 50)
+    sourceReliability: Number(sourceEvent.source_reliability_score || 50),
+    signalCategory: String(normalized.event_category || normalized.category || sourceEvent.event_type || opportunity.opportunity_type || "signal"),
+    vertical
   };
 }
 
@@ -57,7 +79,8 @@ export async function rescoreOpportunityV2({
 
   if (sourceEventError || !sourceEvent) throw new Error(sourceEventError?.message || "Source event not found");
 
-  const next = computeOpportunityScores(deriveScoreInputFromSourceEvent(sourceEvent, opportunity));
+  const vertical = await resolveTenantVertical(supabase, tenantId);
+  const next = computeOpportunityScores(deriveScoreInputFromSourceEvent(sourceEvent, opportunity, vertical));
 
   const { data: updated, error: updateError } = await supabase
     .from("v2_opportunities")

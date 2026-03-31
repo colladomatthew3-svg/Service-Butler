@@ -6,7 +6,7 @@
  *   - Suppression lists (opt-outs)
  *   - Cooling windows (no double-sends)
  *   - Vertical-specific message templates
- *   - Safe mode flag (SB_OUTREACH_SAFE_MODE)
+ *   - Manual review queue for every newly qualified contact
  *
  * This is intentionally separate from the qualification API so the
  * qualification endpoint remains a fast, synchronous write — outreach
@@ -17,15 +17,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FranchiseVertical } from "@/lib/v2/franchise-verticals";
 import { getVertical } from "@/lib/v2/franchise-verticals";
 import { logV2AuditEvent } from "@/lib/v2/audit";
-
-// ---------------------------------------------------------------------------
-// Safe mode
-// ---------------------------------------------------------------------------
-
-function isOutreachSafeMode(): boolean {
-  const val = String(process.env.SB_OUTREACH_SAFE_MODE || "").toLowerCase();
-  return val === "1" || val === "true" || val === "on";
-}
 
 // ---------------------------------------------------------------------------
 // Vertical-specific first-touch templates
@@ -103,11 +94,8 @@ export type QueuedOutreachEntry = {
 /**
  * Queue a first-touch outreach event for a newly qualified opportunity.
  *
- * In safe mode, records are written to `v2_outreach_queue` with status
- * "pending_review" so an operator can approve before sending.
- *
- * In live mode, inserts directly into `v2_outreach_events` with status
- * "queued" for the outreach worker to pick up.
+ * Qualification-triggered outreach always enters `v2_outreach_queue` with
+ * status "pending_review" so an operator can approve it before any send path.
  */
 export async function queueQualificationOutreach(
   supabase: SupabaseClient,
@@ -124,7 +112,7 @@ export async function queueQualificationOutreach(
     urgency?: string;
   }
 ): Promise<{ queued: boolean; channel: string | null; safeMode: boolean; reason?: string }> {
-  const safeMode = isOutreachSafeMode();
+  const safeMode = true;
 
   // Determine preferred channel
   const channel: "sms" | "email" | null = input.phone ? "sms" : input.email ? "email" : null;
@@ -143,62 +131,22 @@ export async function queueQualificationOutreach(
   const messageBody = channel === "sms" ? template.smsBody : template.emailBody;
   const subject = channel === "email" ? template.emailSubject : null;
 
-  if (safeMode) {
-    // Write to pending queue for operator review
-    const { error } = await supabase.from("v2_outreach_queue").insert({
-      tenant_id: input.tenantId,
-      opportunity_id: input.opportunityId,
-      channel,
-      to_address: destination,
-      body: messageBody,
-      subject,
-      status: "pending_review",
-      vertical_key: input.vertical.key,
-      qualified_at: new Date().toISOString(),
-      queued_by: input.actorUserId,
-      metadata: {
-        contact_name: input.contactName ?? null,
-        service_type: input.serviceType ?? null,
-        safe_mode: true,
-      },
-    });
-
-    if (!error) {
-      await logV2AuditEvent({
-        tenantId: input.tenantId,
-        actorType: "user",
-        actorId: input.actorUserId,
-        action: "outreach_queued_safe_mode",
-        entityType: "opportunity",
-        entityId: input.opportunityId,
-        after: { channel, vertical: input.vertical.key },
-      });
-    }
-
-    return { queued: !error, channel, safeMode: true };
-  }
-
-  // Live mode — queue for immediate dispatch
-  const { error } = await supabase.from("v2_outreach_events").insert({
+  const { error } = await supabase.from("v2_outreach_queue").insert({
     tenant_id: input.tenantId,
-    // Note: opportunity_id stored in metadata; lead_id filled when lead is created
-    lead_id: null,
+    opportunity_id: input.opportunityId,
     channel,
-    event_type: "queued",
-    sent_at: null,
-    provider_message_id: null,
-    outcome: null,
+    to_address: destination,
+    body: messageBody,
+    subject,
+    status: "pending_review",
+    vertical_key: input.vertical.key,
+    qualified_at: new Date().toISOString(),
+    queued_by: input.actorUserId,
     metadata: {
-      opportunity_id: input.opportunityId,
-      to_address: destination,
-      body: messageBody,
-      subject,
-      vertical_key: input.vertical.key,
       contact_name: input.contactName ?? null,
       service_type: input.serviceType ?? null,
-      queued_at: new Date().toISOString(),
-      queued_by: input.actorUserId,
-    },
+      safe_mode: true
+    }
   });
 
   if (!error) {
@@ -206,14 +154,14 @@ export async function queueQualificationOutreach(
       tenantId: input.tenantId,
       actorType: "user",
       actorId: input.actorUserId,
-      action: "outreach_queued_live",
+      action: "outreach_queued_pending_review",
       entityType: "opportunity",
       entityId: input.opportunityId,
       after: { channel, vertical: input.vertical.key },
     });
   }
 
-  return { queued: !error, channel, safeMode: false };
+  return { queued: !error, channel, safeMode };
 }
 
 /**

@@ -5,6 +5,8 @@ import { hasVerifiedOwnerContact } from "@/lib/services/contact-proof";
 import { runScanner } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { featureFlags } from "@/lib/config/feature-flags";
+import { injectDedupKey } from "@/lib/v2/deduplication";
+import { getVertical } from "@/lib/v2/franchise-verticals";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { computeOpportunityScores } from "@/lib/v2/scoring";
 import type { OpportunityQualificationStatus } from "@/lib/v2/opportunity-qualification";
@@ -39,6 +41,37 @@ function buildScannerQualificationFields(op: { source: string; raw?: Record<stri
       }
     })
   };
+}
+
+async function resolveTenantVertical(supabase: Awaited<ReturnType<typeof getCurrentUserContext>>["supabase"], tenantId: string) {
+  const { data: tenantRow } = await supabase
+    .from("v2_tenants")
+    .select("settings_json")
+    .eq("id", tenantId)
+    .maybeSingle();
+
+  const settings =
+    tenantRow?.settings_json && typeof tenantRow.settings_json === "object"
+      ? (tenantRow.settings_json as Record<string, unknown>)
+      : null;
+
+  return getVertical(typeof settings?.vertical === "string" ? settings.vertical : null);
+}
+
+function resolveScannerSignalCategory(op: { category?: string; source?: string; raw?: Record<string, unknown> }) {
+  const candidates = [
+    op.category,
+    typeof op.raw?.event_category === "string" ? op.raw.event_category : null,
+    typeof op.raw?.category === "string" ? op.raw.category : null,
+    typeof op.raw?.service_type === "string" ? op.raw.service_type : null,
+    op.source
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+
+  return "scanner_signal";
 }
 
 export async function POST(req: NextRequest) {
@@ -264,10 +297,16 @@ export async function POST(req: NextRequest) {
 
         if (sourceRow?.id) {
           const sourceId = String(sourceRow.id);
+          const tenantVertical = await resolveTenantVertical(supabase, franchiseTenantId);
           for (const op of result.opportunities) {
             const occurredAt = op.createdAtIso || new Date().toISOString();
             const dedupeKey = `${op.id}|${occurredAt}`;
             const hasVerifiedContact = hasVerifiedOwnerContact(op.raw?.enrichment);
+            const serviceType = String(op.raw?.service_type || op.category || "general");
+            const propertyAddress = typeof op.raw?.property_address === "string" ? op.raw.property_address : op.locationText;
+            const propertyCity = typeof op.raw?.property_city === "string" ? op.raw.property_city : null;
+            const propertyState = typeof op.raw?.property_state === "string" ? op.raw.property_state : null;
+            const propertyPostalCode = typeof op.raw?.property_postal_code === "string" ? op.raw.property_postal_code : null;
 
             const { data: sourceEvent } = await supabase
               .from("v2_source_events")
@@ -313,16 +352,35 @@ export async function POST(req: NextRequest) {
               contactAvailability: hasVerifiedContact ? 78 : 18,
               supportingSignalsCount: Array.isArray(op.tags) ? op.tags.length : 1,
               catastropheSignal: Array.isArray(op.tags) && op.tags.some((tag) => /storm|flood|fire/i.test(tag)) ? 80 : 30,
-              sourceReliability: op.confidence
+              sourceReliability: op.confidence,
+              signalCategory: resolveScannerSignalCategory(op),
+              vertical: tenantVertical
             });
+
+            const explainability = injectDedupKey(
+              {
+                ...score.explainability,
+                contact_enrichment_available: hasVerifiedContact,
+                scanner_opportunity_id: op.id,
+                ...buildScannerQualificationFields(op, hasVerifiedContact)
+              },
+              {
+                address: propertyAddress || null,
+                city: propertyCity,
+                state: propertyState,
+                postalCode: propertyPostalCode,
+                serviceType,
+                sourceType: String(op.source || "scanner_signal")
+              }
+            );
 
             const { data: opportunityRow } = await supabase
               .from("v2_opportunities")
               .insert({
                 tenant_id: franchiseTenantId,
                 source_event_id: sourceEvent?.id || null,
-                opportunity_type: String(op.raw?.service_type || op.category || "general"),
-                service_line: String(op.raw?.service_type || op.category || "general"),
+                opportunity_type: serviceType,
+                service_line: serviceType,
                 title: op.title,
                 description: op.description,
                 urgency_score: score.urgencyScore,
@@ -332,16 +390,11 @@ export async function POST(req: NextRequest) {
                 revenue_band: score.revenueBand,
                 catastrophe_linkage_score: score.catastropheLinkageScore,
                 location_text: op.locationText,
-                postal_code: typeof op.raw?.property_postal_code === "string" ? op.raw.property_postal_code : null,
+                postal_code: propertyPostalCode,
                 contact_status: hasVerifiedContact ? "identified" : "unknown",
                 routing_status: "pending",
                 lifecycle_status: "new",
-                explainability_json: {
-                  ...score.explainability,
-                  contact_enrichment_available: hasVerifiedContact,
-                  scanner_opportunity_id: op.id,
-                  ...buildScannerQualificationFields(op, hasVerifiedContact)
-                }
+                explainability_json: explainability
               })
               .select("id")
               .single();

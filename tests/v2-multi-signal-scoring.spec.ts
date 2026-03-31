@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { computeOpportunityScores } from "../src/lib/v2/scoring";
 import { connectorRunnerInternals } from "../src/lib/v2/connectors/runner";
+import { getVertical } from "../src/lib/v2/franchise-verticals";
 
 test("multi-signal scoring increases confidence with stronger source agreement", () => {
   const lowAgreement = computeOpportunityScores({
@@ -78,4 +79,55 @@ test("score merge marks opportunities as multi-signal when distinct sources agre
   expect(merged.sourceTypes).toContain("google_review_distress");
   expect(merged.multiSignal).toBeTruthy();
   expect(merged.confidenceScore).toBeGreaterThanOrEqual(70);
+});
+
+test("runner score inputs carry vertical scoring context into the live ingestion path", () => {
+  const vertical = getVertical("restoration");
+  const input = connectorRunnerInternals.scoreInputsForEvent(
+    {
+      occurredAt: "2026-03-20T12:00:00.000Z",
+      dedupeKey: "storm-1",
+      eventType: "weather.nws",
+      eventCategory: "storm",
+      title: "Storm warning",
+      serviceLine: "restoration",
+      rawPayload: {},
+      normalizedPayload: {}
+    },
+    55,
+    {
+      vertical,
+      signalCategory: "storm"
+    }
+  );
+
+  expect(input.vertical?.key).toBe("restoration");
+  expect(input.signalCategory).toBe("storm");
+});
+
+test("runner builds address-level dedup input from normalized connector events", () => {
+  const dedupInput = connectorRunnerInternals.buildDedupInputForEvent(
+    {
+      occurredAt: "2026-03-20T12:00:00.000Z",
+      dedupeKey: "permit-1",
+      eventType: "permit.city",
+      title: "Roof permit",
+      addressText: "123 Main St",
+      city: "Albany",
+      state: "NY",
+      postalCode: "12207",
+      rawPayload: {},
+      normalizedPayload: {}
+    },
+    "roofing"
+  );
+
+  expect(dedupInput).toEqual({
+    address: "123 Main St",
+    city: "Albany",
+    state: "NY",
+    postalCode: "12207",
+    serviceType: "roofing",
+    sourceType: "permit.city"
+  });
 });

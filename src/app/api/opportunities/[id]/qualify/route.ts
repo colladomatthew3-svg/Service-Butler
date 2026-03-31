@@ -93,7 +93,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const { data: opportunity, error: loadError } = await context.supabase
     .from("v2_opportunities")
-    .select("id,explainability_json")
+    .select("id,urgency_score,location_text,explainability_json")
     .eq("tenant_id", context.franchiseTenantId)
     .eq("id", opportunityId)
     .maybeSingle();
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     })
     .eq("tenant_id", context.franchiseTenantId)
     .eq("id", opportunityId)
-    .select("id,lifecycle_status,contact_status,explainability_json")
+    .select("id,urgency_score,location_text,lifecycle_status,contact_status,explainability_json")
     .single();
 
   if (updateError || !updated?.id) {
@@ -139,11 +139,16 @@ export async function POST(req: NextRequest, { params }: Params) {
       tenantId: context.franchiseTenantId,
       actorUserId: context.userId,
       franchiseVerticalKey: context.franchiseVertical ?? null,
-      urgencyScore: typeof explainJson.urgency_score === "number" ? explainJson.urgency_score : null,
+      urgencyScore: typeof updated.urgency_score === "number" ? updated.urgency_score : typeof explainJson.urgency_score === "number" ? explainJson.urgency_score : null,
       contactName: qualification.contactName,
       phone: qualification.phone,
       email: qualification.email,
-      address: typeof explainJson.address === "string" ? explainJson.address : null,
+      address:
+        typeof explainJson.address === "string"
+          ? explainJson.address
+          : typeof updated.location_text === "string"
+            ? updated.location_text
+            : null,
       serviceType: qualification.sourceType,
     }).catch(() => ({ triggered: false }));
     outreachResult = bridge;

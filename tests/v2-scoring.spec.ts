@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { getVertical } from "../src/lib/v2/franchise-verticals";
 import { computeOpportunityScores } from "../src/lib/v2/scoring";
 
 test("v2 scoring returns bounded explainable scores", () => {
@@ -58,4 +59,41 @@ test("v2 scoring escalates revenue band for stronger job signals", () => {
   const rank = { low: 0, medium: 1, high: 2, enterprise: 3 } as const;
   expect(rank[strong.revenueBand]).toBeGreaterThan(rank[weak.revenueBand]);
   expect(strong.jobLikelihoodScore).toBeGreaterThan(weak.jobLikelihoodScore);
+});
+
+test("v2 scoring applies vertical and preferred-signal modifiers when supplied", () => {
+  const base = computeOpportunityScores({
+    sourceType: "weather.nws",
+    eventRecencyMinutes: 20,
+    severity: 70,
+    geographyMatch: 80,
+    propertyTypeFit: 55,
+    serviceLineFit: 82,
+    priorCustomerMatch: 35,
+    contactAvailability: 45,
+    supportingSignalsCount: 2,
+    catastropheSignal: 76,
+    sourceReliability: 82
+  });
+
+  const restorationStorm = computeOpportunityScores({
+    sourceType: "weather.nws",
+    eventRecencyMinutes: 20,
+    severity: 70,
+    geographyMatch: 80,
+    propertyTypeFit: 55,
+    serviceLineFit: 82,
+    priorCustomerMatch: 35,
+    contactAvailability: 45,
+    supportingSignalsCount: 2,
+    catastropheSignal: 76,
+    sourceReliability: 82,
+    signalCategory: "storm",
+    vertical: getVertical("restoration")
+  });
+
+  expect(restorationStorm.urgencyScore).toBeGreaterThan(base.urgencyScore);
+  expect(restorationStorm.jobLikelihoodScore).toBeGreaterThanOrEqual(base.jobLikelihoodScore);
+  expect(restorationStorm.explainability.vertical_key).toBe("restoration");
+  expect(restorationStorm.explainability.preferred_signal).toBeTruthy();
 });

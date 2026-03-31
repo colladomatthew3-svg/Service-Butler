@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { hasVerifiedOwnerContact } from "@/lib/services/contact-proof";
@@ -34,7 +35,7 @@ import type { EnrichmentRecord } from "@/lib/services/enrichment";
 type Mode = "demo" | "live";
 type ScannerRuntimeMode = "fully-live" | "live-partial" | "simulated";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
-type Tab = "feed" | "rules";
+type Tab = "feed" | "sdr" | "rules";
 type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
 type Trigger = "storm" | "heavy-rain" | "freeze" | "high-wind";
 
@@ -72,6 +73,23 @@ type QualificationState = {
   nextRecommendedAction: string;
   proofAuthenticity: string;
   sourceType: string;
+  contactName: string | null;
+  phone: string | null;
+  email: string | null;
+  verificationStatus: string | null;
+  qualificationSource: string | null;
+  qualificationNotes: string | null;
+  qualifiedAt: string | null;
+  qualifiedBy: string | null;
+};
+
+type QualificationDraft = {
+  contactName: string;
+  phone: string;
+  email: string;
+  verificationStatus: string;
+  qualificationSource: string;
+  qualificationNotes: string;
 };
 
 const categories: Category[] = ["restoration", "plumbing", "demolition", "asbestos", "general"];
@@ -135,6 +153,10 @@ const marketPresets = [
   { label: "Tampa, FL", value: "Tampa, FL 33602" }
 ] as const;
 
+function readText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function mergeScannerEvents(primary: ScannerEvent[], secondary: ScannerEvent[] = []) {
   const seen = new Set<string>();
   return [...primary, ...secondary].filter((event) => {
@@ -152,6 +174,38 @@ function ScannerMetric({ label, value, helper }: { label: string; value: string;
       <p className="mt-1 text-xs text-semantic-muted">{helper}</p>
     </div>
   );
+}
+
+function normalizeQualificationState(event: ScannerEvent, override?: QualificationState): QualificationState {
+  if (override) return override;
+
+  const hasVerifiedContact = hasVerifiedOwnerContact(event.raw?.enrichment);
+  return {
+    status: hasVerifiedContact ? "qualified_contactable" : "research_only",
+    reasonCode: readText(event.raw?.qualification_reason_code) || (hasVerifiedContact ? "verified_contact_present" : "missing_verified_contact"),
+    nextRecommendedAction: readText(event.raw?.next_recommended_action) || (hasVerifiedContact ? "dispatch_to_lead_queue" : "route_to_sdr"),
+    proofAuthenticity: readText(event.raw?.proof_authenticity) || "unknown",
+    sourceType: readText(event.raw?.source_type) || String(event.source || "scanner_signal"),
+    contactName: readText(event.raw?.contact_name) || null,
+    phone: readText(event.raw?.phone) || null,
+    email: readText(event.raw?.email) || null,
+    verificationStatus: readText(event.raw?.verification_status) || null,
+    qualificationSource: readText(event.raw?.qualification_source) || null,
+    qualificationNotes: readText(event.raw?.qualification_notes) || null,
+    qualifiedAt: readText(event.raw?.qualified_at) || null,
+    qualifiedBy: readText(event.raw?.qualified_by) || null
+  };
+}
+
+function buildQualificationDraft(state: QualificationState): QualificationDraft {
+  return {
+    contactName: state.contactName || "",
+    phone: state.phone || "",
+    email: state.email || "",
+    verificationStatus: state.verificationStatus || "verified",
+    qualificationSource: state.qualificationSource || "sdr_follow_up_lane",
+    qualificationNotes: state.qualificationNotes || ""
+  };
 }
 
 export function LeadScannerView({
@@ -181,6 +235,9 @@ export function LeadScannerView({
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const [demoActionMessage, setDemoActionMessage] = useState<string | null>(null);
   const [qualificationByEventId, setQualificationByEventId] = useState<Record<string, QualificationState>>({});
+  const [qualificationDrafts, setQualificationDrafts] = useState<Record<string, QualificationDraft>>({});
+  const [reviewingQualificationId, setReviewingQualificationId] = useState<string | null>(null);
+  const [savingQualificationId, setSavingQualificationId] = useState<string | null>(null);
 
   const [rules, setRules] = useState<RoutingRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
@@ -217,6 +274,25 @@ export function LeadScannerView({
     () => Array.from(new Set([scannerWarning, feedWarning].filter((value): value is string => Boolean(value)))),
     [feedWarning, scannerWarning]
   );
+  const qualifiedDispatchableCount = useMemo(
+    () =>
+      sortedEvents.filter((event) => {
+        const qualification = normalizeQualificationState(event, qualificationByEventId[event.id]);
+        return (
+          hasVerifiedOwnerContact(event.raw?.enrichment) ||
+          (qualification.status === "qualified_contactable" &&
+            qualification.verificationStatus === "verified" &&
+            Boolean(qualification.phone || qualification.email))
+        );
+      }).length,
+    [qualificationByEventId, sortedEvents]
+  );
+  const sdrQueuedEvents = useMemo(
+    () =>
+      sortedEvents.filter((event) => normalizeQualificationState(event, qualificationByEventId[event.id]).status === "queued_for_sdr"),
+    [qualificationByEventId, sortedEvents]
+  );
+  const visibleEvents = tab === "sdr" ? sdrQueuedEvents : sortedEvents;
 
   useEffect(() => {
     setTab(initialTab);
@@ -401,7 +477,15 @@ export function LeadScannerView({
             reasonCode: data.reason_code || "missing_verified_contact",
             nextRecommendedAction: data.next_step || "route_to_sdr",
             proofAuthenticity: data.proof_authenticity || "unknown",
-            sourceType: data.source_type || String(event.source || "scanner_signal")
+            sourceType: data.source_type || String(event.source || "scanner_signal"),
+            contactName: null,
+            phone: null,
+            email: null,
+            verificationStatus: null,
+            qualificationSource: null,
+            qualificationNotes: null,
+            qualifiedAt: null,
+            qualifiedBy: null
           }
         }));
       }
@@ -447,6 +531,16 @@ export function LeadScannerView({
       qualification_status?: QualificationState["status"];
       qualification_reason_code?: string | null;
       next_recommended_action?: string;
+      proof_authenticity?: string;
+      source_type?: string | null;
+      contact_name?: string | null;
+      phone?: string | null;
+      email?: string | null;
+      verification_status?: string | null;
+      qualification_source?: string | null;
+      qualification_notes?: string | null;
+      qualified_at?: string | null;
+      qualified_by?: string | null;
     };
     setDispatchingId(null);
 
@@ -461,11 +555,147 @@ export function LeadScannerView({
         status: data.qualification_status || "queued_for_sdr",
         reasonCode: data.qualification_reason_code || "missing_verified_contact",
         nextRecommendedAction: data.next_recommended_action || "await_sdr_review",
-        proofAuthenticity: String(event.raw?.proof_authenticity || "unknown"),
-        sourceType: String(event.raw?.source_type || event.source || "scanner_signal")
+        proofAuthenticity: data.proof_authenticity || String(event.raw?.proof_authenticity || "unknown"),
+        sourceType: data.source_type || String(event.raw?.source_type || event.source || "scanner_signal"),
+        contactName: data.contact_name || null,
+        phone: data.phone || null,
+        email: data.email || null,
+        verificationStatus: data.verification_status || null,
+        qualificationSource: data.qualification_source || "scanner_operator",
+        qualificationNotes: data.qualification_notes || `Queued from scanner for SDR follow-up: ${event.title}`,
+        qualifiedAt: data.qualified_at || null,
+        qualifiedBy: data.qualified_by || null
       }
     }));
+    setQualificationDrafts((prev) => ({
+      ...prev,
+      [event.id]: buildQualificationDraft(
+        normalizeQualificationState(event, {
+          status: data.qualification_status || "queued_for_sdr",
+          reasonCode: data.qualification_reason_code || "missing_verified_contact",
+          nextRecommendedAction: data.next_recommended_action || "await_sdr_review",
+          proofAuthenticity: data.proof_authenticity || String(event.raw?.proof_authenticity || "unknown"),
+          sourceType: data.source_type || String(event.raw?.source_type || event.source || "scanner_signal"),
+          contactName: data.contact_name || null,
+          phone: data.phone || null,
+          email: data.email || null,
+          verificationStatus: data.verification_status || null,
+          qualificationSource: data.qualification_source || "scanner_operator",
+          qualificationNotes: data.qualification_notes || `Queued from scanner for SDR follow-up: ${event.title}`,
+          qualifiedAt: data.qualified_at || null,
+          qualifiedBy: data.qualified_by || null
+        })
+      )
+    }));
     showToast("Opportunity queued for SDR qualification");
+  }
+
+  function openQualificationReview(event: ScannerEvent) {
+    const state = normalizeQualificationState(event, qualificationByEventId[event.id]);
+    setReviewingQualificationId(event.id);
+    setQualificationDrafts((prev) => ({
+      ...prev,
+      [event.id]: prev[event.id] || buildQualificationDraft(state)
+    }));
+  }
+
+  function updateQualificationDraft(eventId: string, patch: Partial<QualificationDraft>) {
+    setQualificationDrafts((prev) => ({
+      ...prev,
+      [eventId]: {
+        ...(prev[eventId] || {
+          contactName: "",
+          phone: "",
+          email: "",
+          verificationStatus: "verified",
+          qualificationSource: "sdr_follow_up_lane",
+          qualificationNotes: ""
+        }),
+        ...patch
+      }
+    }));
+  }
+
+  async function submitQualification(event: ScannerEvent, status: "qualified_contactable" | "rejected") {
+    const draft = qualificationDrafts[event.id] || buildQualificationDraft(normalizeQualificationState(event, qualificationByEventId[event.id]));
+    const notes = draft.qualificationNotes.trim();
+    const qualificationSource = draft.qualificationSource.trim() || "sdr_follow_up_lane";
+
+    if (!notes) {
+      showToast("Add qualification notes before saving SDR review");
+      return;
+    }
+
+    if (status === "qualified_contactable") {
+      if (!draft.contactName.trim()) {
+        showToast("Contact name is required to mark this signal contactable");
+        return;
+      }
+      if (!draft.phone.trim() && !draft.email.trim()) {
+        showToast("Phone or email is required to mark this signal contactable");
+        return;
+      }
+    }
+
+    setSavingQualificationId(event.id);
+    const res = await fetch(`/api/opportunities/${String(event.raw?.v2_opportunity_id || event.id)}/qualify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        qualification_status: status,
+        qualification_reason_code: status === "rejected" ? "rejected_after_sdr_review" : "verified_contact_present",
+        qualification_source: qualificationSource,
+        qualification_notes: notes,
+        contact_name: status === "qualified_contactable" ? draft.contactName.trim() : undefined,
+        phone: status === "qualified_contactable" ? draft.phone.trim() || undefined : undefined,
+        email: status === "qualified_contactable" ? draft.email.trim() || undefined : undefined,
+        verification_status: status === "qualified_contactable" ? draft.verificationStatus || "verified" : undefined,
+        scannerOpportunityId: typeof event.raw?.scanner_opportunity_id === "string" ? event.raw.scanner_opportunity_id : event.id
+      })
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      qualification_status?: QualificationState["status"];
+      qualification_reason_code?: string | null;
+      next_recommended_action?: string;
+      proof_authenticity?: string;
+      source_type?: string | null;
+      contact_name?: string | null;
+      phone?: string | null;
+      email?: string | null;
+      verification_status?: string | null;
+      qualification_source?: string | null;
+      qualification_notes?: string | null;
+      qualified_at?: string | null;
+      qualified_by?: string | null;
+    };
+    setSavingQualificationId(null);
+
+    if (!res.ok) {
+      showToast(data.error || "Could not save SDR qualification");
+      return;
+    }
+
+    setQualificationByEventId((prev) => ({
+      ...prev,
+      [event.id]: {
+        status: data.qualification_status || status,
+        reasonCode: data.qualification_reason_code || (status === "rejected" ? "rejected_after_sdr_review" : "verified_contact_present"),
+        nextRecommendedAction: data.next_recommended_action || (status === "rejected" ? "do_not_pursue" : "create_lead"),
+        proofAuthenticity: data.proof_authenticity || String(event.raw?.proof_authenticity || "unknown"),
+        sourceType: data.source_type || String(event.raw?.source_type || event.source || "scanner_signal"),
+        contactName: data.contact_name || null,
+        phone: data.phone || null,
+        email: data.email || null,
+        verificationStatus: data.verification_status || null,
+        qualificationSource: data.qualification_source || qualificationSource,
+        qualificationNotes: data.qualification_notes || notes,
+        qualifiedAt: data.qualified_at || null,
+        qualifiedBy: data.qualified_by || null
+      }
+    }));
+    setReviewingQualificationId((current) => (current === event.id ? null : current));
+    showToast(status === "rejected" ? "Signal marked do-not-pursue" : "Verified contact saved. This signal is ready for dispatch.");
   }
 
   async function saveRule() {
@@ -530,6 +760,7 @@ export function LeadScannerView({
 
   const tabs: Array<{ id: Tab; label: string; icon: typeof Radar }> = [
     { id: "feed", label: "Signals", icon: Radar },
+    { id: "sdr", label: "SDR Queue", icon: CheckCircle2 },
     { id: "rules", label: "Routing", icon: Settings2 }
   ];
 
@@ -559,7 +790,10 @@ export function LeadScannerView({
                 Scan now
               </Button>
               <Button size="lg" variant="secondary" onClick={() => setTab("feed")}>
-                Open leads
+                Signal queue
+              </Button>
+              <Button size="lg" variant="secondary" onClick={() => setTab("sdr")}>
+                SDR lane
               </Button>
               <Button size="lg" variant="ghost" onClick={() => setTab("rules")}>
                 Routing rules
@@ -585,7 +819,7 @@ export function LeadScannerView({
                 <ScannerMetric label="Active market" value={location} helper="Saved service area" />
                 <ScannerMetric label="Signal mix" value={`${sourceMixCount} sources`} helper="Channels represented" />
                 <ScannerMetric label="Queue depth" value={`${queueDepth} results`} helper="Lead candidates" />
-                <ScannerMetric label="High intent" value={`${highIntentCount}`} helper="Ready to work now" />
+                <ScannerMetric label="SDR queue" value={`${sdrQueuedEvents.length}`} helper="Needs verified contact" />
               </div>
 
               <div className="mt-4 rounded-[1.35rem] border border-semantic-border/60 bg-white/88 p-4">
@@ -817,22 +1051,37 @@ export function LeadScannerView({
         </div>
       )}
 
-      {tab === "feed" && (
+      {tab !== "rules" && (
         <section className="space-y-4">
-          {!loading && sortedEvents.length > 0 && (
+          {!loading && visibleEvents.length > 0 && (
             <div className="flex flex-col gap-2 rounded-[1.1rem] border border-semantic-border/60 bg-white/78 px-4 py-4 text-sm text-semantic-text shadow-[0_10px_24px_rgba(31,42,36,0.05)] sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Ranked queue</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">
+                  {tab === "sdr" ? "SDR follow-up lane" : "Ranked queue"}
+                </p>
                 <p className="mt-1 text-sm font-semibold text-semantic-text">
-                  {sortedEvents.length} opportunities surfaced.
-                  {showingFirstScanGuide
-                    ? " Work the strongest result first and create a lead only if you would actually call it."
-                    : " Work the strongest result first and keep the queue moving."}
+                  {tab === "sdr"
+                    ? `${visibleEvents.length} signals are waiting on verified contact before they can become leads or jobs.`
+                    : `${visibleEvents.length} opportunities surfaced.`}
+                  {tab === "sdr"
+                    ? " Capture verified contact, then promote only the credible ones into dispatch."
+                    : showingFirstScanGuide
+                      ? " Work the strongest result first and create a lead only if you would actually call it."
+                      : " Work the strongest result first and keep the queue moving."}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="brand">{highIntentCount} high intent</Badge>
-                <Badge variant="default">{sourceMixCount} sources</Badge>
+                {tab === "sdr" ? (
+                  <>
+                    <Badge variant="brand">{visibleEvents.length} queued</Badge>
+                    <Badge variant="default">{qualifiedDispatchableCount} ready to dispatch</Badge>
+                  </>
+                ) : (
+                  <>
+                    <Badge variant="brand">{highIntentCount} high intent</Badge>
+                    <Badge variant="default">{sourceMixCount} sources</Badge>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -858,27 +1107,46 @@ export function LeadScannerView({
             </Card>
           )}
 
-          {!loading && sortedEvents.length === 0 && (
+          {!loading && visibleEvents.length === 0 && (
             <Card className="overflow-hidden border-semantic-border/55 bg-white/78 shadow-[0_18px_44px_rgba(31,42,36,0.07)]">
               <CardBody className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1.1fr_0.9fr]">
                 <div className="space-y-4">
-                  <p className="eyebrow">No scan results yet</p>
+                  <p className="eyebrow">{tab === "sdr" ? "No SDR queue yet" : "No scan results yet"}</p>
                   <h3 className="section-title max-w-2xl text-semantic-text">
-                    {showingFirstScanGuide ? "Your market is ready for its first scan." : "Scanner is listening for new demand."}
+                    {tab === "sdr"
+                      ? "Queued SDR follow-up will appear here once a research-only signal is escalated."
+                      : showingFirstScanGuide
+                        ? "Your market is ready for its first scan."
+                        : "Scanner is listening for new demand."}
                   </h3>
                   <p className="dashboard-body max-w-2xl text-semantic-muted">
-                    {showingFirstScanGuide
-                      ? "Run the first scan to surface storm damage, water loss, freeze risk, and emergency demand in the service area you just saved."
-                      : "Run a scan to surface storm damage, water loss, freeze risk, and emergency service demand in your service area."}
+                    {tab === "sdr"
+                      ? "Signals without verified contact stay blocked here until SDR captures a real phone or email, or rejects them as non-workable."
+                      : showingFirstScanGuide
+                        ? "Run the first scan to surface storm damage, water loss, freeze risk, and emergency demand in the service area you just saved."
+                        : "Run a scan to surface storm damage, water loss, freeze risk, and emergency service demand in your service area."}
                   </p>
                   <div className="flex flex-wrap gap-3">
-                    <Button size="lg" onClick={() => runScan(true)} disabled={loading} className="shadow-[0_16px_30px_rgba(29,78,216,0.18)]">
-                      <Sparkles className="h-4 w-4" />
-                      Run scan
-                    </Button>
-                    <Button size="lg" variant="secondary" onClick={() => setTab("rules")}>
-                      Review routing
-                    </Button>
+                    {tab === "sdr" ? (
+                      <>
+                        <Button size="lg" variant="secondary" onClick={() => setTab("feed")}>
+                          Open signal queue
+                        </Button>
+                        <Button size="lg" variant="ghost" onClick={() => setTab("rules")}>
+                          Review routing
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button size="lg" onClick={() => runScan(true)} disabled={loading} className="shadow-[0_16px_30px_rgba(29,78,216,0.18)]">
+                          <Sparkles className="h-4 w-4" />
+                          Run scan
+                        </Button>
+                        <Button size="lg" variant="secondary" onClick={() => setTab("rules")}>
+                          Review routing
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -887,8 +1155,8 @@ export function LeadScannerView({
                   <div className="mt-4 space-y-3">
                     {[
                       ["1", "Set service area", "Ground demand in the market your crews actually cover."],
-                      ["2", "Run first scan", "Surface the strongest signal and review why it matters."],
-                      ["3", "Create first lead", "Only work the result if your team would actually call it."]
+                      ["2", tab === "sdr" ? "Send to SDR" : "Run first scan", tab === "sdr" ? "Queue non-contactable signals instead of overstating them as leads." : "Surface the strongest signal and review why it matters."],
+                      ["3", tab === "sdr" ? "Verify contact" : "Create first lead", tab === "sdr" ? "Capture a real phone or email before dispatch." : "Only work the result if your team would actually call it."]
                     ].map(([number, title, text]) => (
                       <div key={title} className="flex items-start gap-3 rounded-[1rem] border border-semantic-border/60 bg-white/84 p-3">
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
@@ -906,33 +1174,28 @@ export function LeadScannerView({
             </Card>
           )}
 
-          {sortedEvents.map((event, index) => {
+          {visibleEvents.map((event, index) => {
             const nextAction = String(event.raw?.next_action || event.raw?.recommended_action || "Dispatch within SLA and send first contact.");
             const reasonDetails = getOpportunityReasonDetails(event);
             const displayAddress = formatOpportunityAddress(event, location);
             const addressParts = splitDisplayAddress(displayAddress);
             const bullets = opportunityBullets(reasonDetails);
             const enrichment = getEventEnrichment(event);
-            const hasVerifiedContact = hasVerifiedOwnerContact(event.raw?.enrichment);
-            const qualificationState =
-              qualificationByEventId[event.id] ||
-              ({
-                status: hasVerifiedContact ? "qualified_contactable" : "research_only",
-                reasonCode: typeof event.raw?.qualification_reason_code === "string" ? event.raw.qualification_reason_code : hasVerifiedContact ? "verified_contact_present" : "missing_verified_contact",
-                nextRecommendedAction:
-                  typeof event.raw?.next_recommended_action === "string"
-                    ? event.raw.next_recommended_action
-                    : hasVerifiedContact
-                      ? "dispatch_to_lead_queue"
-                      : "route_to_sdr",
-                proofAuthenticity: typeof event.raw?.proof_authenticity === "string" ? event.raw.proof_authenticity : "unknown",
-                sourceType: typeof event.raw?.source_type === "string" ? event.raw.source_type : String(event.source || "scanner_signal")
-              } satisfies QualificationState);
-            const researchOnly = qualificationState.status !== "qualified_contactable";
+            const verifiedFromEnrichment = hasVerifiedOwnerContact(event.raw?.enrichment);
+            const qualificationState = normalizeQualificationState(event, qualificationByEventId[event.id]);
+            const hasDispatchableContact =
+              verifiedFromEnrichment ||
+              (qualificationState.status === "qualified_contactable" &&
+                qualificationState.verificationStatus === "verified" &&
+                Boolean(qualificationState.phone || qualificationState.email));
+            const researchOnly = !hasDispatchableContact;
             const sdrQueued = qualificationState.status === "queued_for_sdr";
+            const rejected = qualificationState.status === "rejected";
             const areaContext = [String(event.raw?.neighborhood || "").trim(), String(event.raw?.county || "").trim()].filter(Boolean).join(" · ");
             const primaryAction = getPrimaryAction(event.intent_score, showingFirstScanGuide);
             const isFeatured = index === 0;
+            const reviewOpen = reviewingQualificationId === event.id;
+            const draft = qualificationDrafts[event.id] || buildQualificationDraft(qualificationState);
 
             return (
               <Card
@@ -1021,11 +1284,13 @@ export function LeadScannerView({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Decision rail</p>
-                        <Badge variant="brand">{researchOnly ? (sdrQueued ? "Queued for SDR" : "Send to SDR") : primaryAction.label}</Badge>
+                        <Badge variant="brand">
+                          {rejected ? "Rejected" : researchOnly ? (sdrQueued ? "Queued for SDR" : "Send to SDR") : primaryAction.label}
+                        </Badge>
                       </div>
                       <Button
                         size="lg"
-                        disabled={dispatchingId === event.id || sdrQueued}
+                        disabled={dispatchingId === event.id || rejected || sdrQueued}
                         onClick={() => {
                           if (researchOnly) {
                             if (sdrQueued) return;
@@ -1042,6 +1307,8 @@ export function LeadScannerView({
                       >
                         {dispatchingId === event.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : rejected ? (
+                          <X className="h-4 w-4" />
                         ) : researchOnly ? (
                           <Settings2 className="h-4 w-4" />
                         ) : primaryAction.mode === "job" ? (
@@ -1049,7 +1316,13 @@ export function LeadScannerView({
                         ) : (
                           <Plus className="h-4 w-4" />
                         )}
-                        {researchOnly ? (sdrQueued ? "Queued for SDR" : "Send to SDR") : showingFirstScanGuide ? "Create First Lead" : primaryAction.label}
+                        {rejected
+                          ? "Rejected"
+                          : researchOnly
+                            ? (sdrQueued ? "Queued for SDR" : "Send to SDR")
+                            : showingFirstScanGuide
+                              ? "Create First Lead"
+                              : primaryAction.label}
                       </Button>
                       <p className="rounded-[1rem] border border-semantic-border/60 bg-white/82 px-4 py-3 text-sm text-semantic-text">
                         <span className="font-semibold">Next step:</span> {researchOnly ? qualificationState.nextRecommendedAction.replace(/_/g, " ") : nextAction}
@@ -1057,12 +1330,115 @@ export function LeadScannerView({
                       <div className={`rounded-[1rem] border px-4 py-3 text-sm ${researchOnly ? "border-amber-300/70 bg-amber-50/80 text-amber-950" : "border-emerald-300/70 bg-emerald-50/80 text-emerald-950"}`}>
                         <p className="font-semibold">Qualification</p>
                         <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-                          <p>Contact status: {hasVerifiedContact ? "verified contactable" : "no verified contact"}</p>
-                          <p>Verification: {hasVerifiedContact ? "verified" : qualificationState.status.replace(/_/g, " ")}</p>
+                          <p>Contact status: {hasDispatchableContact ? "verified contactable" : sdrQueued ? "queued for SDR" : rejected ? "rejected" : "no verified contact"}</p>
+                          <p>Verification: {(qualificationState.verificationStatus || (hasDispatchableContact ? "verified" : qualificationState.status)).replace(/_/g, " ")}</p>
                           <p>Blocked reason: {(qualificationState.reasonCode || "none").replace(/_/g, " ")}</p>
                           <p>Next allowed action: {qualificationState.nextRecommendedAction.replace(/_/g, " ")}</p>
                         </div>
+                        {qualificationState.contactName || qualificationState.phone || qualificationState.email ? (
+                          <div className="mt-3 rounded-[0.95rem] border border-current/10 bg-white/70 px-3 py-3 text-xs">
+                            <p>Contact: {qualificationState.contactName || "Unknown contact"}</p>
+                            <p className="mt-1">
+                              {[qualificationState.phone, qualificationState.email].filter(Boolean).join(" · ") || "No verified channel saved"}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
+                      {sdrQueued ? (
+                        <div className="rounded-[1rem] border border-semantic-border/60 bg-white/82 p-3">
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={savingQualificationId === event.id}
+                              onClick={() => openQualificationReview(event)}
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                              {reviewOpen ? "Editing qualification" : "Review qualification"}
+                            </Button>
+                            {tab !== "sdr" ? (
+                              <Button size="sm" variant="ghost" onClick={() => setTab("sdr")}>
+                                <ArrowRight className="h-4 w-4" />
+                                Open SDR lane
+                              </Button>
+                            ) : null}
+                          </div>
+                          {reviewOpen ? (
+                            <div className="mt-3 space-y-3">
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="space-y-1">
+                                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-semantic-muted">Contact name</span>
+                                  <Input
+                                    value={draft.contactName}
+                                    onChange={(e) => updateQualificationDraft(event.id, { contactName: e.target.value })}
+                                    placeholder="Decision maker or verified contact"
+                                  />
+                                </label>
+                                <label className="space-y-1">
+                                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-semantic-muted">Verification</span>
+                                  <Select
+                                    value={draft.verificationStatus}
+                                    onChange={(e) => updateQualificationDraft(event.id, { verificationStatus: e.target.value })}
+                                  >
+                                    <option value="verified">Verified</option>
+                                    <option value="review">Needs review</option>
+                                  </Select>
+                                </label>
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="space-y-1">
+                                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-semantic-muted">Phone</span>
+                                  <Input
+                                    value={draft.phone}
+                                    onChange={(e) => updateQualificationDraft(event.id, { phone: e.target.value })}
+                                    placeholder="631-555-0199"
+                                  />
+                                </label>
+                                <label className="space-y-1">
+                                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-semantic-muted">Email</span>
+                                  <Input
+                                    value={draft.email}
+                                    onChange={(e) => updateQualificationDraft(event.id, { email: e.target.value })}
+                                    placeholder="owner@example.com"
+                                  />
+                                </label>
+                              </div>
+                              <label className="space-y-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-semantic-muted">Qualification source</span>
+                                <Input
+                                  value={draft.qualificationSource}
+                                  onChange={(e) => updateQualificationDraft(event.id, { qualificationSource: e.target.value })}
+                                  placeholder="sdr_follow_up_lane"
+                                />
+                              </label>
+                              <label className="space-y-1">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-semantic-muted">Notes</span>
+                                <Textarea
+                                  rows={3}
+                                  value={draft.qualificationNotes}
+                                  onChange={(e) => updateQualificationDraft(event.id, { qualificationNotes: e.target.value })}
+                                  placeholder="Who we verified, what channel is real, and why this should move forward."
+                                />
+                              </label>
+                              <div className="flex flex-wrap gap-2">
+                                <Button size="sm" disabled={savingQualificationId === event.id} onClick={() => void submitQualification(event, "qualified_contactable")}>
+                                  {savingQualificationId === event.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                  Save qualified contact
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={savingQualificationId === event.id}
+                                  onClick={() => void submitQualification(event, "rejected")}
+                                >
+                                  <X className="h-4 w-4" />
+                                  Reject signal
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="mt-3 grid gap-2">

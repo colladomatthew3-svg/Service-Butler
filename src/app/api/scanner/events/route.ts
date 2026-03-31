@@ -93,43 +93,80 @@ export async function GET(req: NextRequest) {
       nextRecommendedAction: string;
       researchOnly: boolean;
       requiresSdrQualification: boolean;
+      contactName: string | null;
+      phone: string | null;
+      email: string | null;
+      verificationStatus: string | null;
+      qualificationSource: string | null;
+      qualificationNotes: string | null;
+      qualifiedAt: string | null;
+      qualifiedBy: string | null;
     }
   >();
 
   for (const row of (opportunityRows || []) as Array<Record<string, unknown>>) {
+    const explainability = asRecord(row.explainability_json);
     const qualification = getOpportunityQualificationSnapshot({
-      explainability: row.explainability_json,
+      explainability,
       lifecycleStatus: row.lifecycle_status,
       contactStatus: row.contact_status
     });
-    if (!qualification.scannerEventId || qualificationByScannerEventId.has(qualification.scannerEventId)) continue;
-    qualificationByScannerEventId.set(qualification.scannerEventId, {
-      opportunityId: String(row.id),
-      qualificationStatus: qualification.qualificationStatus,
-      qualificationReasonCode: qualification.qualificationReasonCode,
-      proofAuthenticity: qualification.proofAuthenticity,
-      nextRecommendedAction: qualification.nextRecommendedAction,
-      researchOnly: qualification.researchOnly,
-      requiresSdrQualification: qualification.requiresSdrQualification
-    });
+    const candidateKeys = Array.from(
+      new Set(
+        [qualification.scannerEventId, String(explainability.scanner_event_id || "").trim(), String(explainability.scanner_opportunity_id || "").trim()].filter(
+          (value): value is string => Boolean(value)
+        )
+      )
+    );
+    if (candidateKeys.length === 0) continue;
+    for (const key of candidateKeys) {
+      if (qualificationByScannerEventId.has(key)) continue;
+      qualificationByScannerEventId.set(key, {
+        opportunityId: String(row.id),
+        qualificationStatus: qualification.qualificationStatus,
+        qualificationReasonCode: qualification.qualificationReasonCode,
+        proofAuthenticity: qualification.proofAuthenticity,
+        nextRecommendedAction: qualification.nextRecommendedAction,
+        researchOnly: qualification.researchOnly,
+        requiresSdrQualification: qualification.requiresSdrQualification,
+        contactName: qualification.contactName,
+        phone: qualification.phone,
+        email: qualification.email,
+        verificationStatus: qualification.verificationStatus,
+        qualificationSource: qualification.qualificationSource,
+        qualificationNotes: qualification.qualificationNotes,
+        qualifiedAt: qualification.qualifiedAt,
+        qualifiedBy: qualification.qualifiedBy
+      });
+    }
   }
 
   return NextResponse.json({
     events: events.map((event) => {
-      const scannerOpportunityId = String(asRecord(event.raw).scanner_opportunity_id || "");
-      const qualification = qualificationByScannerEventId.get(scannerOpportunityId);
+      const raw = asRecord(event.raw);
+      const qualification =
+        qualificationByScannerEventId.get(String(raw.scanner_opportunity_id || "").trim()) ||
+        qualificationByScannerEventId.get(String(event.id || "").trim());
       if (!qualification) return event;
       return {
         ...event,
         raw: {
-          ...asRecord(event.raw),
+          ...raw,
           v2_opportunity_id: qualification.opportunityId,
           qualification_status: qualification.qualificationStatus,
           qualification_reason_code: qualification.qualificationReasonCode,
           proof_authenticity: qualification.proofAuthenticity,
           next_recommended_action: qualification.nextRecommendedAction,
           research_only: qualification.researchOnly,
-          requires_sdr_qualification: qualification.requiresSdrQualification
+          requires_sdr_qualification: qualification.requiresSdrQualification,
+          contact_name: qualification.contactName,
+          phone: qualification.phone,
+          email: qualification.email,
+          verification_status: qualification.verificationStatus,
+          qualification_source: qualification.qualificationSource,
+          qualification_notes: qualification.qualificationNotes,
+          qualified_at: qualification.qualifiedAt,
+          qualified_by: qualification.qualifiedBy
         }
       };
     })

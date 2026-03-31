@@ -24,6 +24,7 @@ import { getForecastByLatLng } from "@/lib/services/weather";
 import { getDemoDashboardSnapshot, getDemoWeatherSettings } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
+import { getOpportunityQualificationSnapshot } from "@/lib/v2/opportunity-qualification";
 
 type DashboardLeadRow = {
   id: string;
@@ -68,12 +69,22 @@ type DashboardOutboundRow = {
   export_status?: string | null;
 };
 
+type DashboardSdrRow = {
+  id: string;
+  title?: string | null;
+  location_text?: string | null;
+  created_at: string;
+  next_recommended_action?: string | null;
+  qualification_source?: string | null;
+};
+
 export default async function DashboardOverviewPage() {
   const demoMode = isDemoMode();
   let leadRows: DashboardLeadRow[] = [];
   let jobRows: DashboardJobRow[] = [];
   let opportunities: DashboardOpportunityRow[] = [];
   let outboundLists: DashboardOutboundRow[] = [];
+  let sdrQueue: DashboardSdrRow[] = [];
   let enrichedLeads: Array<DashboardLeadRow & { intent: number }> = [];
   let sourceSummaries: DataSourceSummary[] = await listDataSourceSummaries();
   let settings:
@@ -165,6 +176,35 @@ export default async function DashboardOverviewPage() {
         supabase: v2Context.supabase as never,
         tenantId: v2Context.franchiseTenantId
       });
+
+      const { data: queuedOpportunities } = await v2Context.supabase
+        .from("v2_opportunities")
+        .select("id,title,location_text,created_at,lifecycle_status,contact_status,explainability_json")
+        .eq("tenant_id", v2Context.franchiseTenantId)
+        .order("created_at", { ascending: false })
+        .limit(80);
+
+      sdrQueue = ((queuedOpportunities || []) as Array<Record<string, unknown>>)
+        .filter((row) => {
+          const qualification = getOpportunityQualificationSnapshot({
+            explainability: row.explainability_json,
+            lifecycleStatus: row.lifecycle_status,
+            contactStatus: row.contact_status
+          });
+          return qualification.qualificationStatus === "queued_for_sdr";
+        })
+        .map((row) => {
+          const explainability = (row.explainability_json as Record<string, unknown> | null) || {};
+          return {
+            id: String(row.id),
+            title: typeof row.title === "string" ? row.title : "Queued signal",
+            location_text: typeof row.location_text === "string" ? row.location_text : null,
+            created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
+            next_recommended_action: typeof explainability.next_recommended_action === "string" ? explainability.next_recommended_action : null,
+            qualification_source: typeof explainability.qualification_source === "string" ? explainability.qualification_source : null
+          };
+        })
+        .slice(0, 5);
     }
   }
 
@@ -351,6 +391,75 @@ export default async function DashboardOverviewPage() {
                 </TableBody>
               </Table>
             )}
+          </CardBody>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">SDR lane</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Queued follow-up waiting on verified contact</h2>
+            </div>
+            <Link href="/dashboard/scanner?queue=sdr" className={buttonStyles({ size: "sm", variant: "secondary" })}>
+              Open SDR lane
+            </Link>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            {sdrQueue.length === 0 ? (
+              <EmptyPanel
+                title="No queued SDR work right now."
+                body="Signals without verified contact will show up here after they are escalated from the scanner."
+              />
+            ) : (
+              sdrQueue.map((item) => (
+                <Link
+                  key={item.id}
+                  href="/dashboard/scanner?queue=sdr"
+                  className="flex items-center justify-between gap-4 rounded-lg border border-semantic-border bg-semantic-surface px-4 py-3 transition hover:border-brand-300 hover:bg-white"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-semantic-text">{item.title || "Queued signal"}</p>
+                    <p className="mt-1 text-xs text-semantic-muted">{item.location_text || weatherLabel || "Core market"}</p>
+                    <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-semantic-muted">
+                      {(item.next_recommended_action || "await_sdr_review").replace(/_/g, " ")}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <Badge variant="warning">Queued for SDR</Badge>
+                    <p className="mt-2 text-[11px] uppercase tracking-[0.12em] text-semantic-muted">{formatRelativeTime(item.created_at)}</p>
+                  </div>
+                </Link>
+              ))
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Qualification throughput</p>
+            <h2 className="mt-1 text-base font-semibold text-semantic-text">What has to be true before a signal becomes a lead</h2>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <MetricRow
+              label="Research-only signals"
+              value={String(sdrQueue.length)}
+              helper="Signals stay blocked until SDR captures a verified phone or email."
+              icon={<TriangleAlert className="h-4 w-4" />}
+            />
+            <MetricRow
+              label="Lead queue"
+              value={String(priorityLeads.length)}
+              helper="Once contact is verified, the signal can move into the lead queue for dispatch."
+              icon={<CheckCircle2 className="h-4 w-4" />}
+            />
+            <MetricRow
+              label="Buyer-proof path"
+              value="Signal -> SDR -> lead -> job"
+              helper="This keeps the demo honest and makes attribution legible to a buyer."
+              icon={<ShieldCheck className="h-4 w-4" />}
+            />
           </CardBody>
         </Card>
       </section>

@@ -3,6 +3,7 @@ import { assertRole } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
 import {
   buildQualificationUpdate,
+  getOpportunityQualificationSnapshot,
   type OpportunityQualificationMutation,
   validateQualificationMutation
 } from "@/lib/v2/opportunity-qualification";
@@ -122,6 +123,12 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: updateError?.message || "Opportunity qualification failed" }, { status: 400 });
   }
 
+  const qualification = getOpportunityQualificationSnapshot({
+    explainability: updated.explainability_json,
+    lifecycleStatus: updated.lifecycle_status,
+    contactStatus: updated.contact_status
+  });
+
   return NextResponse.json({
     opportunity: {
       id: updated.id,
@@ -129,8 +136,20 @@ export async function POST(req: NextRequest, { params }: Params) {
       contact_status: updated.contact_status,
       explainability: updated.explainability_json
     },
-    qualification_status: (updated.explainability_json as Record<string, unknown> | null)?.qualification_status || null,
-    qualification_reason_code: (updated.explainability_json as Record<string, unknown> | null)?.qualification_reason_code || null,
-    next_recommended_action: (updated.explainability_json as Record<string, unknown> | null)?.next_recommended_action || null
+    qualification_status: qualification.qualificationStatus,
+    qualification_reason_code: qualification.qualificationReasonCode,
+    next_recommended_action: qualification.nextRecommendedAction,
+    proof_authenticity: qualification.proofAuthenticity,
+    source_type: qualification.sourceType,
+    contact_name: qualification.contactName,
+    phone: qualification.phone,
+    email: qualification.email,
+    verification_status: qualification.verificationStatus,
+    qualification_source: qualification.qualificationSource,
+    qualification_notes: qualification.qualificationNotes,
+    qualified_at: qualification.qualifiedAt,
+    qualified_by: qualification.qualifiedBy,
+    research_only: qualification.researchOnly,
+    requires_sdr_qualification: qualification.requiresSdrQualification
   });
 }

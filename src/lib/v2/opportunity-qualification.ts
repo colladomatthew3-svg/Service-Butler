@@ -33,12 +33,31 @@ export type OpportunityQualificationMutation = {
   qualification_notes?: string | null;
 };
 
+export type OpportunityQualificationContactEvidence = {
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  verificationStatus?: string | null;
+  qualificationSource?: string | null;
+  qualificationNotes?: string | null;
+  qualifiedAt?: string | null;
+  qualifiedBy?: string | null;
+};
+
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function asText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function normalizeProofAuthenticity(value: unknown): ProofAuthenticity | null {
+  const normalized = asText(value).toLowerCase();
+  if (normalized === "live_provider" || normalized === "live_derived" || normalized === "synthetic" || normalized === "unknown") {
+    return normalized;
+  }
+  return null;
 }
 
 export function normalizeQualificationStatus(value: unknown): OpportunityQualificationStatus | null {
@@ -87,7 +106,7 @@ export function getOpportunityQualificationSnapshot(input: {
         : qualificationStatus === "rejected"
           ? "hold"
         : "route_to_sdr");
-  const proofAuthenticity = input.proofAuthenticity || "unknown";
+  const proofAuthenticity = input.proofAuthenticity || normalizeProofAuthenticity(explainability.proof_authenticity) || "unknown";
   const requiresSdrQualification = qualificationStatus !== "qualified_contactable";
   const researchOnly = qualificationStatus === "research_only" || qualificationStatus === "queued_for_sdr";
   const phone = normalizePhone(qualificationContact.phone ?? explainability.phone);
@@ -148,9 +167,8 @@ export function mergeOpportunityQualification(
     qualification_status: input.qualificationStatus,
     qualification_reason_code: input.qualificationReasonCode,
     next_recommended_action: input.nextRecommendedAction,
-    research_only: input.qualificationStatus === "research_only",
-    requires_sdr_qualification:
-      input.qualificationStatus === "research_only" || input.qualificationStatus === "queued_for_sdr",
+    research_only: input.qualificationStatus !== "qualified_contactable",
+    requires_sdr_qualification: input.qualificationStatus !== "qualified_contactable",
     proof_authenticity: input.proofAuthenticity ?? current.proof_authenticity ?? "unknown",
     source_type: input.sourceType ?? (asText(current.source_type) || null),
     scanner_event_id: input.scannerEventId ?? (asText(current.scanner_event_id) || null),
@@ -263,5 +281,67 @@ export function buildResearchOnlyDispatchPayload({
     source_type: sourceType,
     scanner_event_id: scannerEventId,
     opportunity_id: opportunityId || null
+  };
+}
+
+export function buildQualificationBackfill({
+  explainability,
+  lifecycleStatus,
+  contactStatus,
+  proofAuthenticity,
+  scannerEventId,
+  contactEvidence
+}: {
+  explainability: unknown;
+  lifecycleStatus?: unknown;
+  contactStatus?: unknown;
+  proofAuthenticity?: ProofAuthenticity;
+  scannerEventId?: string | null;
+  contactEvidence?: OpportunityQualificationContactEvidence | null;
+}) {
+  const current = asRecord(explainability);
+  const existingStatus = normalizeQualificationStatus(current.qualification_status);
+  const snapshot = getOpportunityQualificationSnapshot({
+    explainability: current,
+    lifecycleStatus,
+    contactStatus,
+    proofAuthenticity
+  });
+
+  if (existingStatus) {
+    return {
+      explainability: current,
+      snapshot,
+      changed: false
+    };
+  }
+
+  const merged = mergeOpportunityQualification(current, {
+    qualificationStatus: snapshot.qualificationStatus,
+    qualificationReasonCode:
+      snapshot.qualificationStatus === "qualified_contactable" ? "historical_contactable_status" : "missing_verified_contact",
+    nextRecommendedAction: snapshot.qualificationStatus === "qualified_contactable" ? "create_lead" : "route_to_sdr",
+    proofAuthenticity: proofAuthenticity ?? snapshot.proofAuthenticity,
+    sourceType: snapshot.sourceType,
+    scannerEventId: scannerEventId ?? snapshot.scannerEventId,
+    contactName: asText(contactEvidence?.contactName) || snapshot.contactName,
+    phone: normalizePhone(contactEvidence?.phone) ?? snapshot.phone,
+    email: normalizeEmail(contactEvidence?.email) ?? snapshot.email,
+    verificationStatus: asText(contactEvidence?.verificationStatus) || snapshot.verificationStatus,
+    qualificationSource: asText(contactEvidence?.qualificationSource) || snapshot.qualificationSource,
+    qualificationNotes: asText(contactEvidence?.qualificationNotes) || snapshot.qualificationNotes,
+    qualifiedAt: asText(contactEvidence?.qualifiedAt) || snapshot.qualifiedAt,
+    qualifiedBy: asText(contactEvidence?.qualifiedBy) || snapshot.qualifiedBy
+  });
+
+  return {
+    explainability: merged,
+    snapshot: getOpportunityQualificationSnapshot({
+      explainability: merged,
+      lifecycleStatus,
+      contactStatus,
+      proofAuthenticity: proofAuthenticity ?? snapshot.proofAuthenticity
+    }),
+    changed: true
   };
 }

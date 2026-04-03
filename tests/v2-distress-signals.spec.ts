@@ -54,6 +54,62 @@ test("distress connector can pull public reddit search results", async () => {
   }
 });
 
+test("distress connector can scrape page-based signals with Firecrawl when configured", async () => {
+  const previousFetch = globalThis.fetch;
+  (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = async (_input, init) => {
+    expect(String(init?.method || "POST")).toBe("POST");
+    expect(String(init?.headers && (init.headers as Record<string, string>).authorization)).toBe("Bearer fc-test-key");
+
+    const body = JSON.parse(String(init?.body || "{}")) as { url?: string; formats?: string[] };
+    expect(body.url).toBe("https://example.com/forum/flood-help");
+    expect(body.formats).toContain("markdown");
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          markdown: "Flooded basement after the storm. Need water extraction immediately.",
+          metadata: {
+            title: "Flood help needed",
+            description: "Urgent basement flooding report",
+            sourceURL: "https://example.com/forum/flood-help",
+            publishedTime: "2026-03-16T13:00:00.000Z"
+          }
+        }
+      }),
+      {
+        headers: {
+          "content-type": "application/json"
+        }
+      }
+    );
+  };
+
+  try {
+    const records = await socialIntentConnector.pull({
+      tenantId: "tenant-1",
+      sourceId: "source-social-firecrawl",
+      sourceType: "social",
+      config: {
+        terms_status: "approved",
+        source_name: "Public Distress Signals",
+        page_urls: ["https://example.com/forum/flood-help"],
+        use_firecrawl: true,
+        firecrawl_api_key: "fc-test-key",
+        city: "Buffalo",
+        state: "NY"
+      }
+    });
+
+    expect(records).toHaveLength(1);
+    expect(records[0]?.title).toBe("Flood help needed");
+    expect(records[0]?.source_provenance).toBe("https://example.com/forum/flood-help");
+    expect(records[0]?.platform).toBe("web");
+  } finally {
+    (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = previousFetch;
+  }
+});
+
 test("distress connector classifies reddit flood distress into water mitigation opportunity", async () => {
   const [event] = await socialIntentConnector.normalize(
     [
@@ -122,6 +178,37 @@ test("distress connector classifies google review no-heat issues into HVAC urgen
 
   const classification = socialIntentConnector.classify(event!);
   expect(classification.opportunityType).toBe("hvac_outage_distress");
+});
+
+test("distress connector uses a public web event type for Firecrawl-backed records", async () => {
+  const [event] = await socialIntentConnector.normalize(
+    [
+      {
+        id: "web-1",
+        platform: "web",
+        title: "Flood damage discussion",
+        body: "Flooded basement and active leak after a storm.",
+        created_at: "2026-03-16T14:00:00.000Z",
+        city: "Buffalo",
+        state: "NY"
+      }
+    ],
+    {
+      tenantId: "tenant-1",
+      sourceId: "source-social-web",
+      sourceType: "social",
+      config: {
+        terms_status: "approved",
+        source_name: "Public Distress Signals"
+      }
+    }
+  );
+
+  expect(event?.eventType).toBe("public_web_distress");
+  expect(socialIntentConnector.classify(event!)).toEqual({
+    opportunityType: "water_damage_distress",
+    serviceLine: "restoration"
+  });
 });
 
 test("distress connector compliance policy blocks ingestion when terms are not approved", () => {

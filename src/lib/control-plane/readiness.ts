@@ -18,6 +18,31 @@ function termsBlocked(termsStatus: DataSourceTermsStatus) {
   return termsStatus === "blocked" || termsStatus === "restricted" || termsStatus === "pending_review";
 }
 
+function parseBoolean(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function parseStringList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry || "").trim()).filter(Boolean);
+  }
+
+  const text = String(value || "").trim();
+  if (!text) return [];
+
+  return text
+    .split(/[\n,]+/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function requiresFirecrawlCredential(source: DataSourceSummary) {
+  const pageUrls = parseStringList(source.config.page_urls);
+  const enabled = parseBoolean(source.config.use_firecrawl);
+  return pageUrls.length > 0 && enabled;
+}
+
 export function buildEnvironmentReadinessState(reason: string, detail?: string): ReadinessState {
   return {
     mode: "blocked",
@@ -48,6 +73,17 @@ export function buildDataSourceReadinessState(source: DataSourceSummary): Readin
       )
     );
     recommendedActions.push("Resolve terms and compliance approval before running this source.");
+  }
+
+  if (requiresFirecrawlCredential(source) && !source.config.firecrawl_api_key && !process.env.FIRECRAWL_API_KEY) {
+    blockingIssues.push(
+      issue(
+        "not_live_in_environment",
+        `${source.name} is configured to scrape public pages, but Firecrawl credentials are missing.`,
+        "Set FIRECRAWL_API_KEY or save firecrawl_api_key on this source before running health checks or live ingestion."
+      )
+    );
+    recommendedActions.push("Set FIRECRAWL_API_KEY or add firecrawl_api_key to the source config.");
   }
 
   if (source.runtimeMode === "simulated") {

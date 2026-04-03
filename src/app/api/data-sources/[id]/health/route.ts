@@ -46,7 +46,11 @@ export async function POST(req: NextRequest, contextArg: { params: Promise<{ id:
     }
 
     const readiness = buildDataSourceReadinessState(sourceSummary);
-    if (!sourceSummary.configured || sourceSummary.status === "not_configured" || readiness.blockingIssues.some((entry) => entry.code === "blocked_by_terms")) {
+    if (
+      !sourceSummary.configured ||
+      sourceSummary.status === "not_configured" ||
+      readiness.blockingIssues.some((entry) => entry.code === "blocked_by_terms" || entry.code === "not_live_in_environment")
+    ) {
       return NextResponse.json(
         {
           ok: false,

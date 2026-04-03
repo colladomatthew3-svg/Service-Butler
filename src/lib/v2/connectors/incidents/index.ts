@@ -5,6 +5,7 @@ import type {
   ConnectorNormalizedEvent,
   ConnectorPullInput
 } from "@/lib/v2/connectors/types";
+import { scrapeConfiguredPagesWithFirecrawl } from "@/lib/integrations/firecrawl";
 
 const CONNECTOR_VERSION = "v2.2.0";
 
@@ -62,10 +63,44 @@ function isCitizenLike(input: ConnectorPullInput) {
   return sourceName.includes("citizen") || sourceProv.includes("citizen");
 }
 
+async function pullIncidentPages(input: ConnectorPullInput) {
+  const pages = await scrapeConfiguredPagesWithFirecrawl({
+    config: input.config,
+    fallbackFields: ["feed_url", "endpoint"]
+  });
+
+  return pages.map((page, index) => {
+    const body = [page.description, page.markdown].filter(Boolean).join("\n\n");
+    const category = classifyIncidentCategory({
+      title: page.title || "",
+      description: body
+    });
+
+    return {
+      id: `firecrawl-incident-${index + 1}`,
+      provider: String(input.config.source_name || input.config.connector_name || "Public Incident Feed"),
+      event_type: category,
+      incident_type: category,
+      title: page.title || `Incident signal ${index + 1}`,
+      description: body,
+      occurred_at: page.publishedTime || new Date().toISOString(),
+      location_text: String(input.config.location_text || input.config.city || ""),
+      address_text: String(input.config.address_text || input.config.location_text || ""),
+      city: String(input.config.city || ""),
+      state: String(input.config.state || ""),
+      postal_code: String(input.config.postal_code || ""),
+      source_provenance: page.url
+    } satisfies Record<string, unknown>;
+  });
+}
+
 export const incidentConnector: ConnectorAdapter = {
   key: "incidents.generic",
 
   async pull(input: ConnectorPullInput) {
+    const scrapedPages = await pullIncidentPages(input);
+    if (scrapedPages.length > 0) return scrapedPages;
+
     const sample = input.config.sample_records;
     if (Array.isArray(sample)) {
       return sample.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
@@ -74,8 +109,8 @@ export const incidentConnector: ConnectorAdapter = {
   },
 
   async normalize(records: Record<string, unknown>[], input: ConnectorPullInput) {
-    const sourceName = String(input.config.connector_name || input.config.source_name || "Generic Incident Feed");
-    const sourceProvenance = String(input.config.source_provenance || "public.incident.feed");
+    const defaultSourceName = String(input.config.connector_name || input.config.source_name || "Generic Incident Feed");
+    const defaultSourceProvenance = String(input.config.source_provenance || "public.incident.feed");
 
     return records.map((record, index): ConnectorNormalizedEvent => {
       const category = classifyIncidentCategory(record);
@@ -84,6 +119,8 @@ export const incidentConnector: ConnectorAdapter = {
       const severity = toNumber(record.severity, category.includes("fire") ? 82 : 68);
       const title = String(record.title || record.incident_type || `Incident ${index + 1}`);
       const occurredAt = String(record.occurred_at || record.created_at || new Date().toISOString());
+      const sourceName = String(record.provider || record.source_name || defaultSourceName);
+      const sourceProvenance = String(record.source_provenance || defaultSourceProvenance);
 
       return {
         occurredAt,

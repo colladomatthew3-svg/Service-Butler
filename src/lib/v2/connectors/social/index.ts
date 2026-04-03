@@ -5,6 +5,7 @@ import type {
   ConnectorNormalizedEvent,
   ConnectorPullInput
 } from "@/lib/v2/connectors/types";
+import { scrapeConfiguredPagesWithFirecrawl } from "@/lib/integrations/firecrawl";
 
 const CONNECTOR_VERSION = "v2.2.0";
 
@@ -168,6 +169,29 @@ function extractFeedRecords(payload: unknown, input: ConnectorPullInput) {
   return [];
 }
 
+async function pullFirecrawlDistressRecords(input: ConnectorPullInput) {
+  const pages = await scrapeConfiguredPagesWithFirecrawl({
+    config: input.config,
+    fallbackFields: ["feed_url"]
+  });
+
+  return pages.map((page, index) => ({
+    id: `firecrawl-social-${index + 1}`,
+    platform: cleanString(input.config.platform) || "web",
+    title: page.title || `Public distress signal ${index + 1}`,
+    body: [page.description, page.markdown].filter(Boolean).join("\n\n"),
+    created_at: page.publishedTime || new Date().toISOString(),
+    author: cleanString(page.metadata.author),
+    source_name: cleanString(input.config.source_name) || cleanString(page.metadata.siteName) || "Public Distress Signals",
+    source_provenance: page.url,
+    location_text: cleanString(input.config.location_text) || cleanString(input.config.city) || "",
+    city: cleanString(input.config.city) || "",
+    state: cleanString(input.config.state) || "",
+    postal_code: cleanString(input.config.postal_code) || "",
+    url: page.url
+  }));
+}
+
 function termsStatus(input: ConnectorPullInput) {
   const status = String(input.config.terms_status || "pending_review").toLowerCase();
   if (status === "approved") return "approved" as const;
@@ -181,6 +205,9 @@ export const socialIntentConnector: ConnectorAdapter = {
 
   async pull(input: ConnectorPullInput) {
     const sample = input.config.sample_records;
+    const scrapedPages = await pullFirecrawlDistressRecords(input);
+    if (scrapedPages.length > 0) return scrapedPages;
+
     const feedUrl = buildRedditSearchUrl(input);
 
     if (!feedUrl) {
@@ -221,11 +248,13 @@ export const socialIntentConnector: ConnectorAdapter = {
       const sourceName =
         String(record.source_name || input.config.source_name || input.config.connector_name || (platform === "google_review" ? "Google Reviews" : "Reddit"));
       const sourceProvenance = String(record.source_provenance || input.config.source_provenance || platform);
+      const eventType =
+        platform === "google_review" ? "google_review_distress" : platform === "reddit" ? "reddit_distress_post" : "public_web_distress";
 
       return {
         occurredAt,
         dedupeKey: `${platform}|${record.id || title}|${occurredAt}`,
-        eventType: platform === "google_review" ? "google_review_distress" : "reddit_distress_post",
+        eventType,
         eventCategory: distress.category,
         title,
         description: body,

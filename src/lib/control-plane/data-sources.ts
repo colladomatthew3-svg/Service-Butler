@@ -124,6 +124,29 @@ function normalizeTermsStatus(value: unknown): DataSourceTermsStatus {
   return "unknown";
 }
 
+function parseStringList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry || "").trim()).filter(Boolean);
+  }
+
+  const text = String(value || "").trim();
+  if (!text) return [];
+
+  return text
+    .split(/[\n,]+/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function parseBoolean(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function hasFirecrawlCredential(config: Record<string, unknown>) {
+  return Boolean(config.firecrawl_api_key || process.env.FIRECRAWL_API_KEY);
+}
+
 export function computeRuntimeMode(sourceType: string, config: Record<string, unknown>, termsStatus: DataSourceTermsStatus): DataSourceRuntimeMode {
   const normalizedType = String(sourceType || "").toLowerCase();
 
@@ -168,7 +191,11 @@ export function computeRuntimeMode(sourceType: string, config: Record<string, un
   if (normalizedType.includes("incident")) {
     const citizenRestricted = envTrue("SB_ENABLE_CITIZEN_CONNECTOR") === false && String(config.source_provenance || "").toLowerCase().includes("citizen");
     if (citizenRestricted) return "simulated";
-    return "simulated";
+    const hasStructuredFeed = Boolean(config.endpoint || config.feed_url);
+    const hasFirecrawlUrls = parseStringList(config.page_urls).length > 0 && parseBoolean(config.use_firecrawl);
+    if (!hasStructuredFeed && !hasFirecrawlUrls) return "simulated";
+    if (hasFirecrawlUrls && !hasFirecrawlCredential(config)) return "live-partial";
+    return termsStatus === "approved" ? "fully-live" : "live-partial";
   }
 
   if (normalizedType.includes("social") || normalizedType.includes("reddit") || normalizedType.includes("review")) {
@@ -177,7 +204,9 @@ export function computeRuntimeMode(sourceType: string, config: Record<string, un
       (Array.isArray(config.search_terms) && config.search_terms.some((value) => String(value || "").trim().length > 0)) ||
       Boolean(String(config.search_query || config.query || "").trim()) ||
       (Array.isArray(config.subreddits) && config.subreddits.some((value) => String(value || "").trim().length > 0));
-    if (!hasFeed && !hasSearchTerms) return "simulated";
+    const hasFirecrawlUrls = parseStringList(config.page_urls).length > 0 && parseBoolean(config.use_firecrawl);
+    if (!hasFeed && !hasSearchTerms && !hasFirecrawlUrls) return "simulated";
+    if (hasFirecrawlUrls && !hasFirecrawlCredential(config)) return "live-partial";
     return termsStatus === "approved" ? "fully-live" : "live-partial";
   }
 

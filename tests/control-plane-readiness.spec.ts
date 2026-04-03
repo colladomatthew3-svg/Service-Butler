@@ -72,3 +72,29 @@ test("data source readiness leaves fully-live approved sources eligible", () => 
   expect(readiness.mode).toBe("live");
   expect(readiness.blockingIssues).toHaveLength(0);
 });
+
+test("data source readiness blocks page scraping when Firecrawl credentials are missing", () => {
+  const previousKey = process.env.FIRECRAWL_API_KEY;
+  delete process.env.FIRECRAWL_API_KEY;
+
+  try {
+    const readiness = buildDataSourceReadinessState(
+      makeSource({
+        sourceType: "incident",
+        name: "Public Incident Feed",
+        runtimeMode: "live-partial",
+        config: {
+          page_urls: ["https://county.example.gov/incidents/flood-response"],
+          use_firecrawl: true
+        }
+      })
+    );
+
+    expect(readiness.mode).toBe("blocked");
+    expect(readiness.blockingIssues.map((issue) => issue.code)).toContain("not_live_in_environment");
+  } finally {
+    if (previousKey !== undefined) {
+      process.env.FIRECRAWL_API_KEY = previousKey;
+    }
+  }
+});

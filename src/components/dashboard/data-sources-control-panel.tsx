@@ -47,6 +47,12 @@ export function DataSourcesControlPanel() {
     () => sources.find((source) => source.id === selectedKey || source.catalogKey === selectedKey) || null,
     [selectedKey, sources]
   );
+  const parsedDraftConfig = useMemo(() => parseJsonObject(draft?.configText || "{}"), [draft?.configText]);
+  const selectedSupportsFirecrawl = selectedSource ? supportsFirecrawl(selectedSource) : false;
+  const firecrawlStatus = useMemo(() => {
+    if (!selectedSource || !selectedSupportsFirecrawl || !draft) return null;
+    return describeFirecrawlState(parsedDraftConfig.value || {});
+  }, [draft, parsedDraftConfig.value, selectedSource, selectedSupportsFirecrawl]);
 
   const counts = useMemo(
     () => ({
@@ -456,6 +462,97 @@ export function DataSourcesControlPanel() {
                     className="font-mono text-xs"
                   />
                 </Field>
+                {selectedSupportsFirecrawl ? (
+                  <div className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Page scraping</p>
+                    <p className="mt-1 text-sm text-semantic-muted">
+                      Use Firecrawl only for public page-based sources that do not expose a stable API feed.
+                    </p>
+                    {parsedDraftConfig.error ? (
+                      <div className="mt-3 rounded-[1rem] border border-amber-300/80 bg-amber-50/85 px-4 py-3 text-sm text-amber-950">
+                        <p className="font-semibold">Configuration JSON needs fixing first</p>
+                        <p className="mt-1 text-xs">{parsedDraftConfig.error}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <Field label="Use Firecrawl">
+                            <Select
+                              value={readBooleanConfig(parsedDraftConfig.value?.use_firecrawl) ? "enabled" : "disabled"}
+                              onChange={(event) =>
+                                setDraft((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        configText: updateConfigText(prev.configText, (config) => {
+                                          config.use_firecrawl = event.target.value === "enabled";
+                                          return config;
+                                        })
+                                      }
+                                    : prev
+                                )
+                              }
+                            >
+                              <option value="disabled">Disabled</option>
+                              <option value="enabled">Enabled</option>
+                            </Select>
+                          </Field>
+                          <Field label="Firecrawl API key">
+                            <Input
+                              type="password"
+                              value={String(parsedDraftConfig.value?.firecrawl_api_key || "")}
+                              placeholder="Optional per-source override"
+                              onChange={(event) =>
+                                setDraft((prev) =>
+                                  prev
+                                    ? {
+                                        ...prev,
+                                        configText: updateConfigText(prev.configText, (config) => {
+                                          const value = event.target.value.trim();
+                                          if (value) {
+                                            config.firecrawl_api_key = value;
+                                          } else {
+                                            delete config.firecrawl_api_key;
+                                          }
+                                          return config;
+                                        })
+                                      }
+                                    : prev
+                                )
+                              }
+                            />
+                          </Field>
+                        </div>
+                        <Field label="Page URLs">
+                          <Textarea
+                            rows={5}
+                            value={formatConfigList(parsedDraftConfig.value?.page_urls)}
+                            placeholder={"https://city.example.gov/incidents/flood-response\nhttps://forum.example.com/help/water-damage"}
+                            onChange={(event) =>
+                              setDraft((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      configText: updateConfigText(prev.configText, (config) => {
+                                        config.page_urls = parseConfigList(event.target.value);
+                                        return config;
+                                      })
+                                    }
+                                  : prev
+                              )
+                            }
+                          />
+                        </Field>
+                        {firecrawlStatus ? (
+                          <div className={`mt-3 rounded-[1rem] border px-4 py-3 text-sm ${firecrawlStatus.tone}`}>
+                            <p className="font-semibold">{firecrawlStatus.title}</p>
+                            <p className="mt-1 text-xs">{firecrawlStatus.detail}</p>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                ) : null}
                 <div className="rounded-xl border border-semantic-border bg-semantic-surface p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Live requirements</p>
                   <div className="mt-3 space-y-2 text-sm text-semantic-text">
@@ -530,6 +627,87 @@ function ReadinessBanner({
       ) : null}
     </div>
   );
+}
+
+function parseJsonObject(text: string) {
+  try {
+    const parsed = JSON.parse(text || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { value: {} as Record<string, unknown>, error: "Configuration JSON must be an object." };
+    }
+    return { value: parsed as Record<string, unknown>, error: null as string | null };
+  } catch (error) {
+    return {
+      value: null as Record<string, unknown> | null,
+      error: error instanceof Error ? error.message : "Configuration JSON is invalid."
+    };
+  }
+}
+
+function updateConfigText(text: string, mutate: (config: Record<string, unknown>) => Record<string, unknown>) {
+  const parsed = parseJsonObject(text);
+  const nextConfig = mutate(parsed.value || {});
+  return JSON.stringify(nextConfig, null, 2);
+}
+
+function parseConfigList(value: string) {
+  return value
+    .split(/\r?\n/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function formatConfigList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry || "").trim()).filter(Boolean).join("\n");
+  }
+  return "";
+}
+
+function readBooleanConfig(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function supportsFirecrawl(source: DataSourceSummary) {
+  const normalized = String(source.sourceType || "").toLowerCase();
+  return normalized.includes("social") || normalized.includes("incident");
+}
+
+function describeFirecrawlState(config: Record<string, unknown>) {
+  const enabled = readBooleanConfig(config.use_firecrawl);
+  const pageCount = parseConfigList(formatConfigList(config.page_urls)).length;
+  const hasLocalKey = Boolean(config.firecrawl_api_key);
+
+  if (!enabled) {
+    return {
+      title: "Firecrawl is disabled",
+      detail: "Turn this on only when the source depends on public web pages instead of a direct public API.",
+      tone: "border-semantic-border bg-white text-semantic-text"
+    };
+  }
+
+  if (pageCount === 0) {
+    return {
+      title: "Add at least one public page URL",
+      detail: "This source can scrape outside pages, but it still needs a list of URLs to crawl.",
+      tone: "border-amber-300/80 bg-amber-50/85 text-amber-950"
+    };
+  }
+
+  if (!hasLocalKey) {
+    return {
+      title: "Page scraping enabled",
+      detail: "No per-source Firecrawl key is saved here. If the environment key is also missing, the readiness banner above will block live runs.",
+      tone: "border-brand-300/80 bg-brand-100/80 text-brand-950"
+    };
+  }
+
+  return {
+    title: "Firecrawl path is configured",
+    detail: `${pageCount} public page${pageCount === 1 ? "" : "s"} will be scraped for this source during health checks and live runs.`,
+    tone: "border-emerald-300/80 bg-emerald-50/85 text-emerald-950"
+  };
 }
 
 function SummaryTile({ label, value, helper }: { label: string; value: string; helper: string }) {

@@ -54,7 +54,10 @@ export const dataSourceCatalog: DataSourceCatalogEntry[] = [
     sourceType: "social",
     name: "Consumer Distress Signals",
     description: "Reddit and review-style distress signals for restoration and emergency home-service demand.",
-    liveRequirements: ["Approved terms for ingestion.", "Configure a public JSON feed URL or Reddit search terms before activating live runs."],
+    liveRequirements: [
+      "Approved terms for ingestion.",
+      "Configure Reddit search terms or enable Firecrawl with page URLs for public page-based distress signals."
+    ],
     defaultTermsStatus: "pending_review",
     defaultReliabilityScore: 58,
     defaultProvenance: "reddit.com/search.json",
@@ -62,6 +65,8 @@ export const dataSourceCatalog: DataSourceCatalogEntry[] = [
       source_name: "Public Distress Signals",
       platform: "reddit",
       feed_url: "",
+      page_urls: [],
+      use_firecrawl: false,
       search_terms: [],
       subreddits: [],
       sample_records: []
@@ -73,12 +78,18 @@ export const dataSourceCatalog: DataSourceCatalogEntry[] = [
     sourceType: "incident",
     name: "Public Incident Feed",
     description: "Fire, flood, outage, and public emergency incidents with restoration relevance.",
-    liveRequirements: ["Approved terms for ingestion.", "Citizen-style feeds remain compliance-gated by default."],
+    liveRequirements: [
+      "Approved terms for ingestion.",
+      "Use page URLs plus Firecrawl for public incident pages that do not expose structured APIs.",
+      "Citizen-style feeds remain compliance-gated by default."
+    ],
     defaultTermsStatus: "pending_review",
     defaultReliabilityScore: 66,
     defaultProvenance: "public.incident.feed",
     defaultConfig: {
       source_name: "Public Incident Feed",
+      page_urls: [],
+      use_firecrawl: false,
       sample_records: []
     }
   },

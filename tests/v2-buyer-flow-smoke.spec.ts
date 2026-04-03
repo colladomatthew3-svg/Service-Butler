@@ -250,4 +250,17 @@ test("buyer smoke flow promotes a queued scanner signal into buyer-proof lead an
   expect(readModel.lead_quality_proof?.booked_jobs_from_verified_leads).toBe(1);
   expect(readModel.lead_quality_proof?.proof_samples?.[0]?.contact_name).toBe("Taylor Lead");
   expect(readModel.lead_quality_proof?.proof_samples?.[0]?.proof_authenticity).toBe("live_provider");
+  expect(readModel.capture_proof_summary).toEqual(
+    expect.objectContaining({
+      sourceEventsCaptured: 1,
+      realSourceEventsCaptured: 1,
+      opportunitiesCreated: 1,
+      realOpportunitiesCaptured: 1,
+      opportunitiesRequiringSdr: 0,
+      qualifiedContactableOpportunities: 1,
+      leadsCreated: 1,
+      realLeadsCreated: 1,
+      bookedJobsAttributed: 1
+    })
+  );
 });

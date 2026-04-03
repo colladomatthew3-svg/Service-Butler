@@ -165,7 +165,7 @@ export const openFemaConnector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const hasSample = Array.isArray(input.config.sample_records);
-    if (hasSample) return { ok: true, detail: "sample_records configured" };
+    if (hasSample) return { ok: false, detail: "sample_records configured; source is simulated until a live OpenFEMA endpoint is configured" };
 
     const endpoint = String(
       input.config.endpoint ||

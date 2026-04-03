@@ -182,7 +182,7 @@ export const overpassConnector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const hasSample = Array.isArray(input.config.sample_records);
-    if (hasSample) return { ok: true, detail: "sample_records configured" };
+    if (hasSample) return { ok: false, detail: "sample_records configured; source is simulated until a live Overpass query is configured" };
 
     const endpoint = String(input.config.endpoint || process.env.OVERPASS_ENDPOINT || "").trim();
     const query = String(input.config.query || process.env.OVERPASS_QUERY || "").trim();

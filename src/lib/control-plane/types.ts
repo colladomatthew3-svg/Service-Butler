@@ -3,6 +3,7 @@ export type DataSourceRuntimeMode = "fully-live" | "live-partial" | "simulated";
 export type DataSourceTermsStatus = "approved" | "restricted" | "pending_review" | "blocked" | "unknown";
 
 export type DataSourceStatus = "active" | "paused" | "disabled" | "not_configured";
+export type DataSourceCaptureStatus = "capturing_live" | "blocked" | "live_safe_partial" | "simulated";
 
 export type ReadinessMode = "live" | "demo" | "blocked";
 
@@ -58,9 +59,12 @@ export type DataSourceSummary = {
   latestEventAt: string | null;
   recordsSeen: number;
   recordsCreated: number;
+  recordsUpdated: number;
   provenance: string | null;
   liveRequirements: string[];
   buyerReadinessNote: string;
+  captureStatus: DataSourceCaptureStatus;
+  countsAsRealCapture: boolean;
   config: Record<string, unknown>;
   configTemplate: Record<string, unknown>;
   rateLimitPolicy: Record<string, unknown>;

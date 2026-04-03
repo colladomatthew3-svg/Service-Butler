@@ -200,6 +200,15 @@ function termsStatus(input: ConnectorPullInput) {
   return "pending_review" as const;
 }
 
+function hasConfiguredSocialPages(input: ConnectorPullInput) {
+  const pages = parseStringList(input.config.page_urls);
+  return pages.length > 0;
+}
+
+function hasConfiguredSocialFeed(input: ConnectorPullInput) {
+  return Boolean(buildRedditSearchUrl(input));
+}
+
 export const socialIntentConnector: ConnectorAdapter = {
   key: "social.intent.public",
 
@@ -332,6 +341,37 @@ export const socialIntentConnector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const start = Date.now();
+    if (Array.isArray(input.config.sample_records) && !hasConfiguredSocialPages(input) && !hasConfiguredSocialFeed(input)) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - start,
+        detail: "sample_records configured; distress source is simulated until a live feed or Firecrawl page source is configured"
+      };
+    }
+
+    if (hasConfiguredSocialPages(input)) {
+      if (!input.config.firecrawl_api_key && !process.env.FIRECRAWL_API_KEY) {
+        return {
+          ok: false,
+          latencyMs: Date.now() - start,
+          detail: "Distress page scraping is configured, but FIRECRAWL_API_KEY is missing"
+        };
+      }
+      return {
+        ok: true,
+        latencyMs: Date.now() - start,
+        detail: "Distress page source configured for Firecrawl scraping"
+      };
+    }
+
+    if (hasConfiguredSocialFeed(input)) {
+      return {
+        ok: true,
+        latencyMs: Date.now() - start,
+        detail: "Public distress feed configured"
+      };
+    }
+
     try {
       const records = await this.pull(input);
       return {

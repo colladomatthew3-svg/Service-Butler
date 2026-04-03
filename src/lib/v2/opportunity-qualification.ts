@@ -133,7 +133,12 @@ export function getOpportunityQualificationSnapshot(input: {
 }
 
 export function isBuyerProofEligibleQualification(snapshot: OpportunityQualificationSnapshot) {
-  return !snapshot.researchOnly && snapshot.qualificationStatus === "qualified_contactable" && snapshot.proofAuthenticity !== "synthetic";
+  return (
+    !snapshot.researchOnly &&
+    snapshot.qualificationStatus === "qualified_contactable" &&
+    snapshot.proofAuthenticity !== "synthetic" &&
+    snapshot.proofAuthenticity !== "unknown"
+  );
 }
 
 export function qualificationAllowsDispatch(snapshot: OpportunityQualificationSnapshot) {

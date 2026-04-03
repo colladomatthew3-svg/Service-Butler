@@ -24,7 +24,9 @@ import { getForecastByLatLng } from "@/lib/services/weather";
 import { getDemoDashboardSnapshot, getDemoWeatherSettings } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
+import { getFranchiseDashboardReadModel } from "@/lib/v2/dashboard-read-models";
 import { getOpportunityQualificationSnapshot } from "@/lib/v2/opportunity-qualification";
+import { opportunityPriorityScore } from "@/lib/v2/source-lanes";
 
 type DashboardLeadRow = {
   id: string;
@@ -58,7 +60,9 @@ type DashboardOpportunityRow = {
   title?: string | null;
   location_text?: string | null;
   intent_score?: number | null;
+  urgency_score?: number | null;
   confidence?: number | null;
+  priority_score?: number | null;
   created_at: string;
 };
 
@@ -87,6 +91,16 @@ export default async function DashboardOverviewPage() {
   let sdrQueue: DashboardSdrRow[] = [];
   let enrichedLeads: Array<DashboardLeadRow & { intent: number }> = [];
   let sourceSummaries: DataSourceSummary[] = await listDataSourceSummaries();
+  let captureProofSummary:
+    | {
+        realSourceEventsCaptured?: number;
+        realOpportunitiesCaptured?: number;
+        opportunitiesRequiringSdr?: number;
+        qualifiedContactableOpportunities?: number;
+        realLeadsCreated?: number;
+        bookedJobsAttributed?: number;
+      }
+    | null = null;
   let settings:
     | {
         weather_lat?: number | null;
@@ -141,7 +155,7 @@ export default async function DashboardOverviewPage() {
 
     const { data: loadedOpportunities } = await supabase
       .from("opportunities")
-      .select("id,category,title,location_text,intent_score,confidence,created_at")
+      .select("id,category,title,location_text,intent_score,urgency_score,confidence,created_at")
       .eq("account_id", accountId)
       .order("created_at", { ascending: false })
       .limit(30);
@@ -176,6 +190,11 @@ export default async function DashboardOverviewPage() {
         supabase: v2Context.supabase as never,
         tenantId: v2Context.franchiseTenantId
       });
+      const franchiseReadModel = await getFranchiseDashboardReadModel({
+        supabase: v2Context.supabase,
+        franchiseTenantId: v2Context.franchiseTenantId
+      });
+      captureProofSummary = franchiseReadModel.capture_proof_summary || null;
 
       const { data: queuedOpportunities } = await v2Context.supabase
         .from("v2_opportunities")
@@ -257,7 +276,7 @@ export default async function DashboardOverviewPage() {
     .sort((a, b) => Number(b.intent || 0) - Number(a.intent || 0))
     .slice(0, 5);
   const highestUrgencyOpportunities = [...opportunities]
-    .sort((a, b) => Number(b.intent_score || 0) - Number(a.intent_score || 0))
+    .sort((a, b) => resolveOpportunityPriority(b) - resolveOpportunityPriority(a))
     .slice(0, 5);
   const latestOpportunity = opportunities[0] || null;
 
@@ -270,6 +289,8 @@ export default async function DashboardOverviewPage() {
   const activeMarkets = Math.max(territorySummary.length, weatherLabel ? 1 : 0);
   const latestSignalAge = latestOpportunity ? formatRelativeTime(latestOpportunity.created_at) : "No signals";
   const queueReadyLeads = priorityLeads.filter((lead) => !lead.scheduled_for).length || priorityLeads.length;
+  const blockedSources = sourceSummaries.filter((source) => source.captureStatus === "blocked").length;
+  const simulatedSources = sourceSummaries.filter((source) => source.captureStatus === "simulated").length;
 
   return (
     <div className="space-y-6">
@@ -326,7 +347,10 @@ export default async function DashboardOverviewPage() {
                   {highestUrgencyOpportunities.map((item) => (
                     <tr key={item.id}>
                       <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 first:rounded-none last:rounded-none">
-                        <Link href="/dashboard/opportunities" className="text-sm font-medium text-semantic-text transition hover:text-brand-700">
+                        <Link
+                          href={`/dashboard/opportunities?opportunity=${encodeURIComponent(item.id)}`}
+                          className="text-sm font-medium text-semantic-text transition hover:text-brand-700"
+                        >
                           {item.title || "Untitled opportunity"}
                         </Link>
                         <p className="mt-1 text-xs text-semantic-muted">{item.category ? toTitleCase(item.category) : "Restoration signal"}</p>
@@ -335,7 +359,9 @@ export default async function DashboardOverviewPage() {
                         {item.location_text || weatherLabel || "Core market"}
                       </TD>
                       <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 text-right first:rounded-none last:rounded-none">
-                        <Badge variant={Number(item.intent_score || 0) >= 75 ? "warning" : "default"}>{Number(item.intent_score || 0)}%</Badge>
+                        <Badge variant={resolveOpportunityPriority(item) >= 75 ? "warning" : "default"}>
+                          {resolveOpportunityPriority(item)}%
+                        </Badge>
                       </TD>
                     </tr>
                   ))}
@@ -466,6 +492,46 @@ export default async function DashboardOverviewPage() {
 
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card>
+          <CardHeader>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Operator proof</p>
+            <h2 className="mt-1 text-base font-semibold text-semantic-text">Real capture vs qualified lead proof</h2>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <p className="text-sm leading-6 text-semantic-muted">
+              Signals and opportunities show market pressure. Only verified-contact, traceable chains count as lead and booked-job proof.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <MetricRow label="Real source events" value={String(captureProofSummary?.realSourceEventsCaptured || 0)} helper="Live public or provider-backed events captured into v2 source events." icon={<Radio className="h-4 w-4" />} />
+              <MetricRow label="Real opportunities" value={String(captureProofSummary?.realOpportunitiesCaptured || 0)} helper="Non-simulated opportunities created from those events." icon={<Target className="h-4 w-4" />} />
+              <MetricRow label="Needs SDR" value={String(captureProofSummary?.opportunitiesRequiringSdr || 0)} helper="Signals blocked until verified contact is captured." icon={<TriangleAlert className="h-4 w-4" />} />
+              <MetricRow label="Qualified contactable" value={String(captureProofSummary?.qualifiedContactableOpportunities || 0)} helper="Opportunities now eligible to become leads." icon={<ShieldCheck className="h-4 w-4" />} />
+              <MetricRow label="Real leads" value={String(captureProofSummary?.realLeadsCreated || 0)} helper="Verified leads on a traceable non-simulated path." icon={<CheckCircle2 className="h-4 w-4" />} />
+              <MetricRow label="Booked jobs proof" value={String(captureProofSummary?.bookedJobsAttributed || 0)} helper="Attributed booked jobs from the qualified proof chain." icon={<TrendingUp className="h-4 w-4" />} />
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Production watch</p>
+            <h2 className="mt-1 text-base font-semibold text-semantic-text">What can still block a buyer-safe demo</h2>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <MetricRow label="Blocked live sources" value={String(blockedSources)} helper="These sources are configured but still blocked by terms, credentials, or failed runs." icon={<TriangleAlert className="h-4 w-4" />} />
+            <MetricRow label="Simulated sources" value={String(simulatedSources)} helper="Useful for operator review only. Excluded from real capture and buyer-proof metrics." icon={<Radio className="h-4 w-4" />} />
+            <MetricRow label="Queued SDR aging" value={String(sdrQueue.length)} helper="Research-only opportunities waiting on verified contact before lead creation." icon={<Clock3 className="h-4 w-4" />} />
+            <MetricRow
+              label="Proof dropoff"
+              value={String(Math.max(0, (captureProofSummary?.realOpportunitiesCaptured || 0) - (captureProofSummary?.realLeadsCreated || 0)))}
+              helper="Real opportunities that have not yet converted into verified leads."
+              icon={<Radio className="h-4 w-4" />}
+            />
+          </CardBody>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Territory summary</p>
@@ -513,7 +579,7 @@ export default async function DashboardOverviewPage() {
           <Card>
             <CardHeader>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Revenue proof</p>
-              <h2 className="mt-1 text-base font-semibold text-semantic-text">Why this reads like a lead engine</h2>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Why this reads like a traceable lead engine</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <MetricRow
@@ -531,7 +597,7 @@ export default async function DashboardOverviewPage() {
               <MetricRow
                 label="Jobs on board today"
                 value={String(scheduledToday)}
-                helper="Proof that the workflow is turning signal into actual scheduled work."
+                helper="Proof that the workflow is turning qualified opportunities into actual scheduled work."
                 icon={<Clock3 className="h-4 w-4" />}
               />
               <MetricRow
@@ -699,6 +765,15 @@ function EmptyPanel({ title, body }: { title: string; body: string }) {
 
 function formatCurrency(value: number) {
   return `$${Math.round(value).toLocaleString()}`;
+}
+
+function resolveOpportunityPriority(item: DashboardOpportunityRow) {
+  if (Number.isFinite(Number(item.priority_score))) return Number(item.priority_score);
+  return opportunityPriorityScore({
+    urgencyScore: item.urgency_score,
+    jobLikelihoodScore: item.intent_score,
+    sourceReliabilityScore: item.confidence
+  });
 }
 
 function formatRelativeTime(value: string) {

@@ -208,7 +208,7 @@ export const usgsWaterConnector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const sample = input.config.sample_records;
-    if (Array.isArray(sample)) return { ok: true, detail: "sample_records configured" };
+    if (Array.isArray(sample)) return { ok: false, detail: "sample_records configured; source is simulated until a live USGS endpoint or site code is configured" };
 
     const endpoint = String(input.config.endpoint || process.env.USGS_WATER_ENDPOINT || "").trim();
     const siteCodes = String(input.config.site_codes || process.env.USGS_SITE_CODES || "").trim();

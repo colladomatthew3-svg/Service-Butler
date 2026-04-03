@@ -35,6 +35,14 @@ test("dashboard exposes inline source readiness", async ({ page }) => {
   await expect(page.getByText(/open data sources/i)).toBeVisible();
 });
 
+test("settings exposes the production truth control plane", async ({ page }) => {
+  await page.goto("/dashboard/settings");
+
+  await expect(page.getByRole("heading", { name: /settings/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /restoration intelligence control plane/i }).first()).toBeVisible();
+  await expect(page.getByText(/operators can add, inspect, test, and run sources here/i)).toBeVisible();
+});
+
 test("network readiness fails closed when tenant context is unavailable", async () => {
   await withEnv(
     {
@@ -82,6 +90,8 @@ test("network overview renders the buyer proof surface", async ({ page }) => {
     await expect(page.getByRole("heading", { name: /lead quality by source/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: /active source status/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: /contactable lead evidence/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /signals, opportunities, and leads are counted separately/i })).toBeVisible();
+    await expect(page.getByText(/public-source opportunities are market pressure signals/i)).toBeVisible();
     await expect(page.getByRole("heading", { name: /why this can sell to a buyer/i })).toBeVisible();
   }
   await expect(page.getByRole("link", { name: /review data sources/i })).toBeVisible();

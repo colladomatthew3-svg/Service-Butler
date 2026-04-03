@@ -6,6 +6,7 @@ import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getOpportunityQualificationSnapshot } from "@/lib/v2/opportunity-qualification";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
+import { classifySourceLane, opportunityPriorityScore } from "@/lib/v2/source-lanes";
 
 export async function GET(req: NextRequest) {
   if (isDemoMode()) {
@@ -55,6 +56,23 @@ export async function GET(req: NextRequest) {
             explainability,
             proofAuthenticity
           });
+          const sourceLane = classifySourceLane({
+            sourceTypes: Array.isArray(explainability.source_types) ? (explainability.source_types as unknown[]) : [],
+            sourceProvenance: explainability.source_provenance,
+            sourceType:
+              Array.isArray(explainability.source_types) && explainability.source_types.length > 0
+                ? explainability.source_types[0]
+                : row.service_line || row.opportunity_type,
+            category: row.opportunity_type,
+            serviceLine: row.service_line,
+            summary: explainability.distress_context_summary,
+            reasoning: explainability.confidence_reasoning
+          });
+          const priorityScore = opportunityPriorityScore({
+            urgencyScore: row.urgency_score,
+            jobLikelihoodScore: row.job_likelihood_score,
+            sourceReliabilityScore: row.source_reliability_score
+          });
 
           return {
             id: row.id,
@@ -86,9 +104,13 @@ export async function GET(req: NextRequest) {
             qualification_status: qualification.qualificationStatus,
             qualification_reason_code: qualification.qualificationReasonCode,
             proof_authenticity: qualification.proofAuthenticity,
+            source_lane: sourceLane,
+            priority_score: priorityScore,
             next_recommended_action: qualification.nextRecommendedAction,
             research_only: qualification.researchOnly,
             requires_sdr_qualification: qualification.requiresSdrQualification,
+            counts_as_real_capture: proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived",
+            counts_as_real_lead: qualification.qualificationStatus === "qualified_contactable" && qualification.proofAuthenticity !== "synthetic" && qualification.proofAuthenticity !== "unknown",
             raw: {
               revenue_band: row.revenue_band,
               routing_status: row.routing_status,

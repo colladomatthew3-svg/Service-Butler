@@ -216,6 +216,12 @@ export const permitsConnector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const provider = resolvePermitsProvider(input);
+    if (provider.key === "permits.static") {
+      return {
+        ok: false,
+        detail: "Permits source is using static/sample fallback; configure a live permits provider before treating it as production-ready"
+      };
+    }
     const start = Date.now();
     const records = await provider.fetchRecords(input).catch(() => []);
     const latencyMs = Date.now() - start;

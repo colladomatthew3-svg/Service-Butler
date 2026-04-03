@@ -4,6 +4,9 @@ import { open311Connector } from "../src/lib/v2/connectors/open311";
 import { openFemaConnector } from "../src/lib/v2/connectors/openfema";
 import { censusConnector } from "../src/lib/v2/connectors/census";
 import { overpassConnector } from "../src/lib/v2/connectors/overpass";
+import { incidentConnector } from "../src/lib/v2/connectors/incidents";
+import { socialIntentConnector } from "../src/lib/v2/connectors/social";
+import { permitsConnector } from "../src/lib/v2/connectors/permits";
 import { listConnectors } from "../src/lib/v2/connectors/registry";
 import { inferConnectorKey } from "../src/lib/v2/connectors/source-type-map";
 
@@ -163,4 +166,36 @@ test("Overpass connector normalizes commercial property signals", async () => {
     opportunityType: "commercial_property_signal",
     serviceLine: "commercial"
   });
+});
+
+test("sample-backed free-source connectors fail health as simulated instead of reporting live-ready", async () => {
+  const input = {
+    tenantId: "tenant-1",
+    sourceId: "source-simulated",
+    sourceType: "free-source",
+    config: {
+      sample_records: [{ id: "sample-1" }]
+    }
+  };
+
+  await expect(open311Connector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+  await expect(openFemaConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+  await expect(usgsWaterConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+  await expect(censusConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+  await expect(overpassConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+});
+
+test("sample-backed fallback connectors fail health until a real live source is configured", async () => {
+  const input = {
+    tenantId: "tenant-1",
+    sourceId: "source-fallback",
+    sourceType: "mixed-source",
+    config: {
+      sample_records: [{ id: "sample-1" }]
+    }
+  };
+
+  await expect(incidentConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+  await expect(socialIntentConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+  await expect(permitsConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
 });

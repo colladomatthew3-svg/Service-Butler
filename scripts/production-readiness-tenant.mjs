@@ -70,7 +70,7 @@ async function resolveTenantReadiness() {
     supabase.from("v2_territories").select("zip_codes,service_lines").eq("tenant_id", tenantId).eq("active", true).limit(50),
     supabase
       .from("v2_data_sources")
-      .select("id,status,terms_status,compliance_status")
+      .select("id,status,terms_status,compliance_status,config_encrypted")
       .eq("tenant_id", tenantId)
       .eq("status", "active")
       .limit(200),
@@ -122,6 +122,15 @@ async function resolveTenantReadiness() {
       const complianceStatus = String(row.compliance_status || row.terms_status || "").toLowerCase();
       return termsStatus === "approved" && complianceStatus === "approved";
     }).length;
+    const blockedSourceCount = activeSources.filter((row) => {
+      const termsStatus = String(row.terms_status || "").toLowerCase();
+      const complianceStatus = String(row.compliance_status || row.terms_status || "").toLowerCase();
+      return termsStatus !== "approved" || complianceStatus !== "approved";
+    }).length;
+    const sampleBackedCount = activeSources.filter((row) => {
+      const config = parseConfig(row.config_encrypted);
+      return Array.isArray(config.sample_records) && config.sample_records.length > 0;
+    }).length;
 
     if (activeSources.length > 0) {
       lines.push({ status: "pass", message: `Active data sources: ${activeSources.length}.` });
@@ -133,6 +142,18 @@ async function resolveTenantReadiness() {
       lines.push({ status: "pass", message: `Live-safe data sources: ${liveSafeCount}.` });
     } else {
       lines.push({ status: "fail", message: "No live-safe data sources are active." });
+    }
+
+    if (blockedSourceCount > 0) {
+      lines.push({ status: "warn", message: `Blocked active data sources: ${blockedSourceCount}.` });
+    } else {
+      lines.push({ status: "pass", message: "No active data sources are blocked by terms/compliance." });
+    }
+
+    if (sampleBackedCount > 0) {
+      lines.push({ status: "warn", message: `Sample-backed active data sources: ${sampleBackedCount}.` });
+    } else {
+      lines.push({ status: "pass", message: "No active data sources are using sample-backed configuration." });
     }
   }
 
@@ -153,4 +174,16 @@ async function resolveTenantReadiness() {
   }
 
   return { lines };
+}
+
+function parseConfig(raw) {
+  if (!raw) return {};
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }

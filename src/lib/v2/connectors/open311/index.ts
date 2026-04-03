@@ -172,7 +172,7 @@ export const open311Connector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const hasSample = Array.isArray(input.config.sample_records);
-    if (hasSample) return { ok: true, detail: "sample_records configured" };
+    if (hasSample) return { ok: false, detail: "sample_records configured; source is simulated until a live Open311 endpoint is configured" };
 
     const endpoint = String(
       input.config.endpoint || process.env.OPEN311_ENDPOINT || "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=1"

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { StatTile } from "@/components/ui/stat-tile";
 import { Table, TableBody, TableHead, TD, TH } from "@/components/ui/table";
+import { classifySourceLane, opportunityPriorityScore, type SourceLaneKey } from "@/lib/v2/source-lanes";
 
 export type Opportunity = {
   id: string;
@@ -31,17 +32,20 @@ export type Opportunity = {
   qualification_status?: "research_only" | "queued_for_sdr" | "qualified_contactable" | "rejected" | null;
   qualification_reason_code?: string | null;
   proof_authenticity?: "live_provider" | "live_derived" | "synthetic" | "unknown" | null;
+  source_lane?: SourceLaneKey | null;
+  priority_score?: number | null;
   next_recommended_action?: string | null;
   research_only?: boolean;
   requires_sdr_qualification?: boolean;
+  counts_as_real_capture?: boolean;
+  counts_as_real_lead?: boolean;
   created_at: string;
 };
+type SourceLaneFilter = "all" | SourceLaneKey;
 
-type SourceLaneKey = "all" | "311" | "flood" | "fire" | "outage" | "weather" | "permits" | "property" | "social" | "other";
+const sourceLaneOrder: SourceLaneFilter[] = ["all", "311", "flood", "fire", "outage", "weather", "permits", "property", "social", "other"];
 
-const sourceLaneOrder: SourceLaneKey[] = ["all", "311", "flood", "fire", "outage", "weather", "permits", "property", "social", "other"];
-
-const sourceLaneLabel: Record<SourceLaneKey, string> = {
+const sourceLaneLabel: Record<SourceLaneFilter, string> = {
   all: "All signals",
   "311": "311 & municipal",
   flood: "Flood & water",
@@ -58,7 +62,7 @@ export function OpportunitiesView() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sourceFilter, setSourceFilter] = useState<SourceLaneKey>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceLaneFilter>("all");
   const [qualificationFilter, setQualificationFilter] = useState("all");
   const [search, setSearch] = useState("");
 
@@ -106,14 +110,14 @@ export function OpportunitiesView() {
       return haystack.includes(normalizedSearch);
     })
     .sort((left, right) => {
-      const rightPriority = Math.max(Number(right.urgency_score || 0), Number(right.intent_score || 0));
-      const leftPriority = Math.max(Number(left.urgency_score || 0), Number(left.intent_score || 0));
+      const rightPriority = getPriorityScore(right);
+      const leftPriority = getPriorityScore(left);
       if (rightPriority !== leftPriority) return rightPriority - leftPriority;
       return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
     });
 
   const contactReadyCount = opportunities.filter((item) => item.qualification_status === "qualified_contactable").length;
-  const highUrgencyCount = opportunities.filter((item) => Math.max(Number(item.urgency_score || 0), Number(item.intent_score || 0)) >= 70).length;
+  const highUrgencyCount = opportunities.filter((item) => getPriorityScore(item) >= 70).length;
   const needsSdrCount = opportunities.filter((item) => getQualificationBucket(item) === "needs_sdr").length;
 
   return (
@@ -121,7 +125,7 @@ export function OpportunitiesView() {
       <PageHeader
         eyebrow="Pipeline"
         title="Opportunities"
-        subtitle="Work the 311, flood, fire, outage, weather, and permit signals that should become real restoration jobs."
+        subtitle="Work the 311, flood, fire, outage, weather, and permit opportunities that can become real jobs after verification."
         actions={
           <>
             <Link href="/dashboard/scanner" className={buttonStyles({ size: "sm", variant: "secondary" })}>
@@ -220,7 +224,7 @@ export function OpportunitiesView() {
           ) : filteredOpportunities.length === 0 ? (
             <EmptyState
               title="No opportunities match the current filters."
-              body="Run the scanner or widen the source and qualification filters to see more market pressure."
+              body="Run the scanner or widen the source and qualification filters to see more market-pressure opportunities."
               actionHref="/dashboard/scanner"
               actionLabel="Run scanner"
             />
@@ -276,7 +280,7 @@ export function OpportunitiesView() {
                             </Badge>
                           </div>
                           <p className="text-xs text-semantic-text">
-                            Intent {formatPercent(item.intent_score)} · Urgency {formatPercent(item.urgency_score)}
+                            Priority {formatPercent(getPriorityScore(item))} · Urgency {formatPercent(item.urgency_score)}
                           </p>
                           <p className="text-xs text-semantic-muted">
                             {(item.next_recommended_action || "review_signal").replace(/_/g, " ")}
@@ -393,7 +397,7 @@ export function getPrimaryAction(item: Opportunity) {
       href: `/dashboard/outbound?opportunity=${encodeURIComponent(item.id)}`,
       label: "Launch buyer flow",
       variant: "primary" as const,
-      note: "This opportunity has verified contact and can move into outbound or lead creation."
+      note: "This opportunity has verified contact and can move into outbound or verified lead creation."
     };
   }
 
@@ -411,7 +415,7 @@ export function getPrimaryAction(item: Opportunity) {
       href: scannerOpportunityHref(item, "sdr"),
       label: "Send to SDR",
       variant: "secondary" as const,
-      note: "Public-source signals stay research-only until SDR verifies a real contact path."
+      note: "Public-source opportunities stay research-only until SDR verifies a real contact path."
     };
   }
 
@@ -419,31 +423,28 @@ export function getPrimaryAction(item: Opportunity) {
     href: scannerOpportunityHref(item),
     label: "Open scanner",
     variant: "secondary" as const,
-    note: "Review the signal, confirm fit, and decide whether it belongs in the SDR lane."
+    note: "Review the opportunity, confirm fit, and decide whether it belongs in the SDR lane."
   };
 }
 
 export function getSourceLane(item: Opportunity): SourceLaneKey {
-  const haystack = [
-    item.category,
-    item.service_line,
-    item.distress_context_summary,
-    item.confidence_reasoning,
-    ...(item.source_types || [])
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  if (item.source_lane) return item.source_lane;
+  return classifySourceLane({
+    sourceTypes: item.source_types,
+    category: item.category,
+    serviceLine: item.service_line,
+    summary: item.distress_context_summary,
+    reasoning: item.confidence_reasoning
+  });
+}
 
-  if (haystack.includes("open311") || haystack.includes("311")) return "311";
-  if (haystack.includes("usgs") || haystack.includes("water") || haystack.includes("flood") || haystack.includes("openfema")) return "flood";
-  if (haystack.includes("fire") || haystack.includes("smoke") || haystack.includes("incident")) return "fire";
-  if (haystack.includes("outage") || haystack.includes("utility") || haystack.includes("infrastructure")) return "outage";
-  if (haystack.includes("weather") || haystack.includes("storm") || haystack.includes("hail") || haystack.includes("wind")) return "weather";
-  if (haystack.includes("permit")) return "permits";
-  if (haystack.includes("overpass") || haystack.includes("property") || haystack.includes("census")) return "property";
-  if (haystack.includes("social") || haystack.includes("reddit") || haystack.includes("distress")) return "social";
-  return "other";
+function getPriorityScore(item: Opportunity) {
+  if (Number.isFinite(Number(item.priority_score))) return Number(item.priority_score);
+  return opportunityPriorityScore({
+    urgencyScore: item.urgency_score,
+    jobLikelihoodScore: item.intent_score,
+    sourceReliabilityScore: item.confidence
+  });
 }
 
 function getSourceBadges(item: Opportunity) {

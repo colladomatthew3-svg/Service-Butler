@@ -11,6 +11,7 @@ import { listDataSourceSummaries } from "@/lib/control-plane/data-sources";
 import type { DataSourceSummary, ReadinessState } from "@/lib/control-plane/types";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getCorporateDashboardReadModel, getFranchiseDashboardReadModel } from "@/lib/v2/dashboard-read-models";
+import type { CaptureProofSummary } from "@/lib/v2/capture-proof";
 import { getProductionReadinessSummary } from "@/lib/v2/readiness";
 import { isDemoMode } from "@/lib/services/review-mode";
 import type { ReactNode } from "react";
@@ -62,6 +63,7 @@ type FranchiseReadModel = {
     contactable_lead_count?: number;
     proof_samples?: ProofSampleRow[];
   };
+  capture_proof_summary?: CaptureProofSummary | null;
   outreach_activity?: {
     total?: number;
   };
@@ -105,6 +107,7 @@ export default async function NetworkOverviewPage() {
   const outreachTotal = franchise?.outreach_activity?.total || 0;
   const territoryPerformance = franchise?.territory_performance || [];
   const proofSamples = franchise?.lead_quality_proof?.proof_samples || [];
+  const captureProof = franchise?.capture_proof_summary || null;
   const revenue = pickMetric(corporate?.metrics || [], "attributable_revenue") || pickMetric(corporate?.metrics || [], "estimated_revenue");
   const scheduledWork = pickMetric(corporate?.metrics || [], "scheduled_work");
   const opportunities = pickMetric(corporate?.metrics || [], "opportunity_volume");
@@ -167,6 +170,13 @@ export default async function NetworkOverviewPage() {
         <>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Real source events" value={captureProof?.realSourceEventsCaptured || 0} icon={<Globe className="h-4 w-4" />} tone="brand" />
+        <StatTile label="Real opportunities" value={captureProof?.realOpportunitiesCaptured || 0} icon={<Target className="h-4 w-4" />} tone="brand" />
+        <StatTile label="Needs SDR" value={captureProof?.opportunitiesRequiringSdr || 0} icon={<BookOpen className="h-4 w-4" />} />
+        <StatTile label="Qualified contactable" value={captureProof?.qualifiedContactableOpportunities || 0} icon={<BadgeCheck className="h-4 w-4" />} tone="success" />
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Verified leads" value={verifiedLeadCount} icon={<BadgeCheck className="h-4 w-4" />} tone="success" />
         <StatTile label="Live-provider verified leads" value={liveProviderVerifiedLeadCount} icon={<BadgeCheck className="h-4 w-4" />} tone="brand" />
         <StatTile label="Network verified leads" value={networkVerifiedLeadCount} icon={<Building2 className="h-4 w-4" />} tone="brand" />
@@ -183,6 +193,24 @@ export default async function NetworkOverviewPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+        <Card>
+          <CardHeader>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Capture proof</p>
+            <h2 className="mt-1 text-base font-semibold text-semantic-text">Signals, opportunities, and leads are counted separately</h2>
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <p className="text-sm leading-6 text-semantic-muted">
+              Public-source opportunities are market pressure signals. Only verified-contact, traceable chains count as lead and booked-job proof.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <MiniStat label="All source events" value={captureProof?.sourceEventsCaptured || 0} />
+              <MiniStat label="All opportunities" value={captureProof?.opportunitiesCreated || 0} />
+              <MiniStat label="Research-only" value={captureProof?.counts.is_research_only || 0} />
+              <MiniStat label="Real leads" value={captureProof?.realLeadsCreated || 0} />
+            </div>
+          </CardBody>
+        </Card>
+
         <Card>
           <CardHeader className="flex items-center justify-between gap-4">
             <div>
@@ -379,7 +407,7 @@ export default async function NetworkOverviewPage() {
               <MetricRow
                 label="Opportunities"
                 value={opportunities}
-                helper="Live demand signals feeding the lead engine."
+                helper="Live market-pressure opportunities feeding the verified lead workflow."
                 icon={<Target className="h-4 w-4" />}
               />
               <MetricRow
@@ -405,6 +433,12 @@ export default async function NetworkOverviewPage() {
                 value={viewModel.demoMode ? "Demo-safe" : "Live-safe"}
                 helper="The buyer-facing surface shows live-safe proof rather than placeholder integrations."
                 icon={<Globe className="h-4 w-4" />}
+              />
+              <MetricRow
+                label="Proof dropoff"
+                value={String(Math.max(0, (captureProof?.realOpportunitiesCaptured || 0) - (captureProof?.realLeadsCreated || 0)))}
+                helper="Real opportunities still waiting to become verified leads."
+                icon={<BadgeCheck className="h-4 w-4" />}
               />
             </CardBody>
           </Card>

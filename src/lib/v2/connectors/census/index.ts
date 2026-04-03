@@ -198,7 +198,7 @@ export const censusConnector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const hasSample = Array.isArray(input.config.sample_records);
-    if (hasSample) return { ok: true, detail: "sample_records configured" };
+    if (hasSample) return { ok: false, detail: "sample_records configured; source is simulated until a live Census endpoint is configured" };
 
     const stateCode = String(input.config.state_code || process.env.CENSUS_API_STATE || "36").trim();
     const apiKey = String(input.config.api_key || process.env.CENSUS_API_KEY || "").trim();

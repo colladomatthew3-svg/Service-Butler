@@ -43,6 +43,10 @@ function requiresFirecrawlCredential(source: DataSourceSummary) {
   return pageUrls.length > 0 && enabled;
 }
 
+function usesSampleRecords(source: DataSourceSummary) {
+  return Array.isArray(source.config.sample_records) && source.config.sample_records.length > 0;
+}
+
 export function buildEnvironmentReadinessState(reason: string, detail?: string): ReadinessState {
   return {
     mode: "blocked",
@@ -86,6 +90,17 @@ export function buildDataSourceReadinessState(source: DataSourceSummary): Readin
     recommendedActions.push("Set FIRECRAWL_API_KEY or add firecrawl_api_key to the source config.");
   }
 
+  if (usesSampleRecords(source)) {
+    blockingIssues.push(
+      issue(
+        "simulated",
+        `${source.name} is using sample records.`,
+        "Sample-backed sources are useful for local review, but they are excluded from live capture and buyer-proof reporting."
+      )
+    );
+    recommendedActions.push("Remove sample_records before using this source for live capture or buyer-proof reporting.");
+  }
+
   if (source.runtimeMode === "simulated") {
     blockingIssues.push(
       issue(
@@ -115,9 +130,17 @@ export function buildDataSourceReadinessState(source: DataSourceSummary): Readin
   };
 }
 
-export function buyerReadinessNoteForSource(source: Pick<DataSourceSummary, "name" | "configured" | "status" | "runtimeMode" | "termsStatus" | "complianceStatus">) {
+export function buyerReadinessNoteForSource(
+  source: Pick<DataSourceSummary, "name" | "configured" | "status" | "runtimeMode" | "termsStatus" | "complianceStatus"> & {
+    config?: Record<string, unknown>;
+  }
+) {
+  const config = source.config || {};
   if (!source.configured || source.status === "not_configured") {
     return "Not configured in this tenant yet.";
+  }
+  if (Array.isArray(config.sample_records) && config.sample_records.length > 0) {
+    return "Sample-backed only. Visible for operator review, but excluded from live capture and buyer-proof metrics.";
   }
   if (termsBlocked(source.termsStatus) || termsBlocked(source.complianceStatus)) {
     return `Blocked for live proof until ${source.termsStatus.replace(/_/g, " ")} terms/compliance are cleared.`;

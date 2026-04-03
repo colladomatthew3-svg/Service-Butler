@@ -63,6 +63,17 @@ function isCitizenLike(input: ConnectorPullInput) {
   return sourceName.includes("citizen") || sourceProv.includes("citizen");
 }
 
+function hasConfiguredIncidentPages(input: ConnectorPullInput) {
+  const pageUrls = Array.isArray(input.config.page_urls)
+    ? input.config.page_urls.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  return pageUrls.length > 0;
+}
+
+function hasConfiguredIncidentFeed(input: ConnectorPullInput) {
+  return Boolean(String(input.config.feed_url || input.config.endpoint || "").trim());
+}
+
 async function pullIncidentPages(input: ConnectorPullInput) {
   const pages = await scrapeConfiguredPagesWithFirecrawl({
     config: input.config,
@@ -194,6 +205,33 @@ export const incidentConnector: ConnectorAdapter = {
   },
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
+    if (Array.isArray(input.config.sample_records) && !hasConfiguredIncidentPages(input) && !hasConfiguredIncidentFeed(input)) {
+      return {
+        ok: false,
+        detail: "sample_records configured; incident source is simulated until a live feed or Firecrawl page source is configured"
+      };
+    }
+
+    if (hasConfiguredIncidentPages(input)) {
+      if (!input.config.firecrawl_api_key && !process.env.FIRECRAWL_API_KEY) {
+        return {
+          ok: false,
+          detail: "Incident page scraping is configured, but FIRECRAWL_API_KEY is missing"
+        };
+      }
+      return {
+        ok: true,
+        detail: "Incident page source configured for Firecrawl scraping"
+      };
+    }
+
+    if (hasConfiguredIncidentFeed(input)) {
+      return {
+        ok: true,
+        detail: "Incident feed endpoint configured"
+      };
+    }
+
     const records = await this.pull(input);
     return {
       ok: true,

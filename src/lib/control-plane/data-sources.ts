@@ -47,6 +47,7 @@ type RawRunRow = {
   completed_at?: string | null;
   records_seen?: number | null;
   records_created?: number | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type RawSourceEventRow = {
@@ -147,8 +148,14 @@ function hasFirecrawlCredential(config: Record<string, unknown>) {
   return Boolean(config.firecrawl_api_key || process.env.FIRECRAWL_API_KEY);
 }
 
+function hasSampleRecords(config: Record<string, unknown>) {
+  return Array.isArray(config.sample_records) && config.sample_records.length > 0;
+}
+
 export function computeRuntimeMode(sourceType: string, config: Record<string, unknown>, termsStatus: DataSourceTermsStatus): DataSourceRuntimeMode {
   const normalizedType = String(sourceType || "").toLowerCase();
+
+  if (hasSampleRecords(config)) return "simulated";
 
   if (normalizedType.includes("weather")) {
     const hasCoords = Number.isFinite(Number(config.latitude ?? config.lat)) && Number.isFinite(Number(config.longitude ?? config.lon));
@@ -213,6 +220,27 @@ export function computeRuntimeMode(sourceType: string, config: Record<string, un
   return termsStatus === "approved" ? "fully-live" : "live-partial";
 }
 
+function resolveCaptureStatus(summary: Pick<DataSourceSummary, "configured" | "status" | "runtimeMode" | "termsStatus" | "complianceStatus" | "config" | "latestRunStatus">) {
+  if (!summary.configured || summary.status === "not_configured" || hasSampleRecords(summary.config)) return "simulated" as const;
+  if (summary.termsStatus !== "approved" || summary.complianceStatus !== "approved") return "blocked" as const;
+  if (summary.runtimeMode === "live-partial") return "live_safe_partial" as const;
+  if (summary.runtimeMode === "simulated") return "simulated" as const;
+  if (summary.latestRunStatus === "failed") return "blocked" as const;
+  return "capturing_live" as const;
+}
+
+function buildBuyerReadinessNote(input: {
+  name: string;
+  configured: boolean;
+  status: DataSourceStatus;
+  runtimeMode: DataSourceRuntimeMode;
+  termsStatus: DataSourceTermsStatus;
+  complianceStatus: DataSourceTermsStatus;
+  config: Record<string, unknown>;
+}) {
+  return buyerReadinessNoteForSource(input as DataSourceSummary);
+}
+
 function configuredSummaryFromCatalog(catalogKey: string): DataSourceSummary {
   const catalog = getDataSourceCatalogEntry(catalogKey);
   if (!catalog) {
@@ -241,16 +269,20 @@ function configuredSummaryFromCatalog(catalogKey: string): DataSourceSummary {
     latestEventAt: null,
     recordsSeen: 0,
     recordsCreated: 0,
+    recordsUpdated: 0,
     provenance: catalog.defaultProvenance,
     liveRequirements: catalog.liveRequirements,
-    buyerReadinessNote: buyerReadinessNoteForSource({
+    buyerReadinessNote: buildBuyerReadinessNote({
       name: catalog.name,
       configured: false,
       status: "not_configured",
       runtimeMode: computeRuntimeMode(catalog.sourceType, catalog.defaultConfig, catalog.defaultTermsStatus),
       termsStatus: catalog.defaultTermsStatus,
-      complianceStatus: catalog.defaultTermsStatus
+      complianceStatus: catalog.defaultTermsStatus,
+      config: catalog.defaultConfig
     }),
+    captureStatus: "simulated",
+    countsAsRealCapture: false,
     config: catalog.defaultConfig,
     configTemplate: catalog.defaultConfig,
     rateLimitPolicy: {}
@@ -524,8 +556,8 @@ function buildConfiguredSummary(
 
   const runtimeMode = computeRuntimeMode(row.source_type, config, termsStatus);
   const freshnessTimestamp = latestEvent?.ingested_at || row.freshness_timestamp || null;
-
-  return {
+  const recordsUpdated = Number((latestRun?.metadata as Record<string, unknown> | null)?.opportunities_updated || 0);
+  const summary = {
     id: String(row.id),
     catalogKey: catalog?.catalogKey || connectorKey,
     connectorKey,
@@ -547,20 +579,33 @@ function buildConfiguredSummary(
     latestEventAt: latestEvent?.ingested_at || null,
     recordsSeen: Number(latestRun?.records_seen || 0),
     recordsCreated: Number(latestRun?.records_created || 0),
+    recordsUpdated,
     provenance: row.provenance || catalog?.defaultProvenance || null,
     liveRequirements: catalog?.liveRequirements || [],
-    buyerReadinessNote: buyerReadinessNoteForSource({
+    buyerReadinessNote: buildBuyerReadinessNote({
       name: row.name || catalog?.name || row.source_type,
       configured: true,
       status: row.status,
       runtimeMode,
       termsStatus,
-      complianceStatus
+      complianceStatus,
+      config
     }),
+    captureStatus: "simulated" as const,
+    countsAsRealCapture: false,
     config,
     configTemplate: catalog?.defaultConfig || {},
     rateLimitPolicy: (row.rate_limit_policy as Record<string, unknown>) || {}
   } satisfies DataSourceSummary;
+
+  const captureStatus = resolveCaptureStatus(summary);
+  const connectorInputMode = String((latestRun?.metadata as Record<string, unknown> | null)?.connector_input_mode || "").toLowerCase();
+
+  return {
+    ...summary,
+    captureStatus,
+    countsAsRealCapture: captureStatus === "capturing_live" && connectorInputMode !== "synthetic_fallback"
+  };
 }
 
 export async function listDataSourceSummaries({
@@ -592,7 +637,7 @@ export async function listDataSourceSummaries({
     ? await Promise.all([
         (supabase as any)
           .from("v2_connector_runs")
-          .select("id,source_id,status,completed_at,records_seen,records_created,started_at")
+          .select("id,source_id,status,completed_at,records_seen,records_created,started_at,metadata")
           .in("source_id", sourceIds)
           .order("started_at", { ascending: false })
           .limit(400),

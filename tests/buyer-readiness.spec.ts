@@ -24,9 +24,12 @@ test("data-source readiness blocks simulated and terms-gated sources", () => {
     latestEventAt: null,
     recordsSeen: 0,
     recordsCreated: 0,
+    recordsUpdated: 0,
     provenance: "permits.provider",
     liveRequirements: ["Provider URL"],
     buyerReadinessNote: "",
+    captureStatus: "simulated",
+    countsAsRealCapture: false,
     config: {},
     configTemplate: {},
     rateLimitPolicy: {}

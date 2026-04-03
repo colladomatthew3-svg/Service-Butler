@@ -789,7 +789,7 @@ export function LeadScannerView({
     <div className="space-y-6">
       <PageHeader
         title="Lead Signal Command Center"
-        subtitle="Tune the market, surface the best opportunities, and move only the calls worth making."
+        subtitle="Tune the market, surface the strongest opportunities, and move only the verified contact paths worth working."
       />
 
       <section className="overflow-hidden rounded-[2.25rem] border border-semantic-border/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(240,246,242,0.92))] shadow-[0_24px_68px_rgba(30,42,36,0.12)]">
@@ -798,7 +798,7 @@ export function LeadScannerView({
             <p className="eyebrow">Live demand command center</p>
             <div className="space-y-4">
               <h2 className="display-title max-w-3xl text-semantic-text">
-                Rank the market, surface the best lead, and hand off only the calls worth making.
+                Rank the market, surface the strongest opportunity, and hand off only the calls worth making.
               </h2>
               <p className="dashboard-body max-w-2xl text-semantic-muted">
                 Scanner keeps the first look calm and decision-ready. Signals are ranked, verified, and routed so your team spends
@@ -839,7 +839,7 @@ export function LeadScannerView({
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <ScannerMetric label="Active market" value={location} helper="Saved service area" />
                 <ScannerMetric label="Signal mix" value={`${sourceMixCount} sources`} helper="Channels represented" />
-                <ScannerMetric label="Queue depth" value={`${queueDepth} results`} helper="Lead candidates" />
+                <ScannerMetric label="Queue depth" value={`${queueDepth} results`} helper="Opportunity candidates" />
                 <ScannerMetric label="SDR queue" value={`${sdrQueuedEvents.length}`} helper="Needs verified contact" />
               </div>
 
@@ -861,7 +861,7 @@ export function LeadScannerView({
                   </div>
                 ) : (
                   <div className="mt-3 space-y-2">
-                    <p className="text-sm font-semibold text-semantic-text">Run the first scan to surface a buyer-ready lead.</p>
+                    <p className="text-sm font-semibold text-semantic-text">Run the first scan to surface a buyer-ready opportunity.</p>
                     <p className="text-sm text-semantic-muted">
                       The command center will highlight the highest-confidence result and keep the next step obvious.
                     </p>
@@ -896,7 +896,7 @@ export function LeadScannerView({
               <div className="space-y-2">
                 <p className="font-semibold text-semantic-text">Service area saved. Now run your first scan.</p>
                 <p className="text-semantic-muted">
-                  This is the first-value step for pilots: pull in local demand, review the strongest opportunity, and create a lead only if it looks credible.
+                  This is the first-value step for pilots: pull in local demand, review the strongest opportunity, and create a verified lead only if it looks credible.
                 </p>
               </div>
             </div>
@@ -1082,12 +1082,12 @@ export function LeadScannerView({
                 </p>
                 <p className="mt-1 text-sm font-semibold text-semantic-text">
                   {tab === "sdr"
-                    ? `${visibleEvents.length} signals are waiting on verified contact before they can become leads or jobs.`
+                    ? `${visibleEvents.length} opportunities are waiting on verified contact before they can become leads or jobs.`
                     : `${visibleEvents.length} opportunities surfaced.`}
                   {tab === "sdr"
                     ? " Capture verified contact, then promote only the credible ones into dispatch."
                     : showingFirstScanGuide
-                      ? " Work the strongest result first and create a lead only if you would actually call it."
+                      ? " Work the strongest result first and create a verified lead only if you would actually call it."
                       : " Work the strongest result first and keep the queue moving."}
                 </p>
               </div>
@@ -1176,8 +1176,8 @@ export function LeadScannerView({
                   <div className="mt-4 space-y-3">
                     {[
                       ["1", "Set service area", "Ground demand in the market your crews actually cover."],
-                      ["2", tab === "sdr" ? "Send to SDR" : "Run first scan", tab === "sdr" ? "Queue non-contactable signals instead of overstating them as leads." : "Surface the strongest signal and review why it matters."],
-                      ["3", tab === "sdr" ? "Verify contact" : "Create first lead", tab === "sdr" ? "Capture a real phone or email before dispatch." : "Only work the result if your team would actually call it."]
+                      ["2", tab === "sdr" ? "Send to SDR" : "Run first scan", tab === "sdr" ? "Queue non-contactable opportunities instead of overstating them as leads." : "Surface the strongest opportunity and review why it matters."],
+                      ["3", tab === "sdr" ? "Verify contact" : "Create verified lead", tab === "sdr" ? "Capture a real phone or email before dispatch." : "Only promote the opportunity if your team would actually call it."]
                     ].map(([number, title, text]) => (
                       <div key={title} className="flex items-start gap-3 rounded-[1rem] border border-semantic-border/60 bg-white/84 p-3">
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">

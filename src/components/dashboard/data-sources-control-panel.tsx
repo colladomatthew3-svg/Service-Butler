@@ -347,15 +347,24 @@ export function DataSourcesControlPanel() {
                         <Badge variant={source.termsStatus === "approved" ? "success" : source.termsStatus === "blocked" ? "danger" : "warning"}>
                           {source.termsStatus.replace(/_/g, " ")}
                         </Badge>
+                        <Badge variant={captureStatusVariant(source.captureStatus)}>{captureStatusLabel(source.captureStatus)}</Badge>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-semantic-muted">
                         <div>
                           <p className="font-semibold text-semantic-text">{source.recordsCreated}</p>
-                          <p>records created</p>
+                          <p>opportunities inserted</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-semantic-text">{source.recordsUpdated}</p>
+                          <p>opportunities updated</p>
                         </div>
                         <div>
                           <p className="font-semibold text-semantic-text">{source.freshnessLabel}</p>
                           <p>latest event</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-semantic-text">{source.countsAsRealCapture ? "Included" : "Excluded"}</p>
+                          <p>buyer capture proof</p>
                         </div>
                       </div>
                       <ReadinessBanner readiness={sourceReadiness} compact />
@@ -740,6 +749,20 @@ function runtimeVariant(mode: DataSourceSummary["runtimeMode"]) {
 function runtimeLabel(mode: DataSourceSummary["runtimeMode"]) {
   if (mode === "fully-live") return "Fully live";
   if (mode === "live-partial") return "Live partial";
+  return "Simulated";
+}
+
+function captureStatusVariant(status: DataSourceSummary["captureStatus"]) {
+  if (status === "capturing_live") return "success";
+  if (status === "blocked") return "danger";
+  if (status === "live_safe_partial") return "warning";
+  return "default";
+}
+
+function captureStatusLabel(status: DataSourceSummary["captureStatus"]) {
+  if (status === "capturing_live") return "Live and capturing";
+  if (status === "blocked") return "Blocked";
+  if (status === "live_safe_partial") return "Live-safe partial";
   return "Simulated";
 }
 

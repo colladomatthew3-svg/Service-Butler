@@ -1,4 +1,5 @@
 import type { V2DashboardMetricRow } from "@/lib/v2/types";
+import type { CaptureProofSummary } from "@/lib/v2/capture-proof";
 import { getOpportunityQualificationSnapshot, isBuyerProofEligibleQualification } from "@/lib/v2/opportunity-qualification";
 import { classifyProofAuthenticity, type ProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -112,6 +113,153 @@ function isBuyerProofEligibleOpportunity(input: {
     proofAuthenticity
   });
   return isBuyerProofEligibleQualification(qualification);
+}
+
+function buildCaptureProofSummary(input: {
+  franchiseTenantId: string;
+  sourceEvents: Array<Record<string, unknown>>;
+  opportunities: Array<Record<string, unknown>>;
+  leads: Array<Record<string, unknown>>;
+  jobs: Array<Record<string, unknown>>;
+  connectorRunById: Map<string, Record<string, unknown>>;
+}) {
+  const leadsByOpportunity = new Map<string, Record<string, unknown>[]>();
+  for (const lead of input.leads) {
+    const opportunityId = asText(lead.opportunity_id);
+    if (!opportunityId) continue;
+    const bucket = leadsByOpportunity.get(opportunityId) || [];
+    bucket.push(lead);
+    leadsByOpportunity.set(opportunityId, bucket);
+  }
+
+  const jobsByLead = new Map<string, Record<string, unknown>[]>();
+  for (const job of input.jobs) {
+    const leadId = asText(job.lead_id);
+    if (!leadId) continue;
+    const bucket = jobsByLead.get(leadId) || [];
+    bucket.push(job);
+    jobsByLead.set(leadId, bucket);
+  }
+
+  let sourceEventsCaptured = 0;
+  let realSourceEventsCaptured = 0;
+  let opportunitiesUpdated = 0;
+  let realOpportunitiesCaptured = 0;
+  let opportunitiesRequiringSdr = 0;
+  let qualifiedContactableOpportunities = 0;
+  let realCaptureOpportunityCount = 0;
+  let realLeadsCreated = 0;
+  let bookedJobsAttributed = 0;
+  let simulatedCount = 0;
+  let researchOnlyCount = 0;
+  let countsAsRealLeadCount = 0;
+  const opportunityAuthenticity = new Map<string, ProofAuthenticity>();
+  const processedRuns = new Set<string>();
+
+  for (const sourceEvent of input.sourceEvents) {
+    const connectorRun = input.connectorRunById.get(asText(sourceEvent.connector_run_id));
+    const connectorRunMetadata = asRecord(connectorRun?.metadata);
+    const authenticity = classifyProofAuthenticity({
+      sourceType: sourceEvent.source_type,
+      sourceName: sourceEvent.source_name,
+      sourceProvenance: sourceEvent.source_provenance,
+      normalizedPayload: asRecord(sourceEvent.normalized_payload),
+      connectorRunMetadata
+    });
+
+    sourceEventsCaptured += 1;
+    if (authenticity === "live_provider" || authenticity === "live_derived") {
+      realSourceEventsCaptured += 1;
+    } else if (authenticity === "synthetic") {
+      simulatedCount += 1;
+    }
+
+    const runId = asText(sourceEvent.connector_run_id);
+    if (runId && !processedRuns.has(runId)) {
+      processedRuns.add(runId);
+      opportunitiesUpdated += toNumber(connectorRunMetadata.opportunities_updated, 0);
+    }
+  }
+
+  for (const opportunity of input.opportunities) {
+    const sourceEvent = input.sourceEvents.find((row) => asText(row.id) === asText(opportunity.source_event_id)) || {};
+    const connectorRun = input.connectorRunById.get(asText(sourceEvent.connector_run_id));
+    const authenticity =
+      proofAuthenticityForOpportunity({
+        opportunity,
+        sourceEvent,
+        connectorRunMetadata: asRecord(connectorRun?.metadata)
+      }) || "unknown";
+    opportunityAuthenticity.set(asText(opportunity.id), authenticity);
+
+    const qualification = getOpportunityQualificationSnapshot({
+      explainability: asRecord(opportunity.explainability_json),
+      lifecycleStatus: opportunity.lifecycle_status,
+      contactStatus: opportunity.contact_status,
+      proofAuthenticity: authenticity
+    });
+
+    if (qualification.researchOnly) researchOnlyCount += 1;
+    if (qualification.requiresSdrQualification || qualification.qualificationStatus === "queued_for_sdr" || qualification.qualificationStatus === "research_only") {
+      opportunitiesRequiringSdr += 1;
+    }
+    if (qualification.qualificationStatus === "qualified_contactable") {
+      qualifiedContactableOpportunities += 1;
+    }
+
+    const countsAsRealCapture =
+      (authenticity === "live_provider" || authenticity === "live_derived") &&
+      !qualification.researchOnly;
+    if (countsAsRealCapture) {
+      realOpportunitiesCaptured += 1;
+      realCaptureOpportunityCount += 1;
+    }
+  }
+
+  for (const lead of input.leads) {
+    const opportunityId = asText(lead.opportunity_id);
+    const opportunity = input.opportunities.find((row) => asText(row.id) === opportunityId) || {};
+    const qualification = getOpportunityQualificationSnapshot({
+      explainability: asRecord(opportunity.explainability_json),
+      lifecycleStatus: opportunity.lifecycle_status,
+      contactStatus: opportunity.contact_status,
+      proofAuthenticity: opportunityAuthenticity.get(opportunityId) || "unknown"
+    });
+    const leadSnapshot = leadVerificationSnapshot(lead);
+    const countsAsRealLead =
+      (opportunityAuthenticity.get(opportunityId) === "live_provider" || opportunityAuthenticity.get(opportunityId) === "live_derived") &&
+      qualification.qualificationStatus === "qualified_contactable" &&
+      leadSnapshot.verified;
+
+    if (countsAsRealLead) {
+      realLeadsCreated += 1;
+      countsAsRealLeadCount += 1;
+      const bookedJobs = (jobsByLead.get(asText(lead.id)) || []).filter((job) => String(job.status || "").toLowerCase().includes("book"));
+      bookedJobsAttributed += bookedJobs.length;
+    }
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    tenantId: input.franchiseTenantId,
+    isDemo: false,
+    sourceEventsCaptured,
+    realSourceEventsCaptured,
+    opportunitiesCreated: input.opportunities.length,
+    opportunitiesUpdated,
+    realOpportunitiesCaptured,
+    opportunitiesRequiringSdr,
+    qualifiedContactableOpportunities,
+    leadsCreated: input.leads.length,
+    realLeadsCreated,
+    bookedJobsAttributed,
+    counts: {
+      is_simulated: simulatedCount,
+      is_research_only: researchOnlyCount,
+      counts_as_real_capture: realCaptureOpportunityCount,
+      counts_as_real_lead: countsAsRealLeadCount
+    }
+  } satisfies CaptureProofSummary;
 }
 
 function sourceRankingScore(stats: {
@@ -823,6 +971,14 @@ export async function getFranchiseDashboardReadModel({
     const leadJobs = jobsByLead.get(asText(lead.id)) || [];
     return sum + leadJobs.filter((job) => String(job.status || "").toLowerCase().includes("book")).length;
   }, 0);
+  const captureProofSummary = buildCaptureProofSummary({
+    franchiseTenantId,
+    sourceEvents: sourceEventRows,
+    opportunities: oppRows,
+    leads: leadRows,
+    jobs: jobRows,
+    connectorRunById
+  });
 
   return {
     metrics: [
@@ -884,6 +1040,7 @@ export async function getFranchiseDashboardReadModel({
       source_quality_preview: sourceQualityPreview.slice(0, 5),
       proof_samples: proofSamples
     },
+    capture_proof_summary: captureProofSummary,
     freshness: {
       generated_at: new Date().toISOString(),
       outreach_events_considered: outreachRows.length,

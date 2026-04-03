@@ -10,24 +10,6 @@ export async function GET() {
   if (isDemoMode() || !featureFlags.useV2Reads) {
     return NextResponse.json({
       mode: "compat",
-      metrics: [],
-      opportunities: [],
-      assignments: [],
-      jobs: [],
-      lead_quality_proof: {
-        verified_lead_count: 0,
-        network_verified_lead_count: 0,
-        review_lead_count: 0,
-        rejected_lead_count: 0,
-        contactable_lead_count: 0,
-        booked_jobs_from_verified_leads: 0,
-        booked_jobs_from_network_leads: 0,
-        network_activated_opportunity_count: 0,
-        network_outreach_event_count: 0,
-        booked_jobs_from_review_leads: 0,
-        source_quality_preview: [],
-        proof_samples: []
-      },
       capture_proof_summary: null
     });
   }
@@ -42,9 +24,11 @@ export async function GET() {
       franchiseTenantId: context.franchiseTenantId
     });
 
-    return NextResponse.json(data);
+    return NextResponse.json({
+      capture_proof_summary: data.capture_proof_summary || null
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Franchise dashboard read model failed";
+    const message = error instanceof Error ? error.message : "Capture proof summary failed";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

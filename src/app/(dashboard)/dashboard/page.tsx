@@ -304,10 +304,10 @@ export default async function DashboardOverviewPage() {
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Highest urgency</p>
-              <h2 className="mt-1 text-base font-semibold text-semantic-text">Signals to work first</h2>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Opportunities to work first</h2>
             </div>
-            <Link href="/dashboard/scanner" className={buttonStyles({ size: "sm", variant: "secondary" })}>
-              View scanner
+            <Link href="/dashboard/opportunities" className={buttonStyles({ size: "sm", variant: "secondary" })}>
+              Open opportunities
             </Link>
           </CardHeader>
           <CardBody className="space-y-4">
@@ -326,7 +326,7 @@ export default async function DashboardOverviewPage() {
                   {highestUrgencyOpportunities.map((item) => (
                     <tr key={item.id}>
                       <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-3 first:rounded-none last:rounded-none">
-                        <Link href="/dashboard/scanner" className="text-sm font-medium text-semantic-text transition hover:text-brand-700">
+                        <Link href="/dashboard/opportunities" className="text-sm font-medium text-semantic-text transition hover:text-brand-700">
                           {item.title || "Untitled opportunity"}
                         </Link>
                         <p className="mt-1 text-xs text-semantic-muted">{item.category ? toTitleCase(item.category) : "Restoration signal"}</p>

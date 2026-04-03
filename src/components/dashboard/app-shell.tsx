@@ -7,6 +7,7 @@ import {
   Inbox,
   LayoutGrid,
   Users,
+  Target,
   CalendarDays,
   Settings,
   X,
@@ -43,8 +44,9 @@ const navSections: NavSection[] = [
     label: "Operator",
     items: [
       { href: "/dashboard", label: "Command Center", icon: LayoutGrid, exact: true },
-      { href: "/dashboard/inbox", label: "Inbox", icon: Inbox },
-      { href: "/dashboard/scanner", label: "Lead Signals", icon: Radar }
+      { href: "/dashboard/opportunities", label: "Opportunities", icon: Target },
+      { href: "/dashboard/scanner", label: "Scanner", icon: Radar },
+      { href: "/dashboard/inbox", label: "Inbox", icon: Inbox }
     ]
   },
   {

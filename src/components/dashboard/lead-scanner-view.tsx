@@ -208,12 +208,22 @@ function buildQualificationDraft(state: QualificationState): QualificationDraft 
   };
 }
 
+function matchesFocusedOpportunity(event: ScannerEvent, focusOpportunityId: string) {
+  const target = focusOpportunityId.trim();
+  if (!target) return false;
+
+  const rawOpportunityId = readText(event.raw?.v2_opportunity_id) || readText(event.raw?.opportunity_id);
+  return rawOpportunityId === target || event.id === target;
+}
+
 export function LeadScannerView({
   initialTab = "feed",
-  onboardingMode
+  onboardingMode,
+  focusOpportunityId
 }: {
   initialTab?: Tab;
   onboardingMode?: "first-scan";
+  focusOpportunityId?: string;
 }) {
   const [mode] = useState<Mode>(isDemoMode() ? "demo" : "live");
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -253,10 +263,21 @@ export function LeadScannerView({
 
   const { showToast } = useToast();
 
-  const sortedEvents = useMemo(
-    () => [...events].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-    [events]
-  );
+  const sortedEvents = useMemo(() => {
+    const ordered = [...events].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    if (!focusOpportunityId) return ordered;
+
+    const focused: ScannerEvent[] = [];
+    const remainder: ScannerEvent[] = [];
+    for (const event of ordered) {
+      if (matchesFocusedOpportunity(event, focusOpportunityId)) {
+        focused.push(event);
+      } else {
+        remainder.push(event);
+      }
+    }
+    return [...focused, ...remainder];
+  }, [events, focusOpportunityId]);
 
   const testRule = useMemo(() => {
     const pick = selectedCategories[0] || "general";
@@ -1194,6 +1215,7 @@ export function LeadScannerView({
             const areaContext = [String(event.raw?.neighborhood || "").trim(), String(event.raw?.county || "").trim()].filter(Boolean).join(" · ");
             const primaryAction = getPrimaryAction(event.intent_score, showingFirstScanGuide);
             const isFeatured = index === 0;
+            const isFocused = focusOpportunityId ? matchesFocusedOpportunity(event, focusOpportunityId) : false;
             const reviewOpen = reviewingQualificationId === event.id;
             const draft = qualificationDrafts[event.id] || buildQualificationDraft(qualificationState);
 
@@ -1202,7 +1224,8 @@ export function LeadScannerView({
                 key={event.id}
                 className={cn(
                   "overflow-hidden border-semantic-border/60 bg-white/84 shadow-[0_18px_44px_rgba(31,42,36,0.08)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(31,42,36,0.12)]",
-                  isFeatured && "ring-1 ring-brand-300"
+                  isFeatured && "ring-1 ring-brand-300",
+                  isFocused && "ring-2 ring-brand-500 shadow-[0_24px_60px_rgba(29,78,216,0.16)]"
                 )}
                 data-testid="scanner-result-card"
               >
@@ -1216,6 +1239,7 @@ export function LeadScannerView({
                         <Badge variant={addressQualityVariant(event)}>{addressQualityLabel(event)}</Badge>
                         <Badge variant="default">{freshnessLabel(event.created_at)}</Badge>
                         {isFeatured && <Badge variant="brand">Top result</Badge>}
+                        {isFocused && <Badge variant="brand">Focused opportunity</Badge>}
                       </div>
 
                       <div className="space-y-2">

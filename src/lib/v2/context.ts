@@ -93,6 +93,7 @@ export async function getV2TenantContext(): Promise<
     .eq("account_id", accountId)
     .maybeSingle();
 
+
   let franchiseTenantId = mapping?.franchise_tenant_id ? String(mapping.franchise_tenant_id) : "";
   let enterpriseTenantId = mapping?.enterprise_tenant_id ? String(mapping.enterprise_tenant_id) : "";
 
@@ -116,12 +117,27 @@ export async function getV2TenantContext(): Promise<
     throw new Error("V2 tenant mapping not found for current account");
   }
 
+  // Read franchise vertical from tenant settings_json
+  let franchiseVertical: string | null = null;
+  const { data: tenantRow } = await supabase
+    .from("v2_tenants")
+    .select("settings_json")
+    .eq("id", franchiseTenantId)
+    .maybeSingle();
+  if (tenantRow?.settings_json && typeof tenantRow.settings_json === "object") {
+    const settings = tenantRow.settings_json as Record<string, unknown>;
+    if (typeof settings.vertical === "string" && settings.vertical) {
+      franchiseVertical = settings.vertical;
+    }
+  }
+
   return {
     accountId,
     userId,
     role,
     franchiseTenantId,
     enterpriseTenantId,
+    franchiseVertical,
     supabase
   };
 }

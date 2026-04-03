@@ -1,3 +1,5 @@
+import { checkOpportunityDuplicate, injectDedupKey } from "@/lib/v2/deduplication";
+import { type FranchiseVertical, getVertical } from "@/lib/v2/franchise-verticals";
 import { computeOpportunityScores } from "@/lib/v2/scoring";
 import type { V2ConnectorRunResult } from "@/lib/v2/types";
 import type { ConnectorAdapter, ConnectorNormalizedEvent, ConnectorPullInput } from "@/lib/v2/connectors/types";
@@ -89,7 +91,14 @@ function mapClusterType(eventCategory: string) {
   return "incident";
 }
 
-function scoreInputsForEvent(event: ConnectorNormalizedEvent, signalAgreement = 50) {
+function scoreInputsForEvent(
+  event: ConnectorNormalizedEvent,
+  signalAgreement = 50,
+  options: {
+    vertical?: FranchiseVertical;
+    signalCategory?: string;
+  } = {}
+) {
   const occurredAt = new Date(event.occurredAt).getTime();
   const now = Date.now();
   const minutes = Number.isFinite(occurredAt) ? Math.max(0, Math.round((now - occurredAt) / 60000)) : 120;
@@ -125,7 +134,52 @@ function scoreInputsForEvent(event: ConnectorNormalizedEvent, signalAgreement = 
     supportingSignalsCount: Number(event.supportingSignalsCount ?? 1),
     catastropheSignal: Number(event.catastropheSignal ?? event.urgencyHint ?? 0),
     sourceReliability: Number(event.sourceReliability ?? 50),
-    signalAgreement
+    signalAgreement,
+    signalCategory: options.signalCategory,
+    vertical: options.vertical
+  };
+}
+
+async function resolveTenantVertical(supabase: SupabaseClient, tenantId: string) {
+  const { data: tenantRow } = await supabase
+    .from("v2_tenants")
+    .select("settings_json")
+    .eq("id", tenantId)
+    .maybeSingle();
+
+  const settings =
+    tenantRow?.settings_json && typeof tenantRow.settings_json === "object"
+      ? (tenantRow.settings_json as Record<string, unknown>)
+      : null;
+
+  return getVertical(typeof settings?.vertical === "string" ? settings.vertical : null);
+}
+
+function resolveSignalCategory(event: ConnectorNormalizedEvent, fallback: string) {
+  const normalized = event.normalizedPayload as Record<string, unknown>;
+  const candidates = [
+    event.eventCategory,
+    typeof normalized.event_category === "string" ? normalized.event_category : null,
+    typeof normalized.category === "string" ? normalized.category : null,
+    fallback,
+    event.eventType
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+  }
+
+  return "signal";
+}
+
+function buildDedupInputForEvent(event: ConnectorNormalizedEvent, serviceType: string) {
+  return {
+    address: String(event.addressText || event.locationText || "").trim() || null,
+    city: String(event.city || "").trim() || null,
+    state: String(event.state || "").trim() || null,
+    postalCode: String(event.postalCode || parsePostalFromText(String(event.locationText || "")) || "").trim() || null,
+    serviceType: String(serviceType || "").trim() || null,
+    sourceType: String(event.eventType || "").trim() || null
   };
 }
 
@@ -319,6 +373,26 @@ async function resolveOpportunityCandidate({
   );
 }
 
+async function loadOpportunityCandidateById({
+  supabase,
+  tenantId,
+  opportunityId
+}: {
+  supabase: SupabaseClient;
+  tenantId: string;
+  opportunityId: string;
+}) {
+  const { data, error } = await supabase
+    .from("v2_opportunities")
+    .select("id,urgency_score,job_likelihood_score,source_reliability_score,catastrophe_linkage_score,created_at,explainability_json,title,description")
+    .eq("tenant_id", tenantId)
+    .eq("id", opportunityId)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return data as Record<string, unknown>;
+}
+
 function mergeOpportunityScores({
   existing,
   incoming,
@@ -370,7 +444,8 @@ async function upsertOpportunityFromEvent({
   sourceEventId,
   event,
   classification,
-  clusterId
+  clusterId,
+  vertical
 }: {
   supabase: SupabaseClient;
   tenantId: string;
@@ -378,49 +453,56 @@ async function upsertOpportunityFromEvent({
   event: ConnectorNormalizedEvent;
   classification: { opportunityType: string; serviceLine: string };
   clusterId: string | null;
-}): Promise<{
-  opportunityId: string;
-  scoring: {
-    urgencyScore: number;
-    jobLikelihoodScore: number;
-    sourceReliabilityScore: number;
-    catastropheLinkageScore: number;
-    confidenceScore: number;
-    explainability: Record<string, unknown>;
-    multiSignal: boolean;
-  };
-  multiSignal: boolean;
-  outcome: "inserted" | "updated";
-}> {
-  const scoring = computeOpportunityScores(scoreInputsForEvent(event, 55));
+  vertical: FranchiseVertical;
+}) {
   const locationPoint = toPoint(event.latitude, event.longitude);
 
   const primaryServiceLine = classification.serviceLine || event.serviceLineCandidates?.[0] || event.serviceLine || "general";
   const secondaryServiceLines = (event.serviceLineCandidates || []).filter((line) => String(line) !== primaryServiceLine);
   const postalCode = String(event.postalCode || parsePostalFromText(String(event.locationText || "")) || "").trim();
   const likelyJobType = String(event.likelyJobType || classifyLikelyJobType(classification.opportunityType, primaryServiceLine));
+  const signalCategory = resolveSignalCategory(event, classification.opportunityType);
+  const scoring = computeOpportunityScores(
+    scoreInputsForEvent(event, 55, {
+      vertical,
+      signalCategory
+    })
+  );
+  const dedupInput = buildDedupInputForEvent(event, primaryServiceLine);
+  const duplicate = await checkOpportunityDuplicate(supabase, tenantId, dedupInput, vertical);
 
-  const candidate = await resolveOpportunityCandidate({
-    supabase,
-    tenantId,
-    serviceLine: primaryServiceLine,
-    postalCode: postalCode || null
-  });
+  const candidate =
+    (duplicate.isDuplicate
+      ? await loadOpportunityCandidateById({
+          supabase,
+          tenantId,
+          opportunityId: duplicate.existingOpportunityId
+        })
+      : null) ||
+    (await resolveOpportunityCandidate({
+      supabase,
+      tenantId,
+      serviceLine: primaryServiceLine,
+      postalCode: postalCode || null
+    }));
 
-  const baseExplainability = {
-    ...scoring.explainability,
-    primary_service_line: primaryServiceLine,
-    secondary_service_lines: secondaryServiceLines,
-    likely_job_type: likelyJobType,
-    estimated_response_window: event.estimatedResponseWindow || responseWindowFromUrgency(scoring.urgencyScore),
-    confidence_reasoning: `score=${scoring.confidenceScore}; source=${event.eventType}; recency_weighted=true`,
-    distress_context_summary: event.distressContextSummary || "",
-    confidence_score: scoring.confidenceScore,
-    signal_count: 1,
-    source_types: [event.eventType],
-    multi_signal: false,
-    event_category: event.eventCategory || classification.opportunityType
-  } as Record<string, unknown>;
+  const baseExplainability = injectDedupKey(
+    {
+      ...scoring.explainability,
+      primary_service_line: primaryServiceLine,
+      secondary_service_lines: secondaryServiceLines,
+      likely_job_type: likelyJobType,
+      estimated_response_window: event.estimatedResponseWindow || responseWindowFromUrgency(scoring.urgencyScore),
+      confidence_reasoning: `score=${scoring.confidenceScore}; source=${event.eventType}; recency_weighted=true`,
+      distress_context_summary: event.distressContextSummary || "",
+      confidence_score: scoring.confidenceScore,
+      signal_count: 1,
+      source_types: [event.eventType],
+      multi_signal: false,
+      event_category: signalCategory
+    } as Record<string, unknown>,
+    dedupInput
+  );
 
   let opportunityId = "";
   let finalScores = {
@@ -482,68 +564,6 @@ async function upsertOpportunityFromEvent({
 
     if (error || !updated?.id) throw new Error(error?.message || "Failed to update v2 opportunity");
     opportunityId = String(updated.id);
-    const outcome = "updated" as const;
-    await supabase.from("v2_opportunity_signals").insert([
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "urgency_score",
-        signal_value: finalScores.urgencyScore,
-        signal_weight: 1,
-        explanation: "Urgency score from recency + severity + catastrophe context"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "job_likelihood_score",
-        signal_value: finalScores.jobLikelihoodScore,
-        signal_weight: 1,
-        explanation: "Likelihood score from service fit, recency, severity, and source agreement"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "source_reliability_score",
-        signal_value: finalScores.sourceReliabilityScore,
-        signal_weight: 1,
-        explanation: "Source reliability score"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "catastrophe_linkage_score",
-        signal_value: finalScores.catastropheLinkageScore,
-        signal_weight: 1,
-        explanation: "Catastrophe linkage strength"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "confidence_score",
-        signal_value: finalScores.confidenceScore,
-        signal_weight: 1,
-        explanation: "Confidence score derived from recency, reliability, geography precision, and signal agreement"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: String(event.eventCategory || event.eventType),
-        signal_value: toBoundedScore(event.severityHint ?? event.severity, 50),
-        signal_weight: 1,
-        explanation: `Supporting signal from ${event.eventType}`,
-        metadata: {
-          event_type: event.eventType,
-          source_name: event.sourceName || "unknown"
-        }
-      }
-    ]);
-
-    return {
-      opportunityId,
-      scoring: finalScores,
-      multiSignal: Boolean((finalScores.explainability as Record<string, unknown>).multi_signal),
-      outcome
-    };
   } else {
     const { data: inserted, error } = await supabase
       .from("v2_opportunities")
@@ -574,78 +594,80 @@ async function upsertOpportunityFromEvent({
 
     if (error || !inserted?.id) throw new Error(error?.message || "Failed to create v2 opportunity");
     opportunityId = String(inserted.id);
-    const outcome = "inserted" as const;
-    await supabase.from("v2_opportunity_signals").insert([
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "urgency_score",
-        signal_value: finalScores.urgencyScore,
-        signal_weight: 1,
-        explanation: "Urgency score from recency + severity + catastrophe context"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "job_likelihood_score",
-        signal_value: finalScores.jobLikelihoodScore,
-        signal_weight: 1,
-        explanation: "Likelihood score from service fit, recency, severity, and source agreement"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "source_reliability_score",
-        signal_value: finalScores.sourceReliabilityScore,
-        signal_weight: 1,
-        explanation: "Source reliability score"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "catastrophe_linkage_score",
-        signal_value: finalScores.catastropheLinkageScore,
-        signal_weight: 1,
-        explanation: "Catastrophe linkage strength"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: "confidence_score",
-        signal_value: finalScores.confidenceScore,
-        signal_weight: 1,
-        explanation: "Confidence score derived from recency, reliability, geography precision, and signal agreement"
-      },
-      {
-        tenant_id: tenantId,
-        opportunity_id: opportunityId,
-        signal_key: String(event.eventCategory || event.eventType),
-        signal_value: toBoundedScore(event.severityHint ?? event.severity, 50),
-        signal_weight: 1,
-        explanation: `Supporting signal from ${event.eventType}`,
-        metadata: {
-          event_type: event.eventType,
-          source_name: event.sourceName || "unknown"
-        }
-      }
-    ]);
-
-    return {
-      opportunityId,
-      scoring: finalScores,
-      multiSignal: Boolean((finalScores.explainability as Record<string, unknown>).multi_signal),
-      outcome
-    };
   }
+
+  await supabase.from("v2_opportunity_signals").insert([
+    {
+      tenant_id: tenantId,
+      opportunity_id: opportunityId,
+      signal_key: "urgency_score",
+      signal_value: finalScores.urgencyScore,
+      signal_weight: 1,
+      explanation: "Urgency score from recency + severity + catastrophe context"
+    },
+    {
+      tenant_id: tenantId,
+      opportunity_id: opportunityId,
+      signal_key: "job_likelihood_score",
+      signal_value: finalScores.jobLikelihoodScore,
+      signal_weight: 1,
+      explanation: "Likelihood score from service fit, recency, severity, and source agreement"
+    },
+    {
+      tenant_id: tenantId,
+      opportunity_id: opportunityId,
+      signal_key: "source_reliability_score",
+      signal_value: finalScores.sourceReliabilityScore,
+      signal_weight: 1,
+      explanation: "Source reliability score"
+    },
+    {
+      tenant_id: tenantId,
+      opportunity_id: opportunityId,
+      signal_key: "catastrophe_linkage_score",
+      signal_value: finalScores.catastropheLinkageScore,
+      signal_weight: 1,
+      explanation: "Catastrophe linkage strength"
+    },
+    {
+      tenant_id: tenantId,
+      opportunity_id: opportunityId,
+      signal_key: "confidence_score",
+      signal_value: finalScores.confidenceScore,
+      signal_weight: 1,
+      explanation: "Confidence score derived from recency, reliability, geography precision, and signal agreement"
+    },
+    {
+      tenant_id: tenantId,
+      opportunity_id: opportunityId,
+      signal_key: String(event.eventCategory || event.eventType),
+      signal_value: toBoundedScore(event.severityHint ?? event.severity, 50),
+      signal_weight: 1,
+      explanation: `Supporting signal from ${event.eventType}`,
+      metadata: {
+        event_type: event.eventType,
+        source_name: event.sourceName || "unknown"
+      }
+    }
+  ]);
+
+  return {
+    opportunityId,
+    scoring: finalScores,
+    multiSignal: Boolean((finalScores.explainability as Record<string, unknown>).multi_signal)
+  };
 }
 
 export const connectorRunnerInternals = {
+  buildDedupInputForEvent,
   ensureSourceMetadata,
   validateNormalizedEvent,
   mergeOpportunityScores,
   parseLatLngFromPoint,
   haversineMeters,
   mapClusterType,
+  resolveSignalCategory,
+  resolveTenantVertical,
   scoreInputsForEvent,
   upsertIncidentClusterFromEvent
 };
@@ -720,14 +742,13 @@ export async function runConnectorForSource({
   try {
     const pulled = await connector.pull(pullInput);
     const normalizedEvents = await connector.normalize(pulled, pullInput);
+    const vertical = await resolveTenantVertical(supabase, tenantId);
 
     let createdCount = 0;
-    let updatedCount = 0;
     let invalidCount = 0;
     let multiSignalCount = 0;
     let totalFreshness = 0;
     let totalReliability = 0;
-    const sampleBacked = Array.isArray(sourceConfig.sample_records) && sourceConfig.sample_records.length > 0;
 
     for (const event of normalizedEvents) {
       const validation = validateNormalizedEvent(event);
@@ -745,7 +766,14 @@ export async function runConnectorForSource({
       });
 
       const locationPoint = toPoint(event.latitude, event.longitude);
-      const eventScoring = computeOpportunityScores(scoreInputsForEvent(event, 50));
+      const classification = connector.classify(event);
+      const signalCategory = resolveSignalCategory(event, classification.opportunityType);
+      const eventScoring = computeOpportunityScores(
+        scoreInputsForEvent(event, 50, {
+          vertical,
+          signalCategory
+        })
+      );
 
       totalFreshness += Number(normalizedPayload.data_freshness_score || 0);
       totalReliability += Number(eventScoring.sourceReliabilityScore || 50);
@@ -784,23 +812,21 @@ export async function runConnectorForSource({
         event
       });
 
-      const classification = connector.classify(event);
       const opportunity = await upsertOpportunityFromEvent({
         supabase,
         tenantId,
         sourceEventId: String(sourceEvent.id),
         event,
         classification,
-        clusterId: cluster?.clusterId || null
+        clusterId: cluster?.clusterId || null,
+        vertical
       });
 
       if (opportunity.multiSignal) multiSignalCount += 1;
-      if (opportunity.outcome === "inserted") createdCount += 1;
-      else updatedCount += 1;
+      createdCount += 1;
     }
 
-    const processedCount = createdCount + updatedCount;
-    const status = invalidCount > 0 || processedCount < normalizedEvents.length ? "partial" : "completed";
+    const status = createdCount === normalizedEvents.length ? "completed" : "partial";
     await supabase
       .from("v2_connector_runs")
       .update({
@@ -811,17 +837,13 @@ export async function runConnectorForSource({
         metadata: {
           connector_key: connector.key,
           source_type: sourceType,
-          connector_input_mode: sampleBacked ? "synthetic_fallback" : "live_provider",
           terms_status: compliance.termsStatus,
-          counts_as_real_capture: !sampleBacked,
           avg_data_freshness_score:
             normalizedEvents.length > 0 ? Math.round(totalFreshness / normalizedEvents.length) : 0,
           avg_source_reliability:
             normalizedEvents.length > 0 ? Math.round(totalReliability / normalizedEvents.length) : 0,
           invalid_events: invalidCount,
-          multi_signal_opportunities: multiSignalCount,
-          opportunities_inserted: createdCount,
-          opportunities_updated: updatedCount
+          multi_signal_opportunities: multiSignalCount
         }
       })
       .eq("id", runId);
@@ -837,11 +859,8 @@ export async function runConnectorForSource({
       after: {
         source_id: sourceId,
         connector_key: connector.key,
-        connector_input_mode: sampleBacked ? "synthetic_fallback" : "live_provider",
         records_seen: normalizedEvents.length,
         records_created: createdCount,
-        counts_as_real_capture: !sampleBacked,
-        opportunities_updated: updatedCount,
         invalid_events: invalidCount,
         multi_signal_opportunities: multiSignalCount
       }

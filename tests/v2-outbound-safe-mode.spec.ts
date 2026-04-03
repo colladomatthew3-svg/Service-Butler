@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { sendTwilioMessage } from "../src/lib/v2/twilio";
 import { createHubSpotTask } from "../src/lib/v2/hubspot";
+import { getVertical } from "../src/lib/v2/franchise-verticals";
+import { queueQualificationOutreach } from "../src/lib/v2/qualification-outreach-bridge";
 
 test("twilio safe mode returns preview result without live send", async () => {
   const prev = {
@@ -50,4 +52,31 @@ test("hubspot safe mode returns preview task result", async () => {
 
   process.env.HUBSPOT_ACCESS_TOKEN = prev.token;
   process.env.SB_HUBSPOT_SAFE_MODE = prev.safe;
+});
+
+test("qualification outreach always enters the pending-review queue", async () => {
+  const touchedTables: string[] = [];
+
+  const supabaseMock = {
+    from: (table: string) => {
+      touchedTables.push(table);
+      return {
+        insert: async () => ({ error: new Error("simulated insert failure") })
+      };
+    }
+  };
+
+  const result = await queueQualificationOutreach(supabaseMock as never, {
+    opportunityId: "opp-1",
+    tenantId: "tenant-1",
+    actorUserId: "user-1",
+    vertical: getVertical("restoration"),
+    contactName: "Taylor",
+    phone: "+15555550123",
+    serviceType: "restoration"
+  });
+
+  expect(result.safeMode).toBeTruthy();
+  expect(result.queued).toBeFalsy();
+  expect(touchedTables).toEqual(["v2_outreach_queue"]);
 });

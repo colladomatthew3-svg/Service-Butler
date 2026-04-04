@@ -1,0 +1,4 @@
+
+> service-butler-ai@0.1.0 check:production
+> bash scripts/production-readiness.sh
+

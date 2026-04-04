@@ -1,0 +1,5 @@
+
+> service-butler-ai@0.1.0 proof:book-verified-lead
+> mkdir -p .tmp/operator && npx tsc scripts/book-verified-live-provider-lead.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/book-verified-live-provider-lead.js
+
+No verified live-provider lead without a booked job was found.

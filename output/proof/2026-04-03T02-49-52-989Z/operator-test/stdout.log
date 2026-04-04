@@ -1,0 +1,16 @@
+
+> service-butler-ai@0.1.0 operator-test
+> node scripts/operator-test.mjs
+
+[operator-test] mode=live-partially-configured
+[operator-test] config-note: PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)
+[operator-test] config-note: Inngest keys missing
+[operator-test] connector-input-mode=live_provider
+connector run
+opportunity created
+opportunity scored
+territory matched
+assignment created
+outreach sent
+webhook booked job received
+dashboard updated

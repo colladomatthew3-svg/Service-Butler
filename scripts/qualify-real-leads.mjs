@@ -27,7 +27,10 @@ function loadEnvFromFile(filePath) {
     const separator = line.indexOf("=");
     if (separator <= 0) continue;
     const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim();
+    let value = line.slice(separator + 1).trim();
+    if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
     if (!(key in process.env)) {
       process.env[key] = value;
     }
@@ -100,6 +103,10 @@ function printMetric(label, value) {
   console.log(`${label}=${value}`);
 }
 
+function isOperatorTestArtifact(metadata) {
+  return Boolean(asRecord(metadata).operator_test);
+}
+
 loadEnvFromFile(path.join(process.cwd(), ".env.local"));
 loadEnvFromFile(path.join(process.cwd(), ".env"));
 
@@ -140,6 +147,7 @@ const tenantId = asText(tenant.id);
 
 const [
   { data: sourceEvents, error: sourceEventError },
+  { data: dataSources, error: dataSourcesError },
   { data: connectorRuns, error: connectorRunError },
   { data: opportunities, error: opportunityError },
   { data: leads, error: leadsError },
@@ -148,10 +156,15 @@ const [
 ] = await Promise.all([
   supabase
     .from("v2_source_events")
-    .select("id,connector_run_id,source_name,source_type,source_provenance,normalized_payload,occurred_at,ingested_at")
+    .select("id,source_id,connector_run_id,normalized_payload,occurred_at,ingested_at,event_type")
     .eq("tenant_id", tenantId)
     .order("ingested_at", { ascending: false })
     .limit(500),
+  supabase
+    .from("v2_data_sources")
+    .select("id,name,source_type,provenance")
+    .eq("tenant_id", tenantId)
+    .limit(100),
   supabase
     .from("v2_connector_runs")
     .select("id,status,completed_at,records_seen,records_created,metadata")
@@ -160,7 +173,7 @@ const [
     .limit(300),
   supabase
     .from("v2_opportunities")
-    .select("id,source_event_id,title,contact_status,lifecycle_status,created_at")
+    .select("id,source_event_id,title,contact_status,lifecycle_status,created_at,explainability_json")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(400),
@@ -184,7 +197,7 @@ const [
     .limit(500)
 ]);
 
-for (const error of [sourceEventError, connectorRunError, opportunityError, leadsError, jobsError, outreachError]) {
+for (const error of [sourceEventError, dataSourcesError, connectorRunError, opportunityError, leadsError, jobsError, outreachError]) {
   if (error) {
     console.error("real-lead-qualification=FAIL");
     console.error(error.message || "Failed reading qualification data");
@@ -202,15 +215,23 @@ const recentJobs = (jobs || []).filter((row) => asText(row.booked_at || row.crea
 const recentOutreach = (outreachEvents || []).filter((row) => asText(row.created_at) >= sinceIso);
 
 const connectorRunById = new Map((connectorRuns || []).map((row) => [asText(row.id), row]));
+const sourceById = new Map((dataSources || []).map((row) => [asText(row.id), row]));
 const opportunityById = new Map(recentOpportunities.map((row) => [asText(row.id), row]));
 const sourceEventById = new Map(recentSourceEvents.map((row) => [asText(row.id), row]));
+const operatorTestSourceEventIds = new Set(
+  recentOpportunities
+    .filter((row) => Boolean(asRecord(row.explainability_json).operator_test))
+    .map((row) => asText(row.source_event_id))
+    .filter(Boolean)
+);
 
 const eventAuthenticityRows = recentSourceEvents.map((row) => ({
   ...row,
+  connectorRunMetadata: connectorRunById.get(asText(row.connector_run_id))?.metadata || null,
   authenticity: classifyProofAuthenticity({
-    sourceType: row.source_type,
-    sourceName: row.source_name,
-    sourceProvenance: row.source_provenance,
+    sourceType: asText(row.source_type || sourceById.get(asText(row.source_id))?.source_type || asRecord(row.normalized_payload).source_type || row.event_type),
+    sourceName: asText(row.source_name || asRecord(row.normalized_payload).source_name || sourceById.get(asText(row.source_id))?.name),
+    sourceProvenance: asText(row.source_provenance || asRecord(row.normalized_payload).source_provenance || sourceById.get(asText(row.source_id))?.provenance),
     normalizedPayload: row.normalized_payload,
     connectorRunMetadata: connectorRunById.get(asText(row.connector_run_id))?.metadata || null
   })
@@ -220,6 +241,13 @@ const liveProviderEvents = eventAuthenticityRows.filter((row) => row.authenticit
 const liveDerivedEvents = eventAuthenticityRows.filter((row) => row.authenticity === "live_derived");
 const syntheticEvents = eventAuthenticityRows.filter((row) => row.authenticity === "synthetic");
 const unknownEvents = eventAuthenticityRows.filter((row) => row.authenticity === "unknown");
+const proofCohortEvents = eventAuthenticityRows.filter((row) => {
+  if (row.authenticity === "live_provider" || row.authenticity === "live_derived") return true;
+  if (row.authenticity !== "synthetic") return false;
+  if (operatorTestSourceEventIds.has(asText(row.id))) return false;
+  return !isOperatorTestArtifact(row.connectorRunMetadata);
+});
+const proofCohortSyntheticEvents = proofCohortEvents.filter((row) => row.authenticity === "synthetic");
 
 const liveProviderEventIds = new Set(liveProviderEvents.map((row) => asText(row.id)));
 const liveProviderOpportunities = recentOpportunities.filter((row) => liveProviderEventIds.has(asText(row.source_event_id)));
@@ -282,10 +310,16 @@ if (identifiedWithoutVerifiedContact.length > 0) {
   );
 }
 
-const totalEvents = eventAuthenticityRows.length || 1;
-const syntheticShare = Number(((syntheticEvents.length / totalEvents) * 100).toFixed(1));
-if (syntheticShare >= 40) {
-  issues.push(issue("warn", "Synthetic contamination is high", `${syntheticShare}% of recent source events are synthetic.`));
+const proofCohortEventCount = proofCohortEvents.length || 1;
+const syntheticShare = Number(((proofCohortSyntheticEvents.length / proofCohortEventCount) * 100).toFixed(1));
+if (proofCohortSyntheticEvents.length > 0 && syntheticShare >= 40) {
+  issues.push(
+    issue(
+      "warn",
+      "Synthetic contamination is high",
+      `${syntheticShare}% of proof-cohort source events are synthetic.`
+    )
+  );
 }
 
 const totalRevenue = bookedFromVerifiedLeadJobs.reduce((sum, row) => sum + (Number(row.revenue_amount) || 0), 0);
@@ -298,6 +332,8 @@ printMetric("lookback_days", lookbackDays);
 printMetric("live_provider_source_events", liveProviderEvents.length);
 printMetric("live_derived_source_events", liveDerivedEvents.length);
 printMetric("synthetic_source_events", syntheticEvents.length);
+printMetric("proof_cohort_source_events", proofCohortEvents.length);
+printMetric("proof_cohort_synthetic_source_events", proofCohortSyntheticEvents.length);
 printMetric("unknown_source_events", unknownEvents.length);
 printMetric("live_provider_opportunities", liveProviderOpportunities.length);
 printMetric("live_provider_contactable_leads", liveProviderContactableLeadRows.length);

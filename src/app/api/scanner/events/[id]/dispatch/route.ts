@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
-import { dispatchDemoScannerEvent } from "@/lib/demo/store";
 import { extractVerifiedOwnerContactFromEnrichment } from "@/lib/services/contact-proof";
 import { generateSignals } from "@/lib/services/intent-engine";
 import { resolveOpportunityAddress } from "@/lib/services/scanner";
 import { isDemoMode } from "@/lib/services/review-mode";
+import { isSyntheticScannerRecord } from "@/lib/services/scanner-truth";
 import { getForecastByLatLng } from "@/lib/services/weather";
 import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from "@/lib/v2/opportunity-qualification";
 
@@ -53,22 +53,9 @@ function asRecord(value: unknown) {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (isDemoMode()) {
-    const body = (await req.json().catch(() => ({}))) as {
-      createMode?: CreateMode;
-    };
-    const result = dispatchDemoScannerEvent(id, normalizeMode(body.createMode) || undefined);
-    if (!result) {
-      return NextResponse.json({ error: "Scanner event not found" }, { status: 404 });
-    }
-
     return NextResponse.json({
-      dispatched: true,
-      mode: result.mode,
-      leadId: result.leadId,
-      jobId: result.jobId,
-      message: result.message,
-      redirectPath: "/dashboard/scanner?demoAction=1"
-    });
+      error: "Scanner demo dispatch is disabled. Only real verified public signals can be dispatched."
+    }, { status: 409 });
   }
 
   const { accountId, role, supabase, userId } = await getCurrentUserContext();
@@ -89,6 +76,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (eventError || !event) {
     return NextResponse.json({ error: "Scanner event not found" }, { status: 404 });
+  }
+
+  if (isSyntheticScannerRecord({ source: event.source, raw: event.raw })) {
+    return NextResponse.json(
+      {
+        error: "Synthetic scanner records cannot be dispatched. Only real public signals are eligible.",
+        status: "research_only",
+        reason_code: "synthetic_signal_blocked",
+        next_step: "run_live_scan",
+        proof_authenticity: String(event.raw?.proof_authenticity || "synthetic"),
+        source_type: String(event.raw?.source_type || event.source || "scanner_signal"),
+        scanner_event_id: event.id
+      },
+      { status: 409 }
+    );
   }
 
   const { data: rule } = await supabase

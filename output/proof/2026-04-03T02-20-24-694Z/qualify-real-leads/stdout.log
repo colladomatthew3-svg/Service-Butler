@@ -1,0 +1,29 @@
+real-lead-qualification=FAIL
+tenant_id=8e479ab5-58a2-4fef-ad9a-4d88b6f05d45
+tenant_name=NY Restoration Group
+lookback_days=14
+live_provider_source_events=7
+live_derived_source_events=0
+synthetic_source_events=9
+unknown_source_events=0
+live_provider_opportunities=7
+live_provider_contactable_leads=6
+live_provider_verified_leads=0
+live_provider_review_leads=0
+outreach_events_on_live_provider_leads=12
+sent_outreach_on_verified_leads=0
+booked_jobs_from_live_provider_leads=6
+booked_jobs_from_verified_live_provider_leads=0
+verified_live_provider_revenue=0
+identified_without_verified_contact=0
+issues:
+- [FAIL] No verified live-provider leads: The system is not yet turning official public signals into verified, contactable leads.
+- [WARN] No outreach on verified live-provider leads: There is no recent outbound event proving the verified-lead follow-up loop is running.
+- [WARN] No booked jobs from verified live-provider leads: Revenue attribution from truly verified public-source leads is not yet proven in the recent window.
+- [WARN] Synthetic contamination is high: 56.3% of recent source events are synthetic.
+sample_live_provider_opportunities:
+- Street Condition
+- Severe Storm
+- Severe Storm
+- Street Condition
+- Blocked Driveway

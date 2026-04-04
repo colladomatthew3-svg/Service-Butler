@@ -1,0 +1,32 @@
+
+> service-butler-ai@0.1.0 check:production
+> bash scripts/production-readiness.sh
+
+Service Butler production readiness
+Checked at 2026-04-03T02:31:24Z
+
+PASS  NEXT_PUBLIC_APP_URL looks valid
+PASS  NEXT_PUBLIC_SUPABASE_URL is set
+PASS  NEXT_PUBLIC_SUPABASE_ANON_KEY is set
+PASS  SUPABASE_SERVICE_ROLE_KEY is set
+PASS  WEBHOOK_SHARED_SECRET is set
+PASS  V2 rollout flags are enabled (reads + writes)
+WARN  DEMO_MODE is enabled in development
+WARN  BILLING_MODE is disabled
+WARN  Premium enrichment endpoint is not configured
+WARN  email provider is incomplete: missing FROM_EMAIL POSTMARK_SERVER_TOKEN
+WARN  No SendGrid fallback configured
+PASS  Twilio is explicitly disabled for live-safe production
+PASS  HubSpot is explicitly disabled for live-safe production
+WARN  Smartlead is incomplete: missing SMARTLEAD_API_KEY
+WARN  Inngest is incomplete: missing INNGEST_EVENT_KEY INNGEST_SIGNING_KEY
+PASS  Active territories: 2.
+PASS  Service area is configured on active territories.
+PASS  Active data sources: 9.
+PASS  Live-safe data sources: 9.
+PASS  No active data sources are blocked by terms/compliance.
+PASS  No active data sources are using sample-backed configuration.
+PASS  Recent successful connector runs (7d): 8.
+PASS  Recent source events (7d): 8.
+
+Summary: 16 pass, 7 warn, 0 fail

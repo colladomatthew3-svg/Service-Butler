@@ -1,8 +1,8 @@
 # Servpro Proof Bundle
 
-- Generated at: 2026-03-29T18:15:46.992Z
+- Generated at: 2026-04-03T03:26:51.517Z
 - Proof timestamp: 2026-03-29T12-00-00-000Z
-- Status: FAIL
+- Status: PASS
 
 ## Production Readiness
 
@@ -15,10 +15,11 @@
 
 | Step | Status | Exit | Duration (ms) | Stdout | Stderr |
 | --- | --- | ---: | ---: | --- | --- |
-| operator-healthcheck | FAIL | 1 | 1276 | `operator-healthcheck/stdout.log` | `operator-healthcheck/stderr.log` |
-| validate-integrations | FAIL | 1 | 1027 | `validate-integrations/stdout.log` | `validate-integrations/stderr.log` |
-| operator-test | FAIL | 1 | 153 | `operator-test/stdout.log` | `operator-test/stderr.log` |
-| qualify-real-leads | FAIL | 1 | 62 | `qualify-real-leads/stdout.log` | `qualify-real-leads/stderr.log` |
+| operator-healthcheck | PASS | 0 | 2137 | `operator-healthcheck/stdout.log` | `operator-healthcheck/stderr.log` |
+| validate-integrations | PASS | 0 | 1972 | `validate-integrations/stdout.log` | `validate-integrations/stderr.log` |
+| operator-test | PASS | 0 | 451 | `operator-test/stdout.log` | `operator-test/stderr.log` |
+| proof-book-verified-lead | PASS | 0 | 1459 | `proof-book-verified-lead/stdout.log` | `proof-book-verified-lead/stderr.log` |
+| qualify-real-leads | PASS | 0 | 126 | `qualify-real-leads/stdout.log` | `qualify-real-leads/stderr.log` |
 
 ## Excerpts
 
@@ -26,17 +27,48 @@
 > mkdir -p .tmp/operator && npx tsc scripts/operator-healthcheck.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/operator-healthcheck.js
 Service Butler Operator Healthcheck
 [PASS] supabase_env: Supabase URL + service role key present.
+[PASS] supabase_local_runtime: Local Supabase endpoint is reachable at 127.0.0.1:54321.
 [PASS] webhook_secret: WEBHOOK_SHARED_SECRET configured.
-[FAIL] supabase_connectivity: Supabase connectivity check failed (TypeError: fetch failed).
-       remediation: Confirm URL/key pair and that the target project is reachable.
+[PASS] supabase_connectivity: Supabase connectivity OK.
+[PASS] table:v2_tenants: Table reachable.
+[PASS] table:v2_tenant_memberships: Table reachable.
+[PASS] table:v2_territories: Table reachable.
+[PASS] table:v2_data_sources: Table reachable.
+[PASS] table:v2_connector_runs: Table reachable. | stderr: (node:79928) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
 - validate-integrations: > service-butler-ai@0.1.0 validate-integrations
-> mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js | stderr: Operator tenant not found (NY Restoration Group). Run npm run operator:seed.
+> mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js
+Integration Validation Report
+[WARN] twilio: Twilio explicitly disabled.
+[WARN] hubspot: HubSpot explicitly disabled.
+[PASS] lead_opportunity_link: Lead is linked to opportunity. crm_sync_status=not_synced | stderr: (node:79986) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
 - operator-test: > service-butler-ai@0.1.0 operator-test
 > node scripts/operator-test.mjs
 [operator-test] mode=live-partially-configured
-[operator-test] config-note: PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)
-[operator-test] config-note: Inngest keys missing | stderr: (node:80828) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[operator-test] config-note: Inngest keys missing
+[operator-test] connector-input-mode=live_provider
+connector run
+opportunity created
+opportunity scored
+territory matched
+assignment created
+outreach sent
+webhook booked job received | stderr: (node:80015) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
-Operator tenant not found (NY Restoration Group). Run operator seed first.
-- qualify-real-leads: no stdout | stderr: real-lead-qualification=FAIL
-Operator tenant not found (NY Restoration Group)
+- proof-book-verified-lead: > service-butler-ai@0.1.0 proof:book-verified-lead
+> mkdir -p .tmp/operator && npx tsc scripts/book-verified-live-provider-lead.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/book-verified-live-provider-lead.js
+No verified live-provider lead without a booked job was found. | stderr: (node:80077) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+- qualify-real-leads: real-lead-qualification=PASS
+tenant_id=8e479ab5-58a2-4fef-ad9a-4d88b6f05d45
+tenant_name="NY Restoration Group"
+lookback_days=14
+live_provider_source_events=7
+live_derived_source_events=0
+synthetic_source_events=9
+proof_cohort_source_events=7
+proof_cohort_synthetic_source_events=0
+unknown_source_events=0
+live_provider_opportunities=7
+live_provider_contactable_leads=7

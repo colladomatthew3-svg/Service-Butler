@@ -21,7 +21,6 @@ import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { WeatherTicker } from "@/components/dashboard/weather-ticker";
 import { listDataSourceSummaries } from "@/lib/control-plane/data-sources";
 import { getForecastByLatLng } from "@/lib/services/weather";
-import { getDemoDashboardSnapshot, getDemoWeatherSettings } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getFranchiseDashboardReadModel } from "@/lib/v2/dashboard-read-models";
@@ -112,25 +111,8 @@ export default async function DashboardOverviewPage() {
     | null = null;
 
   if (demoMode) {
-    const snapshot = getDemoDashboardSnapshot();
-    const weather = await getDemoWeatherSettings();
-
-    leadRows = snapshot.leads;
-    jobRows = snapshot.jobs;
-    opportunities = snapshot.opportunities;
-    outboundLists = snapshot.outboundLists;
-    enrichedLeads = snapshot.leads.map((lead) => ({
-      ...lead,
-      intent: Number(lead.intentScore || 0)
-    }));
     sourceSummaries = await listDataSourceSummaries();
-    settings = {
-      weather_lat: weather.weather_lat,
-      weather_lng: weather.weather_lng,
-      weather_location_label: weather.weather_location_label,
-      home_base_city: weather.home_base_city,
-      home_base_state: weather.home_base_state
-    };
+    settings = null;
   } else {
     const { accountId, supabase } = await getCurrentUserContext();
 
@@ -291,6 +273,10 @@ export default async function DashboardOverviewPage() {
   const queueReadyLeads = priorityLeads.filter((lead) => !lead.scheduled_for).length || priorityLeads.length;
   const blockedSources = sourceSummaries.filter((source) => source.captureStatus === "blocked").length;
   const simulatedSources = sourceSummaries.filter((source) => source.captureStatus === "simulated").length;
+  const hasProofChainData = Boolean(
+    captureProofSummary &&
+      Object.values(captureProofSummary).some((value) => Number(value || 0) > 0)
+  );
 
   return (
     <div className="space-y-6">
@@ -317,7 +303,7 @@ export default async function DashboardOverviewPage() {
       <section className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
         <WeatherTicker lat={lat} lng={lng} locationLabel={weatherLabel} />
 
-        <SourceHealthSnapshotCard sources={sourceSummaries} ctaHref="/dashboard/settings#data-sources" />
+        <SourceHealthSnapshotCard sources={sourceSummaries} ctaHref="/dashboard/settings#data-sources" forceBlockedGuidance={demoMode} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-2">
@@ -333,7 +319,10 @@ export default async function DashboardOverviewPage() {
           </CardHeader>
           <CardBody className="space-y-4">
             {highestUrgencyOpportunities.length === 0 ? (
-              <EmptyPanel title="No opportunities detected yet." body="Run the scanner to load the first demand signals into the command center." />
+              <EmptyPanel
+                title="No real opportunities detected yet."
+                body="Open live source setup first, then run the scanner. Research-only market pressure should route into SDR before it is counted in the proof chain."
+              />
             ) : (
               <Table className="border-spacing-y-0">
                 <TableHead>
@@ -383,7 +372,10 @@ export default async function DashboardOverviewPage() {
           </CardHeader>
           <CardBody className="space-y-4">
             {priorityLeads.length === 0 ? (
-              <EmptyPanel title="No active lead queue yet." body="Run the scanner and convert the strongest signal into a verified lead." />
+              <EmptyPanel
+                title="No verified lead queue yet."
+                body="Use scanner capture and SDR verification to clear a real phone or email. This route stays empty until the live proof chain produces verified leads."
+              />
             ) : (
               <Table className="border-spacing-y-0">
                 <TableHead>
@@ -436,7 +428,7 @@ export default async function DashboardOverviewPage() {
             {sdrQueue.length === 0 ? (
               <EmptyPanel
                 title="No queued SDR work right now."
-                body="Signals without verified contact will show up here after they are escalated from the scanner."
+                body="Once live sources are configured, run the scanner and escalate research-only rows here. SDR is the bridge between source capture and verified lead creation."
               />
             ) : (
               sdrQueue.map((item) => (
@@ -497,17 +489,26 @@ export default async function DashboardOverviewPage() {
             <h2 className="mt-1 text-base font-semibold text-semantic-text">Real capture vs qualified lead proof</h2>
           </CardHeader>
           <CardBody className="space-y-3">
-            <p className="text-sm leading-6 text-semantic-muted">
-              Signals and opportunities show market pressure. Only verified-contact, traceable chains count as lead and booked-job proof.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <MetricRow label="Real source events" value={String(captureProofSummary?.realSourceEventsCaptured || 0)} helper="Live public or provider-backed events captured into v2 source events." icon={<Radio className="h-4 w-4" />} />
-              <MetricRow label="Real opportunities" value={String(captureProofSummary?.realOpportunitiesCaptured || 0)} helper="Non-simulated opportunities created from those events." icon={<Target className="h-4 w-4" />} />
-              <MetricRow label="Needs SDR" value={String(captureProofSummary?.opportunitiesRequiringSdr || 0)} helper="Signals blocked until verified contact is captured." icon={<TriangleAlert className="h-4 w-4" />} />
-              <MetricRow label="Qualified contactable" value={String(captureProofSummary?.qualifiedContactableOpportunities || 0)} helper="Opportunities now eligible to become leads." icon={<ShieldCheck className="h-4 w-4" />} />
-              <MetricRow label="Real leads" value={String(captureProofSummary?.realLeadsCreated || 0)} helper="Verified leads on a traceable non-simulated path." icon={<CheckCircle2 className="h-4 w-4" />} />
-              <MetricRow label="Booked jobs proof" value={String(captureProofSummary?.bookedJobsAttributed || 0)} helper="Attributed booked jobs from the qualified proof chain." icon={<TrendingUp className="h-4 w-4" />} />
-            </div>
+            {hasProofChainData ? (
+              <>
+                <p className="text-sm leading-6 text-semantic-muted">
+                  Signals and opportunities show market pressure. Only verified-contact, traceable chains count as lead and booked-job proof.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <MetricRow label="Real source events" value={String(captureProofSummary?.realSourceEventsCaptured || 0)} helper="Live public or provider-backed events captured into v2 source events." icon={<Radio className="h-4 w-4" />} />
+                  <MetricRow label="Real opportunities" value={String(captureProofSummary?.realOpportunitiesCaptured || 0)} helper="Non-simulated opportunities created from those events." icon={<Target className="h-4 w-4" />} />
+                  <MetricRow label="Needs SDR" value={String(captureProofSummary?.opportunitiesRequiringSdr || 0)} helper="Signals blocked until verified contact is captured." icon={<TriangleAlert className="h-4 w-4" />} />
+                  <MetricRow label="Qualified contactable" value={String(captureProofSummary?.qualifiedContactableOpportunities || 0)} helper="Opportunities now eligible to become leads." icon={<ShieldCheck className="h-4 w-4" />} />
+                  <MetricRow label="Real leads" value={String(captureProofSummary?.realLeadsCreated || 0)} helper="Verified leads on a traceable non-simulated path." icon={<CheckCircle2 className="h-4 w-4" />} />
+                  <MetricRow label="Booked jobs proof" value={String(captureProofSummary?.bookedJobsAttributed || 0)} helper="Attributed booked jobs from the qualified proof chain." icon={<TrendingUp className="h-4 w-4" />} />
+                </div>
+              </>
+            ) : (
+              <EmptyPanel
+                title="No buyer-safe proof chain yet."
+                body="Start with live source setup, run the scanner, route research-only rows into SDR, and verify one real contactable lead before expecting booked-job proof."
+              />
+            )}
           </CardBody>
         </Card>
 
@@ -541,7 +542,10 @@ export default async function DashboardOverviewPage() {
           </CardHeader>
           <CardBody className="space-y-4">
             {territorySummary.length === 0 ? (
-              <EmptyPanel title="No territory view yet." body="Signals, leads, and jobs will start grouping by market once activity arrives." />
+              <EmptyPanel
+                title="No territory view yet."
+                body="Markets appear here after live source setup, scanner capture, SDR verification, and the first proof-chain conversions."
+              />
             ) : (
               <Table className="border-spacing-y-0">
                 <TableHead>
@@ -621,7 +625,10 @@ export default async function DashboardOverviewPage() {
             </CardHeader>
             <CardBody className="space-y-2">
               {nextUp.length === 0 ? (
-                <EmptyPanel title="No booked visits yet." body="Once a lead converts, the upcoming work queue will appear here." />
+                <EmptyPanel
+                  title="No booked visits yet."
+                  body="Booked work appears here only after the scanner -> SDR -> lead -> job proof chain is real and attributable."
+                />
               ) : (
                 nextUp.map((job) => (
                   <Link
@@ -652,10 +659,12 @@ export default async function DashboardOverviewPage() {
 
 function SourceHealthSnapshotCard({
   sources,
-  ctaHref
+  ctaHref,
+  forceBlockedGuidance = false
 }: {
   sources: DataSourceSummary[];
   ctaHref: string;
+  forceBlockedGuidance?: boolean;
 }) {
   const liveCount = sources.filter((source) => source.runtimeMode === "fully-live").length;
   const partialCount = sources.filter((source) => source.runtimeMode === "live-partial").length;
@@ -675,37 +684,46 @@ function SourceHealthSnapshotCard({
         </Link>
       </CardHeader>
       <CardBody className="space-y-4">
-        <div className="grid grid-cols-3 gap-2">
-          <MiniSourceStat label="Live" value={String(liveCount)} />
-          <MiniSourceStat label="Partial" value={String(partialCount)} />
-          <MiniSourceStat label="Total" value={String(sources.length)} />
-        </div>
-        {visibleSources.length === 0 ? (
+        {forceBlockedGuidance ? (
           <EmptyPanel
-            title="No active data sources yet."
-            body="Open settings to configure NOAA, permits, Open311, and the other connector families in the acquisition-ready control plane."
+            title="Live source setup required."
+            body="Normal operator view stays blocked until live sources are configured. Open data sources, activate real connectors, then run the scanner and push research-only pressure into SDR."
           />
         ) : (
-          <div className="space-y-2">
-            {visibleSources.map((source) => (
-              <div key={source.id || source.catalogKey} className="rounded-lg border border-semantic-border bg-semantic-surface p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-semantic-text">{source.name}</p>
-                    <p className="mt-1 text-xs text-semantic-muted">
-                      {source.family} · {source.freshnessLabel}
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              <MiniSourceStat label="Live" value={String(liveCount)} />
+              <MiniSourceStat label="Partial" value={String(partialCount)} />
+              <MiniSourceStat label="Total" value={String(sources.length)} />
+            </div>
+            {visibleSources.length === 0 ? (
+              <EmptyPanel
+                title="No active data sources yet."
+                body="Open settings to configure live sources, then run the scanner. Once capture starts, research-only pressure should route into SDR before it becomes lead proof."
+              />
+            ) : (
+              <div className="space-y-2">
+                {visibleSources.map((source) => (
+                  <div key={source.id || source.catalogKey} className="rounded-lg border border-semantic-border bg-semantic-surface p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-semantic-text">{source.name}</p>
+                        <p className="mt-1 text-xs text-semantic-muted">
+                          {source.family} · {source.freshnessLabel}
+                        </p>
+                      </div>
+                      <Badge variant={source.runtimeMode === "fully-live" ? "success" : source.runtimeMode === "live-partial" ? "warning" : "default"}>
+                        {source.runtimeMode}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-semantic-muted">
+                      {source.latestRunStatus || "not run"} · {source.recordsCreated.toLocaleString()} created · {source.recordsSeen.toLocaleString()} seen
                     </p>
                   </div>
-                  <Badge variant={source.runtimeMode === "fully-live" ? "success" : source.runtimeMode === "live-partial" ? "warning" : "default"}>
-                    {source.runtimeMode}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-xs text-semantic-muted">
-                  {source.latestRunStatus || "not run"} · {source.recordsCreated.toLocaleString()} created · {source.recordsSeen.toLocaleString()} seen
-                </p>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </CardBody>
     </Card>

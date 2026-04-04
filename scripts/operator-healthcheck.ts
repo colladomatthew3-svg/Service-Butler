@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 
 function loadEnvFromFile(filePath: string) {
@@ -55,6 +56,42 @@ function pushResult(list: CheckResult[], result: CheckResult) {
   list.push(result);
 }
 
+function parseLocalEndpoint(urlValue: string) {
+  try {
+    const parsed = new URL(urlValue);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "127.0.0.1" || host === "localhost") {
+      return {
+        host,
+        port: Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80))
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function canConnectToPort(host: string, port: number, timeoutMs = 1500) {
+  await new Promise<void>((resolve, reject) => {
+    const socket = net.createConnection({ host, port });
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("timeout"));
+    }, timeoutMs);
+
+    socket.once("connect", () => {
+      clearTimeout(timeout);
+      socket.end();
+      resolve();
+    });
+    socket.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
 async function checkTableExists(supabase: any, table: string): Promise<CheckResult> {
   const { error } = await supabase.from(table).select("id", { head: true, count: "exact" }).limit(1);
   if (error) {
@@ -97,6 +134,28 @@ async function main() {
     status: "PASS",
     detail: "Supabase URL + service role key present."
   });
+
+  const localEndpoint = parseLocalEndpoint(supabaseUrl);
+  if (localEndpoint) {
+    try {
+      await canConnectToPort(localEndpoint.host, localEndpoint.port);
+      pushResult(results, {
+        name: "supabase_local_runtime",
+        status: "PASS",
+        detail: `Local Supabase endpoint is reachable at ${localEndpoint.host}:${localEndpoint.port}.`
+      });
+    } catch {
+      pushResult(results, {
+        name: "supabase_local_runtime",
+        status: "FAIL",
+        detail: `NEXT_PUBLIC_SUPABASE_URL points to local Supabase (${localEndpoint.host}:${localEndpoint.port}), but nothing is listening there.`,
+        remediation: "Start Docker Desktop and run `npm run db:start`, or point the env at a hosted Supabase project before rerunning the healthcheck."
+      });
+
+      printReport(results);
+      process.exit(1);
+    }
+  }
 
   if (!webhookSecret) {
     pushResult(results, {

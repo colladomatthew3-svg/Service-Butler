@@ -1,24 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserContext } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
-import { getDemoDashboardSnapshot } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
-import { getOpportunityQualificationSnapshot } from "@/lib/v2/opportunity-qualification";
+import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from "@/lib/v2/opportunity-qualification";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { classifySourceLane, opportunityPriorityScore } from "@/lib/v2/source-lanes";
 
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function asText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function toNumber(value: unknown, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function leadCountsAsReal(row: Record<string, unknown>) {
+  const channels = asRecord(row.contact_channels_json);
+  const verificationStatus = asText(channels.verification_status || row.lead_status).toLowerCase();
+  const verificationScore = toNumber(channels.verification_score || 0);
+  const phone = asText(channels.phone);
+  const email = asText(channels.email);
+  return verificationStatus === "verified" && verificationScore >= 70 && Boolean(phone || email);
+}
+
 export async function GET(req: NextRequest) {
   if (isDemoMode()) {
-    const category = (req.nextUrl.searchParams.get("category") || "").trim().toLowerCase();
-    const limitRaw = Number(req.nextUrl.searchParams.get("limit") || 50);
-    const limit = Math.max(1, Math.min(250, Number.isFinite(limitRaw) ? limitRaw : 50));
-
-    const opportunities = getDemoDashboardSnapshot().opportunities
-      .filter((item) => !category || category === "all" || String(item.category || "").toLowerCase() === category)
-      .slice(0, limit);
-
-    return NextResponse.json({ opportunities });
+    return NextResponse.json({
+      opportunities: [],
+      warning: "Operator opportunities only show persisted real signals. Demo opportunity data is disabled on this surface."
+    });
   }
 
   if (featureFlags.useV2Reads) {
@@ -41,6 +57,25 @@ export async function GET(req: NextRequest) {
 
       const { data, error } = await query;
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+      const opportunityIds = (data || []).map((row) => String(row.id));
+      const verifiedLeadOpportunityIds = new Set<string>();
+
+      if (opportunityIds.length > 0) {
+        const { data: leadRows, error: leadError } = await v2Context.supabase
+          .from("v2_leads")
+          .select("opportunity_id,lead_status,contact_channels_json")
+          .eq("tenant_id", v2Context.franchiseTenantId)
+          .in("opportunity_id", opportunityIds);
+
+        if (leadError) return NextResponse.json({ error: leadError.message }, { status: 400 });
+
+        for (const lead of leadRows || []) {
+          if (leadCountsAsReal(lead as Record<string, unknown>)) {
+            verifiedLeadOpportunityIds.add(String((lead as Record<string, unknown>).opportunity_id || ""));
+          }
+        }
+      }
 
       return NextResponse.json({
         opportunities: (data || []).map((row: Record<string, unknown>) => {
@@ -73,6 +108,8 @@ export async function GET(req: NextRequest) {
             jobLikelihoodScore: row.job_likelihood_score,
             sourceReliabilityScore: row.source_reliability_score
           });
+          const dispatchReady = qualificationAllowsDispatch(qualification);
+          const countsAsRealCapture = proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived";
 
           return {
             id: row.id,
@@ -105,12 +142,15 @@ export async function GET(req: NextRequest) {
             qualification_reason_code: qualification.qualificationReasonCode,
             proof_authenticity: qualification.proofAuthenticity,
             source_lane: sourceLane,
+            source_provenance: typeof explainability.source_provenance === "string" ? explainability.source_provenance : null,
             priority_score: priorityScore,
             next_recommended_action: qualification.nextRecommendedAction,
             research_only: qualification.researchOnly,
             requires_sdr_qualification: qualification.requiresSdrQualification,
-            counts_as_real_capture: proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived",
-            counts_as_real_lead: qualification.qualificationStatus === "qualified_contactable" && qualification.proofAuthenticity !== "synthetic" && qualification.proofAuthenticity !== "unknown",
+            verification_status: qualification.verificationStatus,
+            dispatch_ready: dispatchReady,
+            counts_as_real_capture: countsAsRealCapture,
+            counts_as_real_lead: countsAsRealCapture && verifiedLeadOpportunityIds.has(String(row.id)),
             raw: {
               revenue_band: row.revenue_band,
               routing_status: row.routing_status,

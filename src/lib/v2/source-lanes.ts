@@ -1,4 +1,4 @@
-export type SourceLaneKey = "311" | "flood" | "fire" | "outage" | "weather" | "permits" | "property" | "social" | "other";
+export type SourceLaneKey = "311" | "flood" | "fire" | "outage" | "weather" | "mold_biohazard" | "permits" | "property" | "social" | "other";
 
 function normalizeValue(value: unknown) {
   return String(value || "").trim().toLowerCase();
@@ -47,6 +47,17 @@ export function classifySourceLane(input: {
     haystack.includes("basement flooding")
   ) {
     return "flood";
+  }
+
+  if (
+    haystack.includes("mold") ||
+    haystack.includes("biohazard") ||
+    haystack.includes("hazmat") ||
+    haystack.includes("sewage") ||
+    haystack.includes("sewer") ||
+    haystack.includes("contamination")
+  ) {
+    return "mold_biohazard";
   }
 
   if (haystack.includes("outage") || haystack.includes("utility") || haystack.includes("infrastructure")) {

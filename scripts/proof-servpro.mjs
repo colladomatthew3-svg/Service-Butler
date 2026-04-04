@@ -14,7 +14,10 @@ function loadEnvFromFile(filePath) {
       const separator = line.indexOf("=");
       if (separator <= 0) continue;
       const key = line.slice(0, separator).trim();
-      const value = line.slice(separator + 1).trim();
+      let value = line.slice(separator + 1).trim();
+      if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
       if (!(key in process.env)) {
         process.env[key] = value;
       }
@@ -46,6 +49,10 @@ const steps = [
   {
     name: "operator-test",
     command: ["npm", "run", "operator-test"]
+  },
+  {
+    name: "proof-book-verified-lead",
+    command: ["npm", "run", "proof:book-verified-lead"]
   },
   {
     name: "qualify-real-leads",

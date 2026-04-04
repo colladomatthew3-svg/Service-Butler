@@ -1,0 +1,28 @@
+real-lead-qualification=WARN
+tenant_id=8e479ab5-58a2-4fef-ad9a-4d88b6f05d45
+tenant_name=NY Restoration Group
+lookback_days=14
+live_provider_source_events=7
+live_derived_source_events=0
+synthetic_source_events=9
+proof_cohort_source_events=16
+proof_cohort_synthetic_source_events=9
+unknown_source_events=0
+live_provider_opportunities=7
+live_provider_contactable_leads=7
+live_provider_verified_leads=1
+live_provider_review_leads=0
+outreach_events_on_live_provider_leads=13
+sent_outreach_on_verified_leads=1
+booked_jobs_from_live_provider_leads=7
+booked_jobs_from_verified_live_provider_leads=1
+verified_live_provider_revenue=6400
+identified_without_verified_contact=0
+issues:
+- [WARN] Synthetic contamination is high: 56.3% of proof-cohort source events are synthetic.
+sample_live_provider_opportunities:
+- Street Condition
+- Severe Storm
+- Severe Storm
+- Street Condition
+- Blocked Driveway

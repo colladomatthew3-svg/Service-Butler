@@ -94,6 +94,26 @@ export const dataSourceCatalog: DataSourceCatalogEntry[] = [
     }
   },
   {
+    catalogKey: "utility.outages",
+    connectorKey: "utility.outages",
+    sourceType: "utility",
+    name: "Utility Outage Signals",
+    description: "Outage and infrastructure distress signals from utility pages and trusted public coverage.",
+    liveRequirements: [
+      "Approved terms status.",
+      "Enable Firecrawl and configure utility search terms for live ingestion."
+    ],
+    defaultTermsStatus: "pending_review",
+    defaultReliabilityScore: 64,
+    defaultProvenance: "firecrawl.search",
+    defaultConfig: {
+      source_name: "Utility Outage Signals",
+      use_firecrawl: true,
+      search_terms: ["power outage", "water main break", "utility emergency"],
+      region: "Suffolk County, NY"
+    }
+  },
+  {
     catalogKey: "water.usgs",
     connectorKey: "water.usgs",
     sourceType: "usgs_water",

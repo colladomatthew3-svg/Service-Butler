@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertRole } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
+import { buildEnvironmentReadinessState } from "@/lib/control-plane/readiness";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getFranchiseDashboardReadModel } from "@/lib/v2/dashboard-read-models";
@@ -9,8 +10,12 @@ import type { AccountRole } from "@/types/domain";
 export async function GET() {
   if (isDemoMode() || !featureFlags.useV2Reads) {
     return NextResponse.json({
-      mode: "compat",
-      capture_proof_summary: null
+      mode: "blocked",
+      capture_proof_summary: null,
+      readiness: buildEnvironmentReadinessState(
+        "Capture proof is blocked until live v2 reads are enabled for a tenant-mapped account.",
+        "Use a live tenant environment instead of demo or compat mode for buyer-proof reporting."
+      )
     });
   }
 

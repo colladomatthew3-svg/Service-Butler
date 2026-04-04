@@ -60,3 +60,91 @@ test("queued SDR opportunities keep the operator in the SDR lane for the same op
     })
   );
 });
+
+test("qualified opportunities without verified contact stay out of buyer flow", () => {
+  const item = makeOpportunity({
+    id: "opp-qualified",
+    qualification_status: "qualified_contactable",
+    research_only: false,
+    requires_sdr_qualification: false,
+    dispatch_ready: false,
+    verification_status: "review"
+  });
+
+  expect(getPrimaryAction(item)).toEqual(
+    expect.objectContaining({
+      href: "/dashboard/scanner?queue=sdr&opportunity=opp-qualified",
+      label: "Complete verification"
+    })
+  );
+});
+
+test("verified contact ready opportunities can launch buyer flow", () => {
+  const item = makeOpportunity({
+    id: "opp-ready",
+    qualification_status: "qualified_contactable",
+    research_only: false,
+    requires_sdr_qualification: false,
+    dispatch_ready: true,
+    verification_status: "verified"
+  });
+
+  expect(getPrimaryAction(item)).toEqual(
+    expect.objectContaining({
+      href: "/dashboard/outbound?opportunity=opp-ready",
+      label: "Launch buyer flow"
+    })
+  );
+});
+
+test("mold and sewage opportunities stay in a restoration-specific lane until verified", () => {
+  const item = makeOpportunity({
+    id: "opp-biohazard",
+    source_types: ["incident"],
+    confidence_reasoning: "Public incident page shows sewage backup and contamination.",
+    distress_context_summary: "Mold remediation and biohazard cleanup likely after sewage overflow."
+  });
+
+  expect(getSourceLane(item)).toBe("mold_biohazard");
+  expect(getPrimaryAction(item)).toEqual(
+    expect.objectContaining({
+      href: "/dashboard/scanner?queue=sdr&opportunity=opp-biohazard",
+      label: "Send to SDR"
+    })
+  );
+});
+
+test("mold_biohazard opportunities remain SDR-gated until verified contact is dispatch-ready", () => {
+  const needsVerification = makeOpportunity({
+    id: "opp-biohazard-qualified",
+    source_types: ["incident"],
+    confidence_reasoning: "Biohazard incident and mold spread after sewage overflow.",
+    distress_context_summary: "Mold and biohazard cleanup expected.",
+    qualification_status: "qualified_contactable",
+    verification_status: "review",
+    dispatch_ready: false,
+    research_only: false,
+    requires_sdr_qualification: false
+  });
+
+  expect(getSourceLane(needsVerification)).toBe("mold_biohazard");
+  expect(getPrimaryAction(needsVerification)).toEqual(
+    expect.objectContaining({
+      href: "/dashboard/scanner?queue=sdr&opportunity=opp-biohazard-qualified",
+      label: "Complete verification"
+    })
+  );
+
+  const verifiedReady = {
+    ...needsVerification,
+    verification_status: "verified",
+    dispatch_ready: true
+  };
+
+  expect(getPrimaryAction(verifiedReady)).toEqual(
+    expect.objectContaining({
+      href: "/dashboard/outbound?opportunity=opp-biohazard-qualified",
+      label: "Launch buyer flow"
+    })
+  );
+});

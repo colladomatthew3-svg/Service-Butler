@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertRole, getCurrentUserContext } from "@/lib/auth/rbac";
 import { hasVerifiedOwnerContact } from "@/lib/services/contact-proof";
 import { runScanner } from "@/lib/services/scanner";
-import { isDemoMode } from "@/lib/services/review-mode";
 import { isSyntheticScannerRecord } from "@/lib/services/scanner-truth";
+import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isDemoMode, resolveReviewAccountId } from "@/lib/services/review-mode";
 import { featureFlags } from "@/lib/config/feature-flags";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { computeOpportunityScores } from "@/lib/v2/scoring";
@@ -12,6 +13,7 @@ import type { OpportunityQualificationStatus } from "@/lib/v2/opportunity-qualif
 type ScannerRunRequestBody = {
   mode?: "demo" | "live";
   location?: string;
+  marketScope?: "single" | "nyc_li_burst";
   categories?: string[];
   limit?: number;
   lat?: number;
@@ -20,6 +22,22 @@ type ScannerRunRequestBody = {
   campaignMode?: "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
   triggers?: string[];
 };
+
+async function resolveOperationalAccountId(supabase: Awaited<ReturnType<typeof getCurrentUserContext>>["supabase"]) {
+  const operatorTenantId = String(process.env.OPERATOR_TENANT_ID || "").trim();
+  if (operatorTenantId) {
+    const { data: map } = await supabase
+      .from("v2_account_tenant_map")
+      .select("account_id")
+      .eq("franchise_tenant_id", operatorTenantId)
+      .limit(1)
+      .maybeSingle();
+    if (map?.account_id) return String(map.account_id);
+  }
+
+  const { data: account } = await supabase.from("accounts").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
+  return String(account?.id || "");
+}
 
 function buildScannerQualificationFields(op: { source: string; raw?: Record<string, unknown> }, hasVerifiedContact: boolean) {
   const qualificationStatus: OpportunityQualificationStatus = hasVerifiedContact ? "qualified_contactable" : "research_only";
@@ -41,26 +59,95 @@ function buildScannerQualificationFields(op: { source: string; raw?: Record<stri
   };
 }
 
-export async function POST(req: NextRequest) {
-  if (isDemoMode()) {
-    return NextResponse.json({
-      mode: "live",
-      requestedMode: "live",
-      runtimeMode: "live-partial",
-      warnings: ["Scanner demo mode is disabled. Configure live public sources to populate the queue."],
-      weatherRisk: null,
-      locationResolved: null,
-      opportunities: []
-    });
+async function runBurstScanner({
+  location,
+  categories,
+  limit,
+  radius,
+  campaignMode,
+  triggers
+}: {
+  location: string;
+  categories?: string[];
+  limit: number;
+  radius: number;
+  campaignMode?: "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
+  triggers?: string[];
+}) {
+  const burstMarkets = [
+    "Brooklyn, NY 11201",
+    "Queens, NY 11368",
+    "Manhattan, NY 10019",
+    "Bronx, NY 10451",
+    "Hempstead, NY 11550",
+    "Hauppauge, NY 11788",
+    "Patchogue, NY 11772"
+  ];
+  const requestedLimit = Math.max(1, Math.min(200, Number(limit) || 80));
+  const perMarketLimit = Math.max(25, Math.min(120, Math.ceil((requestedLimit / burstMarkets.length) * 2)));
+
+  const runs = await Promise.all(
+    burstMarkets.map((market) =>
+      runScanner({
+        mode: "live",
+        location: market,
+        categories,
+        limit: perMarketLimit,
+        lat: null,
+        lon: null,
+        radius,
+        campaignMode,
+        triggers
+      })
+    )
+  );
+
+  const warnings = Array.from(new Set(runs.flatMap((run) => run.warnings || [])));
+  const merged = runs
+    .flatMap((run) => run.opportunities)
+    .sort((a, b) => b.intentScore - a.intentScore);
+
+  const deduped: typeof merged = [];
+  const seen = new Set<string>();
+  for (const item of merged) {
+    const dedupeKey = `${item.id}|${String(item.raw?.property_address || item.locationText || "")}|${item.title}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    deduped.push(item);
+    if (deduped.length >= requestedLimit) break;
   }
 
-  const { accountId, role, supabase } = await getCurrentUserContext();
+  const runtimeMode = runs.some((run) => run.runtimeMode === "fully-live") ? "fully-live" : "live-partial";
+  const weatherRisk = runs.find((run) => run.weatherRisk)?.weatherRisk ?? null;
+  warnings.push(`Burst scan covered ${burstMarkets.length} NYC/LI markets from ${location}.`);
+
+  return {
+    mode: "live" as const,
+    requestedMode: "live" as const,
+    runtimeMode,
+    warnings: Array.from(new Set(warnings)),
+    weatherRisk,
+    opportunities: deduped,
+    locationResolved: { lat: null, lon: null, label: location || "NYC + Long Island burst" }
+  };
+}
+
+export async function POST(req: NextRequest) {
+  const context = await getCurrentUserContext();
+  const { role } = context;
+  let { accountId, supabase } = context;
+  if (!supabase && isDemoMode()) {
+    supabase = getSupabaseAdminClient() as typeof supabase;
+    const resolved = await resolveOperationalAccountId(supabase);
+    accountId = resolved || (await resolveReviewAccountId());
+  }
   assertRole(role, ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]);
 
   const body = await readScannerRunBody(req);
 
-  const mode = "live";
+  const mode = "live" as const;
   const location = String(body.location || "").trim();
+  const marketScope = body.marketScope === "nyc_li_burst" ? "nyc_li_burst" : "single";
 
   let lat = Number(body.lat);
   let lon = Number(body.lon);
@@ -84,17 +171,28 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const result = await runScanner({
+  const requestedLimit = Number.isFinite(body.limit) ? Number(body.limit) : 80;
+  const scanInput = {
     mode,
-    location: String(body.location || location || "Service Area"),
     categories: Array.isArray(body.categories) ? body.categories : undefined,
-    limit: Number.isFinite(body.limit) ? Number(body.limit) : 20,
-    lat: Number.isFinite(lat) ? lat : null,
-    lon: Number.isFinite(lon) ? lon : null,
     radius: Number.isFinite(body.radius) ? Number(body.radius) : 25,
     campaignMode: body.campaignMode,
     triggers: Array.isArray(body.triggers) ? body.triggers : undefined
-  });
+  };
+  const result =
+    marketScope === "nyc_li_burst"
+      ? await runBurstScanner({
+          ...scanInput,
+          location: String(body.location || location || "NYC + Long Island"),
+          limit: requestedLimit
+        })
+      : await runScanner({
+          ...scanInput,
+          location: String(body.location || location || "Service Area"),
+          limit: requestedLimit,
+          lat: Number.isFinite(lat) ? lat : null,
+          lon: Number.isFinite(lon) ? lon : null
+        });
   const warnings = [...(result.warnings || [])];
 
   const realOpportunities = result.opportunities.filter((op) => !isSyntheticScannerRecord({ source: op.source, raw: op.raw }));

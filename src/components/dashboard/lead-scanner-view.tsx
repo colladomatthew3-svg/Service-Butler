@@ -29,15 +29,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils/cn";
 import { hasVerifiedOwnerContact } from "@/lib/services/contact-proof";
-import { isDemoMode } from "@/lib/services/review-mode";
+import { isSyntheticScannerRecord } from "@/lib/services/scanner-truth";
 import type { EnrichmentRecord } from "@/lib/services/enrichment";
 
-type Mode = "demo" | "live";
-type ScannerRuntimeMode = "fully-live" | "live-partial" | "simulated";
+type Mode = "live";
+type ScannerRuntimeMode = "fully-live" | "live-partial";
 type Category = "plumbing" | "demolition" | "asbestos" | "restoration" | "general";
 type Tab = "feed" | "sdr" | "rules";
 type CampaignMode = "Storm Response" | "Roofing" | "Water Damage" | "HVAC Emergency";
 type Trigger = "storm" | "heavy-rain" | "freeze" | "high-wind";
+type MarketScope = "single" | "nyc_li_burst";
 
 type ScannerEvent = {
   id: string;
@@ -90,6 +91,15 @@ type QualificationDraft = {
   verificationStatus: string;
   qualificationSource: string;
   qualificationNotes: string;
+};
+
+type ScannerThroughputSummary = {
+  window_hours: number;
+  captured_real_signals: number;
+  qualified_contactable_signals: number;
+  research_only_signals: number;
+  scanner_verified_leads_created: number;
+  warning?: string;
 };
 
 const categories: Category[] = ["restoration", "plumbing", "demolition", "asbestos", "general"];
@@ -225,14 +235,15 @@ export function LeadScannerView({
   onboardingMode?: "first-scan";
   focusOpportunityId?: string;
 }) {
-  const [mode] = useState<Mode>(isDemoMode() ? "demo" : "live");
+  const [mode] = useState<Mode>("live");
   const [tab, setTab] = useState<Tab>(initialTab);
   const [location, setLocation] = useState("Hauppauge, NY 11788");
+  const [marketScope, setMarketScope] = useState<MarketScope>("single");
   const [campaignMode, setCampaignMode] = useState<CampaignMode>("Storm Response");
   const [lat, setLat] = useState("");
   const [lon, setLon] = useState("");
   const [radius, setRadius] = useState("25");
-  const [limit, setLimit] = useState("20");
+  const [limit, setLimit] = useState("80");
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([...categories]);
   const [selectedTriggers, setSelectedTriggers] = useState<Trigger[]>(["storm", "heavy-rain"]);
   const [loading, setLoading] = useState(false);
@@ -240,10 +251,10 @@ export function LeadScannerView({
   const [captured, setCaptured] = useState<ScannerEvent[]>([]);
   const [scannerWarning, setScannerWarning] = useState<string | null>(null);
   const [feedWarning, setFeedWarning] = useState<string | null>(null);
-  const [runtimeMode, setRuntimeMode] = useState<ScannerRuntimeMode>(mode === "demo" ? "simulated" : "fully-live");
+  const [runtimeMode, setRuntimeMode] = useState<ScannerRuntimeMode>("fully-live");
+  const [throughput, setThroughput] = useState<ScannerThroughputSummary | null>(null);
   const [preview, setPreview] = useState<ScannerEvent | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
-  const [demoActionMessage, setDemoActionMessage] = useState<string | null>(null);
   const [qualificationByEventId, setQualificationByEventId] = useState<Record<string, QualificationState>>({});
   const [qualificationDrafts, setQualificationDrafts] = useState<Record<string, QualificationDraft>>({});
   const [reviewingQualificationId, setReviewingQualificationId] = useState<string | null>(null);
@@ -264,7 +275,9 @@ export function LeadScannerView({
   const { showToast } = useToast();
 
   const sortedEvents = useMemo(() => {
-    const ordered = [...events].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const ordered = [...events]
+      .filter((event) => !isSyntheticScannerRecord({ source: event.source, raw: event.raw }))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     if (!focusOpportunityId) return ordered;
 
     const focused: ScannerEvent[] = [];
@@ -313,6 +326,57 @@ export function LeadScannerView({
       sortedEvents.filter((event) => normalizeQualificationState(event, qualificationByEventId[event.id]).status === "queued_for_sdr"),
     [qualificationByEventId, sortedEvents]
   );
+  const throughputActionPlan = useMemo(() => {
+    const capturedSignals = throughput?.captured_real_signals ?? 0;
+    const qualifiedSignals = throughput?.qualified_contactable_signals ?? 0;
+    const verifiedLeads = throughput?.scanner_verified_leads_created ?? 0;
+    const researchOnlySignals = throughput?.research_only_signals ?? 0;
+    const highThroughput = capturedSignals >= 12;
+    const lowQualified =
+      capturedSignals > 0 && qualifiedSignals <= Math.max(2, Math.floor(capturedSignals * 0.2));
+
+    if (highThroughput && lowQualified) {
+      return {
+        tone: "warning" as const,
+        badge: "Route to SDR",
+        title: "High real-signal volume, but too few verified contacts.",
+        body:
+          "Keep the no-synthetic policy intact. Route the strongest research-only signals to SDR, verify phone or email, then dispatch only the qualified records.",
+        steps: ["Route top research-only signals to SDR.", "Verify phone or email before qualification.", "Dispatch only after the signal becomes qualified contactable."]
+      };
+    }
+
+    if (qualifiedSignals > 0 || qualifiedDispatchableCount > 0) {
+      return {
+        tone: "success" as const,
+        badge: "Dispatch ready",
+        title: "Verified contacts are available for dispatch.",
+        body:
+          "Work the qualified queue first. Those signals already have verified contactability, so the next move is dispatch, not more scanning.",
+        steps: ["Open the verified-ready queue.", "Create the lead or job from the qualified signal.", "Keep SDR focused on the remaining research-only records."]
+      };
+    }
+
+    if (researchOnlySignals > 0 || sdrQueuedEvents.length > 0 || verifiedLeads === 0) {
+      return {
+        tone: "default" as const,
+        badge: "Verification first",
+        title: "Qualification is the next hard gate.",
+        body:
+          "Scanner is capturing real signals, but buyer-grade output only starts after contact verification. Move research-only records into SDR before trying to dispatch.",
+        steps: ["Route research-only signals to SDR.", "Verify contact details on the strongest records.", "Dispatch after qualification unlocks the lead path."]
+      };
+    }
+
+    return {
+      tone: "default" as const,
+      badge: "Monitor",
+      title: "Scanner is ready for the next live run.",
+      body:
+        "Keep the feed tight, watch throughput, and only advance signals that clear verified contactability.",
+      steps: ["Run the next scan.", "Review the strongest signals.", "Dispatch only verified contacts."]
+    };
+  }, [qualifiedDispatchableCount, sdrQueuedEvents.length, throughput]);
   const visibleEvents = tab === "sdr" ? sdrQueuedEvents : sortedEvents;
 
   useEffect(() => {
@@ -348,10 +412,19 @@ export function LeadScannerView({
     setRulesLoading(false);
   }, [showToast]);
 
+  const loadThroughput = useCallback(async () => {
+    const res = await fetch("/api/scanner/throughput");
+    const data = (await res.json().catch(() => ({}))) as ScannerThroughputSummary & { error?: string };
+    if (!res.ok) return;
+    setThroughput(data);
+    if (data.warning) setFeedWarning((prev) => prev || data.warning || null);
+  }, []);
+
   useEffect(() => {
     loadEvents();
     loadRules();
-  }, [loadEvents, loadRules]);
+    loadThroughput();
+  }, [loadEvents, loadRules, loadThroughput]);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,10 +463,11 @@ export function LeadScannerView({
       body: JSON.stringify({
         mode,
         location,
+        marketScope,
         campaignMode,
         categories: selectedCategories,
         triggers: selectedTriggers,
-        limit: Number(limit) || 20,
+        limit: Number(limit) || 80,
         radius: Number(radius) || 25,
         lat: parseNum(lat),
         lon: parseNum(lon)
@@ -446,11 +520,12 @@ export function LeadScannerView({
 
     const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
     setScannerWarning(warnings[0] || null);
-    setRuntimeMode(data.runtimeMode || (data.mode === "demo" ? "simulated" : "fully-live"));
+    setRuntimeMode(data.runtimeMode || "fully-live");
     setCaptured((prev) => mergeScannerEvents(batch, prev));
     setEvents((prev) => mergeScannerEvents(batch, prev));
 
     await loadEvents();
+    await loadThroughput();
     setLoading(false);
 
     if (manual) {
@@ -511,12 +586,6 @@ export function LeadScannerView({
         }));
       }
       showToast(data.error || "Dispatch failed");
-      return;
-    }
-
-    if (isDemoMode()) {
-      setDemoActionMessage(data.message || "Opportunity routed in demo mode.");
-      showToast(data.message || "Opportunity routed");
       return;
     }
 
@@ -823,8 +892,8 @@ export function LeadScannerView({
             <div className="flex flex-wrap gap-2">
               <Badge variant="brand">{location}</Badge>
               <Badge variant="success">{triggerSummary || "All signals"}</Badge>
-              <Badge variant={runtimeMode === "simulated" || runtimeMode === "live-partial" ? "warning" : "default"}>
-                {runtimeMode === "simulated" ? "Demo" : runtimeMode === "live-partial" ? "Partial live" : "Live"} scanning
+              <Badge variant={runtimeMode === "live-partial" ? "warning" : "default"}>
+                {runtimeMode === "live-partial" ? "Partial live" : "Live"} scanning
               </Badge>
             </div>
           </div>
@@ -841,6 +910,59 @@ export function LeadScannerView({
                 <ScannerMetric label="Signal mix" value={`${sourceMixCount} sources`} helper="Channels represented" />
                 <ScannerMetric label="Queue depth" value={`${queueDepth} results`} helper="Opportunity candidates" />
                 <ScannerMetric label="SDR queue" value={`${sdrQueuedEvents.length}`} helper="Needs verified contact" />
+                <ScannerMetric
+                  label="24h captured"
+                  value={`${throughput?.captured_real_signals ?? 0}`}
+                  helper="Real scanner signals captured"
+                />
+                <ScannerMetric
+                  label="24h verified-ready"
+                  value={`${throughput?.qualified_contactable_signals ?? 0}`}
+                  helper="Signals with verified contactability"
+                />
+                <ScannerMetric
+                  label="24h leads created"
+                  value={`${throughput?.scanner_verified_leads_created ?? 0}`}
+                  helper="Scanner-sourced verified leads"
+                />
+              </div>
+
+              <div
+                className={cn(
+                  "mt-4 rounded-[1.35rem] border p-4",
+                  throughputActionPlan.tone === "warning"
+                    ? "border-amber-300/70 bg-[linear-gradient(120deg,rgba(255,251,235,0.98),rgba(255,255,255,0.98))]"
+                    : throughputActionPlan.tone === "success"
+                      ? "border-emerald-200/80 bg-[linear-gradient(120deg,rgba(236,253,245,0.96),rgba(255,255,255,0.98))]"
+                      : "border-semantic-border/60 bg-white/88"
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Next action</p>
+                  <Badge
+                    variant={
+                      throughputActionPlan.tone === "warning"
+                        ? "warning"
+                        : throughputActionPlan.tone === "success"
+                          ? "success"
+                          : "default"
+                    }
+                  >
+                    {throughputActionPlan.badge}
+                  </Badge>
+                </div>
+                <div className="mt-3 space-y-2">
+                  <p className="text-sm font-semibold text-semantic-text">{throughputActionPlan.title}</p>
+                  <p className="text-sm text-semantic-muted">{throughputActionPlan.body}</p>
+                  <div className="space-y-2 pt-1">
+                    {throughputActionPlan.steps.map((step) => (
+                      <div key={step} className="flex items-start gap-2">
+                        <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />
+                        <p className="text-sm text-semantic-text">{step}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-4 rounded-[1.35rem] border border-semantic-border/60 bg-white/88 p-4">
@@ -900,12 +1022,6 @@ export function LeadScannerView({
                 </p>
               </div>
             </div>
-          </div>
-        )}
-
-        {demoActionMessage && (
-          <div className="rounded-[1.25rem] border border-brand-500/20 bg-[linear-gradient(120deg,rgba(229,236,251,0.95),rgba(255,255,255,0.98))] px-4 py-3 text-sm font-medium text-brand-700 shadow-[0_10px_24px_rgba(16,24,40,0.05)]">
-            {demoActionMessage}
           </div>
         )}
 
@@ -1036,9 +1152,16 @@ export function LeadScannerView({
               </div>
             </div>
             <label className="rounded-[1rem] border border-semantic-border/55 bg-white/80 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Coverage</span>
+              <Select value={marketScope} onChange={(e) => setMarketScope(e.target.value as MarketScope)}>
+                <option value="single">Single market</option>
+                <option value="nyc_li_burst">NYC + LI burst</option>
+              </Select>
+            </label>
+            <label className="rounded-[1rem] border border-semantic-border/55 bg-white/80 p-3 shadow-[0_8px_20px_rgba(31,42,36,0.04)]">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-semantic-muted">Results</span>
               <Select value={limit} onChange={(e) => setLimit(e.target.value)}>
-                {["8", "12", "20", "30", "50"].map((value) => (
+                {["20", "50", "80", "120", "200"].map((value) => (
                   <option key={value} value={value}>
                     {value}
                   </option>
@@ -1135,17 +1258,17 @@ export function LeadScannerView({
                   <p className="eyebrow">{tab === "sdr" ? "No SDR queue yet" : "No scan results yet"}</p>
                   <h3 className="section-title max-w-2xl text-semantic-text">
                     {tab === "sdr"
-                      ? "Queued SDR follow-up will appear here once a research-only signal is escalated."
+                      ? "No research-only opportunities are queued for SDR follow-up yet."
                       : showingFirstScanGuide
-                        ? "Your market is ready for its first scan."
-                        : "Scanner is listening for new demand."}
+                        ? "Start with Tier 1 sources, then run the first live scan."
+                        : "No live opportunities surfaced from this scan yet."}
                   </h3>
                   <p className="dashboard-body max-w-2xl text-semantic-muted">
                     {tab === "sdr"
-                      ? "Signals without verified contact stay blocked here until SDR captures a real phone or email, or rejects them as non-workable."
+                      ? "Next action: configure Tier 1 sources if the signal queue is still thin, run a burst scan when the local market is quiet, and send research-only opportunities here so SDR can verify a real phone or email before dispatch."
                       : showingFirstScanGuide
-                        ? "Run the first scan to surface storm damage, water loss, freeze risk, and emergency demand in the service area you just saved."
-                        : "Run a scan to surface storm damage, water loss, freeze risk, and emergency service demand in your service area."}
+                        ? "Next action: confirm Tier 1 sources are active, run the first scan to surface storm damage and emergency demand, and route any research-only opportunities to SDR instead of trying to dispatch them."
+                        : "Next action: confirm Tier 1 sources are active, run a burst scan if this market stays quiet, and route research-only opportunities to SDR before dispatch."}
                   </p>
                   <div className="flex flex-wrap gap-3">
                     {tab === "sdr" ? (
@@ -1172,13 +1295,27 @@ export function LeadScannerView({
                 </div>
 
                 <div className="rounded-[1.5rem] border border-semantic-border/60 bg-[linear-gradient(180deg,rgba(229,236,251,0.12),rgba(255,255,255,0.96))] p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">First-value path</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-semantic-muted">Next actions</p>
                   <div className="mt-4 space-y-3">
-                    {[
-                      ["1", "Set service area", "Ground demand in the market your crews actually cover."],
-                      ["2", tab === "sdr" ? "Send to SDR" : "Run first scan", tab === "sdr" ? "Queue non-contactable opportunities instead of overstating them as leads." : "Surface the strongest opportunity and review why it matters."],
-                      ["3", tab === "sdr" ? "Verify contact" : "Create verified lead", tab === "sdr" ? "Capture a real phone or email before dispatch." : "Only promote the opportunity if your team would actually call it."]
-                    ].map(([number, title, text]) => (
+                    {(
+                      tab === "sdr"
+                        ? [
+                            ["1", "Configure Tier 1 sources", "Keep weather, incident, 311, permit, and other live-safe sources active so SDR is working real opportunities."],
+                            ["2", "Run burst scan", "If the local queue is thin, widen coverage to NYC + LI burst and rescan for live demand."],
+                            ["3", "Verify contact, then dispatch", "Research-only opportunities stay here until SDR verifies a real phone or email."]
+                          ]
+                        : [
+                            ["1", "Configure Tier 1 sources", "Check Data Sources first so the scanner is pulling from live-safe feeds instead of a thin local queue."],
+                            [
+                              "2",
+                              "Run burst scan",
+                              marketScope === "nyc_li_burst"
+                                ? "Burst coverage is already selected. Rerun the scan and review the strongest live opportunities first."
+                                : "If a single-market scan stays quiet, switch to NYC + LI burst and rerun to widen coverage."
+                            ],
+                            ["3", "Route research-only to SDR", "Do not dispatch non-contactable opportunities. Queue them for SDR verification first."]
+                          ]
+                    ).map(([number, title, text]) => (
                       <div key={title} className="flex items-start gap-3 rounded-[1rem] border border-semantic-border/60 bg-white/84 p-3">
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700">
                           {number}

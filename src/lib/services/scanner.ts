@@ -887,6 +887,33 @@ function tagsFromConnectorEvent(event: ConnectorNormalizedEvent) {
   return Array.from(new Set(tags));
 }
 
+function parseEnvList(value: string | undefined) {
+  if (!value) return [];
+  return value
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function buildPublicContactEnrichment(rawPayload: Record<string, unknown>, normalizedPayload: Record<string, unknown>) {
+  const phone = String(normalizedPayload.contact_phone || rawPayload.contact_phone || "").trim();
+  const email = String(normalizedPayload.contact_email || rawPayload.contact_email || "").trim();
+  const name = String(normalizedPayload.contact_name || rawPayload.contact_name || "").trim();
+
+  if (!phone && !email) return null;
+
+  return {
+    simulated: false,
+    ownerContact: {
+      name: name || null,
+      phone: phone || null,
+      email: email || null,
+      verification: "public-record",
+      confidenceLabel: "Public record"
+    }
+  };
+}
+
 function connectorEventToOpportunity({
   connectorKey,
   event,
@@ -928,6 +955,11 @@ function connectorEventToOpportunity({
   const reasonSummary = `${event.title} from ${event.sourceName || connectorKey} indicates ${String(
     classification.serviceLine || event.serviceLine || "general"
   ).toLowerCase()} demand near ${addressInfo.city || serviceAreaLabel}.`;
+  const normalizedPayload =
+    event.normalizedPayload && typeof event.normalizedPayload === "object" && !Array.isArray(event.normalizedPayload)
+      ? (event.normalizedPayload as Record<string, unknown>)
+      : {};
+  const enrichment = buildPublicContactEnrichment(event.rawPayload, normalizedPayload);
 
   return {
     id: mkId([connectorKey, event.dedupeKey, event.occurredAt]),
@@ -976,11 +1008,128 @@ function connectorEventToOpportunity({
       weather_signal: event.eventCategory || event.eventType,
       demand_signal: event.likelyJobType || classification.opportunityType,
       demand_explanation: event.distressContextSummary || reasonSummary,
-      normalized_payload: event.normalizedPayload,
-      raw_payload: event.rawPayload
+      normalized_payload: normalizedPayload,
+      raw_payload: event.rawPayload,
+      ...(enrichment ? { enrichment } : {})
     },
     createdAtIso: event.occurredAt
   } satisfies ScannerOpportunity;
+}
+
+async function fetchOpen311Opportunities({
+  serviceAreaLabel,
+  categories,
+  forecast,
+  limit
+}: {
+  serviceAreaLabel: string;
+  categories: ScannerCategory[];
+  forecast?: ForecastSummary | null;
+  limit: number;
+}): Promise<ScannerOpportunity[]> {
+  const connector = getConnectorByKey("open311.generic");
+  if (!connector) return [];
+
+  const endpoint = String(
+    process.env.OPEN311_ENDPOINT || "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=120&$order=created_date DESC"
+  ).trim();
+
+  const input: ConnectorPullInput = {
+    tenantId: "scanner",
+    sourceId: "scanner-open311",
+    sourceType: "municipal_service_requests",
+    config: {
+      endpoint,
+      source_name: "Open311 Service Requests",
+      source_provenance: "open311.public.api",
+      terms_status: "approved"
+    }
+  };
+
+  const records = await connector.pull(input).catch(() => []);
+  if (records.length === 0) return [];
+
+  const normalized = await connector.normalize(records, input).catch(() => []);
+  const opportunities: ScannerOpportunity[] = [];
+
+  for (const event of normalized) {
+    const opportunity = connectorEventToOpportunity({
+      connectorKey: connector.key,
+      event,
+      serviceAreaLabel,
+      forecast
+    });
+    if (!opportunity || !categories.includes(opportunity.category)) continue;
+    opportunities.push(opportunity);
+    if (opportunities.length >= limit) break;
+  }
+
+  return opportunities;
+}
+
+async function fetchFirecrawlConnectorOpportunities({
+  connectorKey,
+  sourceType,
+  pageUrls,
+  sourceName,
+  serviceAreaLabel,
+  categories,
+  forecast,
+  limit
+}: {
+  connectorKey: "incidents.generic" | "social.intent.public";
+  sourceType: "incident" | "social";
+  pageUrls: string[];
+  sourceName: string;
+  serviceAreaLabel: string;
+  categories: ScannerCategory[];
+  forecast?: ForecastSummary | null;
+  limit: number;
+}): Promise<ScannerOpportunity[]> {
+  const connector = getConnectorByKey(connectorKey);
+  if (!connector || pageUrls.length === 0) return [];
+
+  const firecrawlApiKey = String(process.env.FIRECRAWL_API_KEY || "").trim();
+  if (!firecrawlApiKey) return [];
+
+  const market = parseMarketLocation(serviceAreaLabel);
+  const input: ConnectorPullInput = {
+    tenantId: "scanner",
+    sourceId: `scanner-firecrawl-${sourceType}`,
+    sourceType,
+    config: {
+      use_firecrawl: true,
+      page_urls: pageUrls,
+      firecrawl_api_key: firecrawlApiKey,
+      source_name: sourceName,
+      source_provenance: "firecrawl.public.pages",
+      terms_status: "approved",
+      city: market.city || "",
+      state: market.state || "",
+      postal_code: market.postalCode || "",
+      location_text: serviceAreaLabel
+    }
+  };
+
+  const records = await connector.pull(input).catch(() => []);
+  if (records.length === 0) return [];
+
+  const normalized = await connector.normalize(records, input).catch(() => []);
+  const opportunities: ScannerOpportunity[] = [];
+
+  for (const event of normalized) {
+    const opportunity = connectorEventToOpportunity({
+      connectorKey: connector.key,
+      event,
+      serviceAreaLabel,
+      forecast
+    });
+    if (!opportunity || !categories.includes(opportunity.category)) continue;
+    opportunities.push(opportunity);
+    if (opportunities.length >= limit) break;
+  }
+
+  return opportunities;
 }
 
 async function fetchOpenFemaOpportunities({
@@ -1897,7 +2046,7 @@ export async function runScanner({
   triggers?: string[];
 }) {
   const pickedCategories = normalizeCategories(categories);
-  const safeLimit = Math.max(1, Math.min(50, Number(limit) || 20));
+  const safeLimit = Math.max(1, Math.min(200, Number(limit) || 80));
   const radiusMiles = Math.max(1, Math.min(250, Number(radius) || 25));
   const warnings: string[] = [];
 
@@ -1933,7 +2082,16 @@ export async function runScanner({
   }
 
   if (mode === "live" && resolved) {
-    const [nws, forecastDriven, floodClusters, fdnyFire, usgs, eonet, openFema] = await Promise.all([
+    const incidentPageUrls = parseEnvList(process.env.SCANNER_FIRECRAWL_INCIDENT_PAGE_URLS || process.env.SCANNER_INCIDENT_PAGE_URLS);
+    const socialPageUrls = parseEnvList(process.env.SCANNER_FIRECRAWL_SOCIAL_PAGE_URLS || process.env.SCANNER_SOCIAL_PAGE_URLS);
+    const firecrawlConfigured = incidentPageUrls.length > 0 || socialPageUrls.length > 0;
+    const stateCode = inferStateCodeFromLocation(resolved.label);
+    const shouldPullOpen311 = stateCode === "NY";
+    if (firecrawlConfigured && !String(process.env.FIRECRAWL_API_KEY || "").trim()) {
+      warnings.push("Firecrawl page sources are configured for scanner, but FIRECRAWL_API_KEY is missing.");
+    }
+
+    const [nws, forecastDriven, floodClusters, fdnyFire, usgs, eonet, openFema, open311, incidentPages, socialPages] = await Promise.all([
       fetchNwsOpportunities({
         lat: resolved.lat,
         lon: resolved.lon,
@@ -1989,14 +2147,42 @@ export async function runScanner({
         categories: pickedCategories,
         forecast,
         limit: safeLimit
+      }),
+      shouldPullOpen311
+        ? fetchOpen311Opportunities({
+            serviceAreaLabel: resolved.label,
+            categories: pickedCategories,
+            forecast,
+            limit: safeLimit
+          })
+        : Promise.resolve([]),
+      fetchFirecrawlConnectorOpportunities({
+        connectorKey: "incidents.generic",
+        sourceType: "incident",
+        pageUrls: incidentPageUrls,
+        sourceName: "Firecrawl Incident Pages",
+        serviceAreaLabel: resolved.label,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
+      }),
+      fetchFirecrawlConnectorOpportunities({
+        connectorKey: "social.intent.public",
+        sourceType: "social",
+        pageUrls: socialPageUrls,
+        sourceName: "Firecrawl Distress Pages",
+        serviceAreaLabel: resolved.label,
+        categories: pickedCategories,
+        forecast,
+        limit: safeLimit
       })
     ]);
 
-    const merged = [...nws, ...forecastDriven, ...floodClusters, ...fdnyFire, ...usgs, ...eonet, ...openFema]
+    const merged = [...nws, ...forecastDriven, ...floodClusters, ...fdnyFire, ...usgs, ...eonet, ...openFema, ...open311, ...incidentPages, ...socialPages]
       .sort((a, b) => b.intentScore - a.intentScore)
       .slice(0, safeLimit);
 
-    const directLiveCount = nws.length + fdnyFire.length + usgs.length + eonet.length + openFema.length;
+    const directLiveCount = nws.length + fdnyFire.length + usgs.length + eonet.length + openFema.length + open311.length + incidentPages.length + socialPages.length;
     const derivedLiveCount = forecastDriven.length + floodClusters.length;
     const runtimeMode: ScannerRuntimeMode =
       directLiveCount > 0 ? "fully-live" : derivedLiveCount > 0 ? "live-partial" : "live-partial";

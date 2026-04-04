@@ -42,9 +42,10 @@ test("proof:servpro writes a markdown and json bundle", () => {
     "operator-healthcheck",
     "validate-integrations",
     "operator-test",
+    "proof-book-verified-lead",
     "qualify-real-leads"
   ]);
-  expect(summary.steps).toHaveLength(4);
+  expect(summary.steps).toHaveLength(5);
   expect(summary.status).toMatch(/pass|fail/);
   expect(result.stdout).toContain("Servpro proof bundle saved to");
 });

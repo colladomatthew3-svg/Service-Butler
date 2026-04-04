@@ -5,7 +5,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const supabase_js_1 = require("@supabase/supabase-js");
 const node_fs_1 = __importDefault(require("node:fs"));
-const node_net_1 = __importDefault(require("node:net"));
 const node_path_1 = __importDefault(require("node:path"));
 function loadEnvFromFile(filePath) {
     if (!node_fs_1.default.existsSync(filePath))
@@ -37,55 +36,6 @@ if (!SUPABASE_URL || !SERVICE_ROLE) {
 const supabase = (0, supabase_js_1.createClient)(SUPABASE_URL, SERVICE_ROLE, {
     auth: { autoRefreshToken: false, persistSession: false }
 });
-function parseSupabaseHost(url) {
-    try {
-        return new URL(url).hostname;
-    }
-    catch {
-        return "";
-    }
-}
-function parseSupabasePort(url) {
-    try {
-        const parsed = new URL(url);
-        if (parsed.port)
-            return Number(parsed.port);
-        return parsed.protocol === "https:" ? 443 : 80;
-    }
-    catch {
-        return null;
-    }
-}
-function isLocalSupabaseUrl(url) {
-    const hostname = parseSupabaseHost(url);
-    return hostname === "127.0.0.1" || hostname === "localhost";
-}
-async function isPortListening(host, port) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    return new Promise((resolve) => {
-        const socket = node_net_1.default.createConnection({ host, port });
-        let settled = false;
-        const finish = (result) => {
-            if (settled)
-                return;
-            settled = true;
-            socket.destroy();
-            resolve(result);
-        };
-        socket.setTimeout(1_000);
-        socket.once("connect", () => finish(true));
-        socket.once("timeout", () => finish(false));
-        socket.once("error", () => finish(false));
-    });
-}
-function formatConnectivityGuidance() {
-    const host = parseSupabaseHost(SUPABASE_URL);
-    const port = parseSupabasePort(SUPABASE_URL);
-    if (isLocalSupabaseUrl(SUPABASE_URL) && port !== null) {
-        return `Local Supabase is not reachable at ${host}:${port}. Start it with \`npm run db:start\`, then apply migrations with \`npm run db:push\` and retry \`npm run operator:seed\`.`;
-    }
-    return "Confirm NEXT_PUBLIC_SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY and that the target Supabase project is reachable.";
-}
 const OPERATOR_PROFILE = String(process.env.OPERATOR_PROFILE || "ny_restoration").trim().toLowerCase();
 const IS_SUFFOLK_PROFILE = OPERATOR_PROFILE === "suffolk_restoration";
 const OPERATOR = IS_SUFFOLK_PROFILE
@@ -641,26 +591,6 @@ async function main() {
     console.log("SB_USE_V2_READS=true");
 }
 main().catch((error) => {
-    const errorText = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    if (errorText.includes("fetch failed")) {
-        const host = parseSupabaseHost(SUPABASE_URL);
-        const port = parseSupabasePort(SUPABASE_URL);
-        const checkPort = async () => {
-            if (!host || port === null)
-                return false;
-            return isPortListening(host, port);
-        };
-        checkPort()
-            .then((listening) => {
-            console.error(listening ? "Seed failed while contacting Supabase. Check credentials and schema state." : formatConnectivityGuidance());
-            process.exit(1);
-        })
-            .catch(() => {
-            console.error(formatConnectivityGuidance());
-            process.exit(1);
-        });
-        return;
-    }
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
 });

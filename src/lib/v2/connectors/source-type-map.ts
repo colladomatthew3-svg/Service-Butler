@@ -11,5 +11,6 @@ export function inferConnectorKey(sourceType: string) {
   if (normalizedType.includes("fema") || normalizedType.includes("disaster")) return "disaster.openfema";
   if (normalizedType.includes("census")) return "enrichment.census";
   if (normalizedType.includes("overpass") || normalizedType.includes("osm") || normalizedType.includes("property")) return "property.overpass";
+  if (normalizedType.includes("utility") || normalizedType.includes("outage")) return "utility.outages";
   return "incidents.generic";
 }

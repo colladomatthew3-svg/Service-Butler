@@ -4,8 +4,9 @@ import { Logo } from "@/components/brand/Logo";
 import { buttonStyles } from "@/components/ui/button";
 
 const productLinks = [
-  { href: "/#features", label: "Features" },
-  { href: "/#pricing", label: "Pricing" },
+  { href: "/product", label: "Product" },
+  { href: "/solutions", label: "Solutions" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/blog", label: "Blog" },
   { href: "/login", label: "Product Tour" }
 ] as const;
@@ -13,7 +14,7 @@ const productLinks = [
 const companyLinks = [
   { href: "/", label: "About" },
   { href: "/blog", label: "Resources" },
-  { href: "/login", label: "Customers" }
+  { href: "/solutions", label: "Customers" }
 ] as const;
 
 const supportLinks = [

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
@@ -24,7 +25,10 @@ function loadEnvFromFile(filePath) {
     const separator = line.indexOf("=");
     if (separator <= 0) continue;
     const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim();
+    let value = line.slice(separator + 1).trim();
+    if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
     if (!(key in process.env)) {
       process.env[key] = value;
     }
@@ -57,6 +61,8 @@ function runtimeMode() {
   }
 
   const reasons = [];
+  const hasPermitsSnapshot = Boolean(String(process.env.PERMITS_PROVIDER_SNAPSHOT_PATH || "").trim());
+  const hasPermitsProvider = Boolean(String(process.env.PERMITS_PROVIDER_URL || "").trim()) || hasPermitsSnapshot;
 
   if (!envTrue("SB_USE_V2_WRITES")) reasons.push("SB_USE_V2_WRITES is not enabled");
   if (!envTrue("SB_USE_V2_READS")) reasons.push("SB_USE_V2_READS is not enabled");
@@ -75,7 +81,7 @@ function runtimeMode() {
     reasons.push("HubSpot is not configured and not explicitly disabled");
   }
 
-  if (!process.env.PERMITS_PROVIDER_URL) reasons.push("PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)");
+  if (!hasPermitsProvider) reasons.push("PERMITS_PROVIDER_URL or PERMITS_PROVIDER_SNAPSHOT_PATH not set (connector will run in synthetic mode)");
   if (!process.env.WEBHOOK_SHARED_SECRET) reasons.push("WEBHOOK_SHARED_SECRET not set");
 
   const inngestConfigured = Boolean(process.env.INNGEST_EVENT_KEY && process.env.INNGEST_SIGNING_KEY);
@@ -118,6 +124,28 @@ async function resolveOperatorTenantId(supabase) {
 async function fetchPermitsSignal() {
   const providerUrl = String(process.env.PERMITS_PROVIDER_URL || "").trim();
   const providerToken = String(process.env.PERMITS_PROVIDER_TOKEN || "").trim();
+  const snapshotPath = String(process.env.PERMITS_PROVIDER_SNAPSHOT_PATH || "").trim();
+  const snapshotProvenance = String(process.env.PERMITS_PROVIDER_SOURCE_PROVENANCE || providerUrl || "").trim();
+
+  if (snapshotPath) {
+    const payload = readSnapshotJson(snapshotPath);
+    const records = Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload?.records)
+        ? payload.records
+        : Array.isArray(payload)
+          ? payload
+          : [];
+
+    const first = records[0];
+    if (first && typeof first === "object") {
+      return {
+        mode: "live_provider",
+        record: first,
+        sourceProvenance: snapshotProvenance || snapshotPath
+      };
+    }
+  }
 
   if (!providerUrl) {
     return {
@@ -153,9 +181,10 @@ async function fetchPermitsSignal() {
       headers,
       cache: "no-store",
       signal: controller.signal
-    });
+    }).catch(() => null);
 
-    if (!response.ok) {
+    const payload = response?.ok ? await response.json().catch(() => null) : await fetchJsonWithCurl({ providerUrl, providerToken });
+    if (!response?.ok && !payload) {
       return {
         mode: "synthetic_fallback",
         record: {
@@ -175,7 +204,6 @@ async function fetchPermitsSignal() {
       };
     }
 
-    const payload = await response.json().catch(() => ({}));
     const records = Array.isArray(payload?.results)
       ? payload.results
       : Array.isArray(payload?.records)
@@ -235,6 +263,37 @@ async function fetchPermitsSignal() {
     };
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function fetchJsonWithCurl({ providerUrl, providerToken }) {
+  const args = ["-sS", "--max-time", "8", "-H", "accept: application/json"];
+  if (providerToken) {
+    args.push("-H", `authorization: Bearer ${providerToken}`);
+  }
+  args.push(providerUrl);
+
+  const result = spawnSync("curl", args, {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024
+  });
+
+  if (result.status !== 0 || !result.stdout) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
+}
+
+function readSnapshotJson(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
   }
 }
 

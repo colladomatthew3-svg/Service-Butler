@@ -32,6 +32,9 @@ export type Opportunity = {
   qualification_status?: "research_only" | "queued_for_sdr" | "qualified_contactable" | "rejected" | null;
   qualification_reason_code?: string | null;
   proof_authenticity?: "live_provider" | "live_derived" | "synthetic" | "unknown" | null;
+  source_provenance?: string | null;
+  verification_status?: string | null;
+  dispatch_ready?: boolean;
   source_lane?: SourceLaneKey | null;
   priority_score?: number | null;
   next_recommended_action?: string | null;
@@ -43,7 +46,7 @@ export type Opportunity = {
 };
 type SourceLaneFilter = "all" | SourceLaneKey;
 
-const sourceLaneOrder: SourceLaneFilter[] = ["all", "311", "flood", "fire", "outage", "weather", "permits", "property", "social", "other"];
+const sourceLaneOrder: SourceLaneFilter[] = ["all", "311", "flood", "fire", "outage", "weather", "mold_biohazard", "permits", "property", "social", "other"];
 
 const sourceLaneLabel: Record<SourceLaneFilter, string> = {
   all: "All signals",
@@ -52,6 +55,7 @@ const sourceLaneLabel: Record<SourceLaneFilter, string> = {
   fire: "Fire & emergency",
   outage: "Outage & utility",
   weather: "Weather",
+  mold_biohazard: "Mold & biohazard",
   permits: "Permits",
   property: "Property",
   social: "Distress",
@@ -116,7 +120,7 @@ export function OpportunitiesView() {
       return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
     });
 
-  const contactReadyCount = opportunities.filter((item) => item.qualification_status === "qualified_contactable").length;
+  const contactReadyCount = opportunities.filter((item) => item.dispatch_ready).length;
   const highUrgencyCount = opportunities.filter((item) => getPriorityScore(item) >= 70).length;
   const needsSdrCount = opportunities.filter((item) => getQualificationBucket(item) === "needs_sdr").length;
 
@@ -125,7 +129,7 @@ export function OpportunitiesView() {
       <PageHeader
         eyebrow="Pipeline"
         title="Opportunities"
-        subtitle="Work the 311, flood, fire, outage, weather, and permit opportunities that can become real jobs after verification."
+        subtitle="Work the 311, flood, fire, outage, weather, mold, biohazard, and permit opportunities that can become real jobs after verification."
         actions={
           <>
             <Link href="/dashboard/scanner" className={buttonStyles({ size: "sm", variant: "secondary" })}>
@@ -141,7 +145,7 @@ export function OpportunitiesView() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Active opportunities" value={String(opportunities.length)} icon={<Target className="h-4 w-4" />} tone="brand" />
         <StatTile label="High urgency" value={String(highUrgencyCount)} icon={<TriangleAlert className="h-4 w-4" />} tone="warning" />
-        <StatTile label="Contact ready" value={String(contactReadyCount)} icon={<ShieldCheck className="h-4 w-4" />} tone="success" />
+        <StatTile label="Verified contact ready" value={String(contactReadyCount)} icon={<ShieldCheck className="h-4 w-4" />} tone="success" />
         <StatTile label="Needs SDR" value={String(needsSdrCount)} icon={<Radio className="h-4 w-4" />} />
       </section>
 
@@ -263,6 +267,9 @@ export function OpportunitiesView() {
                               </Badge>
                             ))}
                           </div>
+                          <p className="text-[11px] text-semantic-muted">
+                            Provenance: {formatProvenance(item.source_provenance)}
+                          </p>
                           <p className="text-[11px] uppercase tracking-[0.12em] text-semantic-muted">
                             {formatRelativeTime(item.created_at)}
                             {item.signal_count ? ` · ${item.signal_count} corroborating signals` : ""}
@@ -340,6 +347,7 @@ function getQualificationBucket(item: Opportunity) {
 }
 
 function qualificationLabel(item: Opportunity) {
+  if (item.dispatch_ready) return "Verified contact ready";
   if (item.qualification_status === "qualified_contactable") return "Qualified contactable";
   if (item.qualification_status === "queued_for_sdr") return "Queued for SDR";
   if (item.qualification_status === "rejected") return "Rejected";
@@ -347,6 +355,7 @@ function qualificationLabel(item: Opportunity) {
 }
 
 function qualificationBadgeVariant(item: Opportunity): "default" | "success" | "warning" | "danger" | "brand" {
+  if (item.dispatch_ready) return "success";
   if (item.qualification_status === "qualified_contactable") return "success";
   if (item.qualification_status === "queued_for_sdr") return "warning";
   if (item.qualification_status === "rejected") return "danger";
@@ -392,12 +401,21 @@ function scannerOpportunityHref(item: Opportunity, queue?: "sdr") {
 }
 
 export function getPrimaryAction(item: Opportunity) {
-  if (item.qualification_status === "qualified_contactable") {
+  if (item.dispatch_ready) {
     return {
       href: `/dashboard/outbound?opportunity=${encodeURIComponent(item.id)}`,
       label: "Launch buyer flow",
       variant: "primary" as const,
       note: "This opportunity has verified contact and can move into outbound or verified lead creation."
+    };
+  }
+
+  if (item.qualification_status === "qualified_contactable") {
+    return {
+      href: scannerOpportunityHref(item, "sdr"),
+      label: "Complete verification",
+      variant: "secondary" as const,
+      note: "Qualified opportunities still need verified phone or email before they can become a lead or enter buyer flow."
     };
   }
 
@@ -456,4 +474,10 @@ function getSourceBadges(item: Opportunity) {
       .trim()
       .replace(/\b\w/g, (char) => char.toUpperCase())
   );
+}
+
+function formatProvenance(value: string | null | undefined) {
+  const text = String(value || "").trim();
+  if (!text) return "Unknown source";
+  return text.replace(/^https?:\/\//i, "");
 }

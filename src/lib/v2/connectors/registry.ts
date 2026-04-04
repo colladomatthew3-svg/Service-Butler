@@ -8,6 +8,7 @@ import { open311Connector } from "@/lib/v2/connectors/open311";
 import { openFemaConnector } from "@/lib/v2/connectors/openfema";
 import { censusConnector } from "@/lib/v2/connectors/census";
 import { overpassConnector } from "@/lib/v2/connectors/overpass";
+import { utilityOutageConnector } from "@/lib/v2/connectors/utility";
 
 const CONNECTORS: Record<string, ConnectorAdapter> = {
   [weatherConnector.key]: weatherConnector,
@@ -18,7 +19,8 @@ const CONNECTORS: Record<string, ConnectorAdapter> = {
   [open311Connector.key]: open311Connector,
   [openFemaConnector.key]: openFemaConnector,
   [censusConnector.key]: censusConnector,
-  [overpassConnector.key]: overpassConnector
+  [overpassConnector.key]: overpassConnector,
+  [utilityOutageConnector.key]: utilityOutageConnector
 };
 
 const CONNECTOR_ALIASES: Record<string, string> = {

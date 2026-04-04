@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-04-03T02:20:28.302Z",
+  "proof_timestamp": "2026-04-03T02-20-24-694Z",
+  "proof_dir": "output/proof/2026-04-03T02-20-24-694Z",
+  "status": "fail",
+  "steps": [
+    {
+      "name": "operator-healthcheck",
+      "command": "npm run operator-healthcheck",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-04-03T02:20:24.698Z",
+      "finished_at": "2026-04-03T02:20:26.115Z",
+      "duration_ms": 1417,
+      "stdout_path": "operator-healthcheck/stdout.log",
+      "stderr_path": "operator-healthcheck/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-healthcheck\n> mkdir -p .tmp/operator && npx tsc scripts/operator-healthcheck.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/operator-healthcheck.js\nService Butler Operator Healthcheck\n[PASS] supabase_env: Supabase URL + service role key present.\n[PASS] supabase_local_runtime: Local Supabase endpoint is reachable at 127.0.0.1:54321.\n[PASS] webhook_secret: WEBHOOK_SHARED_SECRET configured.\n[PASS] supabase_connectivity: Supabase connectivity OK.\n[PASS] table:v2_tenants: Table reachable.\n[PASS] table:v2_tenant_memberships: Table reachable.\n[PASS] table:v2_territories: Table reachable.\n[PASS] table:v2_data_sources: Table reachable.\n[PASS] table:v2_connector_runs: Table reachable.",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "validate-integrations",
+      "command": "npm run validate-integrations",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-04-03T02:20:26.117Z",
+      "finished_at": "2026-04-03T02:20:27.749Z",
+      "duration_ms": 1632,
+      "stdout_path": "validate-integrations/stdout.log",
+      "stderr_path": "validate-integrations/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 validate-integrations\n> mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js\nIntegration Validation Report\n[WARN] twilio: Twilio explicitly disabled.\n[WARN] hubspot: HubSpot explicitly disabled.\n[PASS] lead_opportunity_link: Lead is linked to opportunity. crm_sync_status=not_synced",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "operator-test",
+      "command": "npm run operator-test",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-04-03T02:20:27.750Z",
+      "finished_at": "2026-04-03T02:20:28.089Z",
+      "duration_ms": 339,
+      "stdout_path": "operator-test/stdout.log",
+      "stderr_path": "operator-test/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-test\n> node scripts/operator-test.mjs\n[operator-test] mode=live-partially-configured\n[operator-test] config-note: PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)\n[operator-test] config-note: Inngest keys missing\n[operator-test] connector-input-mode=live_provider\nconnector run\nopportunity created\nopportunity scored\nterritory matched\nassignment created\noutreach sent",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "qualify-real-leads",
+      "command": "node scripts/qualify-real-leads.mjs",
+      "status": "fail",
+      "exit_code": 1,
+      "started_at": "2026-04-03T02:20:28.090Z",
+      "finished_at": "2026-04-03T02:20:28.219Z",
+      "duration_ms": 129,
+      "stdout_path": "qualify-real-leads/stdout.log",
+      "stderr_path": "qualify-real-leads/stderr.log",
+      "stdout_excerpt": "real-lead-qualification=FAIL\ntenant_id=8e479ab5-58a2-4fef-ad9a-4d88b6f05d45\ntenant_name=NY Restoration Group\nlookback_days=14\nlive_provider_source_events=7\nlive_derived_source_events=0\nsynthetic_source_events=9\nunknown_source_events=0\nlive_provider_opportunities=7\nlive_provider_contactable_leads=6\nlive_provider_verified_leads=0\nlive_provider_review_leads=0",
+      "stderr_excerpt": "",
+      "signal": null
+    }
+  ],
+  "production_readiness": {
+    "name": "production-readiness",
+    "command": "npm run check:production",
+    "status": "fail",
+    "exit_code": 127,
+    "started_at": "2026-04-03T02:20:28.221Z",
+    "finished_at": "2026-04-03T02:20:28.302Z",
+    "duration_ms": 81,
+    "stdout_path": "production-readiness.stdout.log",
+    "stderr_path": "production-readiness.stderr.log",
+    "stdout_excerpt": "> service-butler-ai@0.1.0 check:production\n> bash scripts/production-readiness.sh",
+    "stderr_excerpt": ".env.local: line 43: Restoration: command not found",
+    "signal": null
+  }
+}

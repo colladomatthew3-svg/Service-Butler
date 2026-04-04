@@ -4,8 +4,9 @@ import { buttonStyles } from "@/components/ui/button";
 
 const navLinks = [
   { href: "/", label: "Home" },
-  { href: "/#features", label: "Features" },
-  { href: "/#pricing", label: "Pricing" },
+  { href: "/product", label: "Product" },
+  { href: "/solutions", label: "Solutions" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/blog", label: "Blog" },
   { href: "/login", label: "Login" }
 ] as const;

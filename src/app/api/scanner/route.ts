@@ -5,7 +5,7 @@ import {
   runScanner,
   opportunityToLeadPayload
 } from "@/lib/services/scanner";
-import { isDemoMode } from "@/lib/services/review-mode";
+import { isSyntheticScannerRecord } from "@/lib/services/scanner-truth";
 
 const CAMPAIGNS: CampaignMode[] = ["Storm Response", "Roofing", "Water Damage", "HVAC Emergency"];
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
             : "general";
 
   const scan = await runScanner({
-    mode: isDemoMode() ? "demo" : "live",
+    mode: "live",
     location,
     categories: [category],
     limit: 16,
@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
       ? "Storm Response"
       : "Roofing";
 
-  const leads = scan.opportunities.map((op) => {
+  const realOpportunities = scan.opportunities.filter((op) => !isSyntheticScannerRecord({ source: op.source, raw: op.raw }));
+  const leads = realOpportunities.map((op) => {
     const base = opportunityToLeadPayload(op);
     const urgency = String(base.requested_timeframe || "").toLowerCase().includes("asap")
       ? "high"
@@ -100,6 +101,10 @@ export async function POST(req: NextRequest) {
       ? "High weather pressure detected. Prioritize storm response and fast outbound callbacks."
       : "Conditions are stable. Focus on scheduled maintenance and high-intent prospects.",
     leads,
-    opportunities: scan.opportunities
+    opportunities: realOpportunities,
+    warnings:
+      scan.opportunities.length !== realOpportunities.length
+        ? ["Synthetic scanner candidates were removed. Only real public signals are shown."]
+        : undefined
   });
 }

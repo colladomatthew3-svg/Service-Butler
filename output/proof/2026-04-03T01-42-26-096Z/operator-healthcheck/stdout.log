@@ -1,0 +1,10 @@
+
+> service-butler-ai@0.1.0 operator-healthcheck
+> mkdir -p .tmp/operator && npx tsc scripts/operator-healthcheck.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/operator-healthcheck.js
+
+
+Service Butler Operator Healthcheck
+
+[PASS] supabase_env: Supabase URL + service role key present.
+[FAIL] supabase_local_runtime: NEXT_PUBLIC_SUPABASE_URL points to local Supabase (127.0.0.1:54321), but nothing is listening there.
+       remediation: Start Docker Desktop and run `npm run db:start`, or point the env at a hosted Supabase project before rerunning the healthcheck.

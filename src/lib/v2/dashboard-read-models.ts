@@ -41,6 +41,37 @@ function collectSourceTypes(explainability: Record<string, unknown>) {
   return [];
 }
 
+function sourceEventNormalized(sourceEvent: Record<string, unknown>) {
+  return asRecord(sourceEvent.normalized_payload);
+}
+
+function sourceConfigForEvent(sourceEvent: Record<string, unknown>, sourceById?: Map<string, Record<string, unknown>>) {
+  return sourceById?.get(asText(sourceEvent.source_id)) || {};
+}
+
+function sourceTypeForEvent(sourceEvent: Record<string, unknown>, sourceById?: Map<string, Record<string, unknown>>) {
+  const normalized = sourceEventNormalized(sourceEvent);
+  const sourceConfig = sourceConfigForEvent(sourceEvent, sourceById);
+  return asText(sourceEvent.source_type || normalized.source_type || normalized.connector_key || sourceConfig.source_type || sourceEvent.event_type);
+}
+
+function sourceNameForEvent(sourceEvent: Record<string, unknown>, sourceById?: Map<string, Record<string, unknown>>) {
+  const normalized = sourceEventNormalized(sourceEvent);
+  const sourceConfig = sourceConfigForEvent(sourceEvent, sourceById);
+  return asText(sourceEvent.source_name || normalized.source_name || normalized.provider || normalized.connector_name || sourceConfig.name || sourceTypeForEvent(sourceEvent, sourceById) || "unknown");
+}
+
+function sourceProvenanceForEvent(sourceEvent: Record<string, unknown>, sourceById?: Map<string, Record<string, unknown>>) {
+  const normalized = sourceEventNormalized(sourceEvent);
+  const sourceConfig = sourceConfigForEvent(sourceEvent, sourceById);
+  return asText(sourceEvent.source_provenance || normalized.source_provenance || normalized.provider || normalized.source_url || sourceConfig.provenance);
+}
+
+function sourceFreshnessForEvent(sourceEvent: Record<string, unknown>) {
+  const normalized = sourceEventNormalized(sourceEvent);
+  return toNumber(sourceEvent.data_freshness_score ?? normalized.data_freshness_score, 0);
+}
+
 function isDistressOpportunity(row: Record<string, unknown>) {
   const opportunityType = String(row.opportunity_type || "").toLowerCase();
   if (opportunityType.includes("distress")) return true;
@@ -92,11 +123,12 @@ function proofAuthenticityForOpportunity(input: {
   opportunity: Record<string, unknown>;
   sourceEvent: Record<string, unknown>;
   connectorRunMetadata?: Record<string, unknown>;
+  sourceById?: Map<string, Record<string, unknown>>;
 }) {
   return classifyProofAuthenticity({
-    sourceType: input.sourceEvent.source_type,
-    sourceName: input.sourceEvent.source_name,
-    sourceProvenance: input.sourceEvent.source_provenance,
+    sourceType: sourceTypeForEvent(input.sourceEvent, input.sourceById),
+    sourceName: sourceNameForEvent(input.sourceEvent, input.sourceById),
+    sourceProvenance: sourceProvenanceForEvent(input.sourceEvent, input.sourceById),
     normalizedPayload: asRecord(input.sourceEvent.normalized_payload),
     connectorRunMetadata: input.connectorRunMetadata
   });
@@ -106,6 +138,7 @@ function isBuyerProofEligibleOpportunity(input: {
   opportunity: Record<string, unknown>;
   sourceEvent: Record<string, unknown>;
   connectorRunMetadata?: Record<string, unknown>;
+  sourceById?: Map<string, Record<string, unknown>>;
 }) {
   const proofAuthenticity = proofAuthenticityForOpportunity(input);
   const qualification = getOpportunityQualificationSnapshot({
@@ -122,6 +155,7 @@ function buildCaptureProofSummary(input: {
   leads: Array<Record<string, unknown>>;
   jobs: Array<Record<string, unknown>>;
   connectorRunById: Map<string, Record<string, unknown>>;
+  sourceById?: Map<string, Record<string, unknown>>;
 }) {
   const leadsByOpportunity = new Map<string, Record<string, unknown>[]>();
   for (const lead of input.leads) {
@@ -160,9 +194,9 @@ function buildCaptureProofSummary(input: {
     const connectorRun = input.connectorRunById.get(asText(sourceEvent.connector_run_id));
     const connectorRunMetadata = asRecord(connectorRun?.metadata);
     const authenticity = classifyProofAuthenticity({
-      sourceType: sourceEvent.source_type,
-      sourceName: sourceEvent.source_name,
-      sourceProvenance: sourceEvent.source_provenance,
+      sourceType: sourceTypeForEvent(sourceEvent, input.sourceById),
+      sourceName: sourceNameForEvent(sourceEvent, input.sourceById),
+      sourceProvenance: sourceProvenanceForEvent(sourceEvent, input.sourceById),
       normalizedPayload: asRecord(sourceEvent.normalized_payload),
       connectorRunMetadata
     });
@@ -188,7 +222,8 @@ function buildCaptureProofSummary(input: {
       proofAuthenticityForOpportunity({
         opportunity,
         sourceEvent,
-        connectorRunMetadata: asRecord(connectorRun?.metadata)
+        connectorRunMetadata: asRecord(connectorRun?.metadata),
+        sourceById: input.sourceById
       }) || "unknown";
     opportunityAuthenticity.set(asText(opportunity.id), authenticity);
 
@@ -505,7 +540,7 @@ export async function getFranchiseDashboardReadModel({
     supabase
       .from("v2_source_events")
       .select(
-        "id,source_id,connector_run_id,source_name,source_type,source_provenance,compliance_status,data_freshness_score,source_reliability_score,connector_version,normalized_payload,event_category,service_line_candidates,severity_hint,urgency_hint,event_timestamp,ingested_at"
+        "id,source_id,connector_run_id,compliance_status,source_reliability_score,normalized_payload,event_type,occurred_at,ingested_at"
       )
       .eq("tenant_id", franchiseTenantId)
       .order("ingested_at", { ascending: false })
@@ -522,6 +557,7 @@ export async function getFranchiseDashboardReadModel({
   const connectorRows = (connectorRuns || []) as Array<Record<string, unknown>>;
   const sourceEventRows = (sourceEvents || []) as Array<Record<string, unknown>>;
   const connectorRunById = new Map(connectorRows.map((row) => [asText(row.id), row]));
+  const sourceById = new Map(sourceRows.map((row) => [asText(row.id), row]));
 
   const hotOpportunities = oppRows.filter((row) => toNumber(row.urgency_score) >= 70 || toNumber(row.job_likelihood_score) >= 70).length;
   const multiSignalCount = oppRows.filter((row) => Boolean(asRecord(row.explainability_json).multi_signal)).length;
@@ -740,7 +776,7 @@ export async function getFranchiseDashboardReadModel({
 
   for (const sourceEvent of sourceEventRows) {
     const key =
-      [sourceEvent.source_id, sourceEvent.source_name, sourceEvent.source_type, sourceEvent.source_provenance]
+      [sourceEvent.source_id, sourceNameForEvent(sourceEvent, sourceById), sourceTypeForEvent(sourceEvent, sourceById), sourceProvenanceForEvent(sourceEvent, sourceById)]
         .map((value) => asText(value))
         .filter(Boolean)
         .join(" | ") || "unknown-source";
@@ -749,10 +785,10 @@ export async function getFranchiseDashboardReadModel({
       sourceStats.set(key, {
         key,
         source_id: asText(sourceEvent.source_id),
-        source_type: asText(sourceEvent.source_type),
-        source_name: asText(sourceEvent.source_name),
-        source_provenance: asText(sourceEvent.source_provenance),
-        source_category: sourceCategoryFromSignal(asText(sourceEvent.source_type)),
+        source_type: sourceTypeForEvent(sourceEvent, sourceById),
+        source_name: sourceNameForEvent(sourceEvent, sourceById),
+        source_provenance: sourceProvenanceForEvent(sourceEvent, sourceById),
+        source_category: sourceCategoryFromSignal(sourceTypeForEvent(sourceEvent, sourceById)),
         authenticity: "unknown",
         compliance_statuses: new Set<string>(),
         approved_event_count: 0,
@@ -774,9 +810,9 @@ export async function getFranchiseDashboardReadModel({
 
     const stats = sourceStats.get(key)!;
     const authenticity = classifyProofAuthenticity({
-      sourceType: sourceEvent.source_type,
-      sourceName: sourceEvent.source_name,
-      sourceProvenance: sourceEvent.source_provenance,
+      sourceType: sourceTypeForEvent(sourceEvent, sourceById),
+      sourceName: sourceNameForEvent(sourceEvent, sourceById),
+      sourceProvenance: sourceProvenanceForEvent(sourceEvent, sourceById),
       normalizedPayload: asRecord(sourceEvent.normalized_payload),
       connectorRunMetadata: asRecord(connectorRunById.get(asText(sourceEvent.connector_run_id))?.metadata)
     });
@@ -787,7 +823,7 @@ export async function getFranchiseDashboardReadModel({
     const compliance = asText(sourceEvent.compliance_status || "unknown");
     stats.compliance_statuses.add(compliance);
     if (compliance === "approved") stats.approved_event_count += 1;
-    stats.freshness_scores.push(toNumber(sourceEvent.data_freshness_score, 0));
+    stats.freshness_scores.push(sourceFreshnessForEvent(sourceEvent));
     stats.reliability_scores.push(toNumber(sourceEvent.source_reliability_score, 0));
 
     const opportunitiesForSource = opportunitiesBySourceEvent.get(asText(sourceEvent.id)) || [];
@@ -795,7 +831,8 @@ export async function getFranchiseDashboardReadModel({
       isBuyerProofEligibleOpportunity({
         opportunity,
         sourceEvent,
-        connectorRunMetadata: asRecord(connectorRunById.get(asText(sourceEvent.connector_run_id))?.metadata)
+        connectorRunMetadata: asRecord(connectorRunById.get(asText(sourceEvent.connector_run_id))?.metadata),
+        sourceById
       })
     );
     stats.opportunity_count += eligibleOpportunitiesForSource.length;
@@ -868,7 +905,8 @@ export async function getFranchiseDashboardReadModel({
     return isBuyerProofEligibleOpportunity({
       opportunity,
       sourceEvent,
-      connectorRunMetadata: asRecord(connectorRun?.metadata)
+      connectorRunMetadata: asRecord(connectorRun?.metadata),
+      sourceById
     });
   });
   const buyerProofLeadRows = leadRows.filter((lead) => {
@@ -878,7 +916,8 @@ export async function getFranchiseDashboardReadModel({
     return isBuyerProofEligibleOpportunity({
       opportunity,
       sourceEvent,
-      connectorRunMetadata: asRecord(connectorRun?.metadata)
+      connectorRunMetadata: asRecord(connectorRun?.metadata),
+      sourceById
     });
   });
 
@@ -891,7 +930,8 @@ export async function getFranchiseDashboardReadModel({
       const authenticity = proofAuthenticityForOpportunity({
         opportunity,
         sourceEvent,
-        connectorRunMetadata: asRecord(connectorRun?.metadata)
+        connectorRunMetadata: asRecord(connectorRun?.metadata),
+        sourceById
       });
       const leadJobs = jobsByLead.get(asText(lead.id)) || [];
       const leadOutreach = outreachByLead.get(asText(lead.id)) || [];
@@ -901,9 +941,9 @@ export async function getFranchiseDashboardReadModel({
         lead_id: asText(lead.id),
         contact_name: asText(lead.contact_name || "Unknown"),
         contact,
-        source_name: asText(sourceEvent.source_name || "unknown"),
-        source_type: asText(sourceEvent.source_type || "unknown"),
-        source_provenance: asText(sourceEvent.source_provenance || ""),
+        source_name: sourceNameForEvent(sourceEvent, sourceById),
+        source_type: sourceTypeForEvent(sourceEvent, sourceById) || "unknown",
+        source_provenance: sourceProvenanceForEvent(sourceEvent, sourceById),
         proof_authenticity: authenticity,
         opportunity_title: asText(opportunity.title || ""),
         service_line: asText(opportunity.service_line || "general"),
@@ -914,7 +954,9 @@ export async function getFranchiseDashboardReadModel({
         proof_summary: [
           snapshot.phone ? `phone ${snapshot.phone}` : "",
           snapshot.email ? `email ${snapshot.email}` : "",
-          asText(sourceEvent.source_name || sourceEvent.source_type || "") ? `source ${asText(sourceEvent.source_name || sourceEvent.source_type || "")}` : "",
+          asText(sourceNameForEvent(sourceEvent, sourceById) || sourceTypeForEvent(sourceEvent, sourceById) || "")
+            ? `source ${asText(sourceNameForEvent(sourceEvent, sourceById) || sourceTypeForEvent(sourceEvent, sourceById) || "")}`
+            : "",
           authenticity !== "unknown" ? `proof ${authenticity.replace(/_/g, " ")}` : "",
           asText(opportunity.service_line || "") ? `service line ${asText(opportunity.service_line || "")}` : "",
           snapshot.reasons.slice(0, 3).join(", ")

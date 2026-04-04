@@ -1,0 +1,78 @@
+{
+  "generated_at": "2026-04-03T02:49:56.950Z",
+  "proof_timestamp": "2026-04-03T02-49-52-989Z",
+  "proof_dir": "output/proof/2026-04-03T02-49-52-989Z",
+  "status": "pass",
+  "steps": [
+    {
+      "name": "operator-healthcheck",
+      "command": "npm run operator-healthcheck",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-04-03T02:49:52.990Z",
+      "finished_at": "2026-04-03T02:49:55.380Z",
+      "duration_ms": 2390,
+      "stdout_path": "operator-healthcheck/stdout.log",
+      "stderr_path": "operator-healthcheck/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-healthcheck\n> mkdir -p .tmp/operator && npx tsc scripts/operator-healthcheck.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/operator-healthcheck.js\nService Butler Operator Healthcheck\n[PASS] supabase_env: Supabase URL + service role key present.\n[PASS] supabase_local_runtime: Local Supabase endpoint is reachable at 127.0.0.1:54321.\n[PASS] webhook_secret: WEBHOOK_SHARED_SECRET configured.\n[PASS] supabase_connectivity: Supabase connectivity OK.\n[PASS] table:v2_tenants: Table reachable.\n[PASS] table:v2_tenant_memberships: Table reachable.\n[PASS] table:v2_territories: Table reachable.\n[PASS] table:v2_data_sources: Table reachable.\n[PASS] table:v2_connector_runs: Table reachable.",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "validate-integrations",
+      "command": "npm run validate-integrations",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-04-03T02:49:55.383Z",
+      "finished_at": "2026-04-03T02:49:56.361Z",
+      "duration_ms": 978,
+      "stdout_path": "validate-integrations/stdout.log",
+      "stderr_path": "validate-integrations/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 validate-integrations\n> mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js\nIntegration Validation Report\n[WARN] twilio: Twilio explicitly disabled.\n[WARN] hubspot: HubSpot explicitly disabled.\n[PASS] lead_opportunity_link: Lead is linked to opportunity. crm_sync_status=not_synced",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "operator-test",
+      "command": "npm run operator-test",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-04-03T02:49:56.361Z",
+      "finished_at": "2026-04-03T02:49:56.586Z",
+      "duration_ms": 225,
+      "stdout_path": "operator-test/stdout.log",
+      "stderr_path": "operator-test/stderr.log",
+      "stdout_excerpt": "> service-butler-ai@0.1.0 operator-test\n> node scripts/operator-test.mjs\n[operator-test] mode=live-partially-configured\n[operator-test] config-note: PERMITS_PROVIDER_URL not set (connector will run in synthetic mode)\n[operator-test] config-note: Inngest keys missing\n[operator-test] connector-input-mode=live_provider\nconnector run\nopportunity created\nopportunity scored\nterritory matched\nassignment created\noutreach sent",
+      "stderr_excerpt": "",
+      "signal": null
+    },
+    {
+      "name": "qualify-real-leads",
+      "command": "node scripts/qualify-real-leads.mjs",
+      "status": "pass",
+      "exit_code": 0,
+      "started_at": "2026-04-03T02:49:56.586Z",
+      "finished_at": "2026-04-03T02:49:56.691Z",
+      "duration_ms": 105,
+      "stdout_path": "qualify-real-leads/stdout.log",
+      "stderr_path": "qualify-real-leads/stderr.log",
+      "stdout_excerpt": "real-lead-qualification=WARN\ntenant_id=8e479ab5-58a2-4fef-ad9a-4d88b6f05d45\ntenant_name=\"NY Restoration Group\"\nlookback_days=14\nlive_provider_source_events=7\nlive_derived_source_events=0\nsynthetic_source_events=9\nunknown_source_events=0\nlive_provider_opportunities=7\nlive_provider_contactable_leads=7\nlive_provider_verified_leads=1\nlive_provider_review_leads=0",
+      "stderr_excerpt": "",
+      "signal": null
+    }
+  ],
+  "production_readiness": {
+    "name": "production-readiness",
+    "command": "npm run check:production",
+    "status": "pass",
+    "exit_code": 0,
+    "started_at": "2026-04-03T02:49:56.693Z",
+    "finished_at": "2026-04-03T02:49:56.949Z",
+    "duration_ms": 256,
+    "stdout_path": "production-readiness.stdout.log",
+    "stderr_path": "production-readiness.stderr.log",
+    "stdout_excerpt": "> service-butler-ai@0.1.0 check:production\n> bash scripts/production-readiness.sh\nService Butler production readiness\nChecked at 2026-04-03T02:49:56Z\nPASS  NEXT_PUBLIC_APP_URL looks valid\nPASS  NEXT_PUBLIC_SUPABASE_URL is set\nPASS  NEXT_PUBLIC_SUPABASE_ANON_KEY is set\nPASS  SUPABASE_SERVICE_ROLE_KEY is set\nPASS  WEBHOOK_SHARED_SECRET is set\nPASS  V2 rollout flags are enabled (reads + writes)\nWARN  DEMO_MODE is enabled in development\nWARN  BILLING_MODE is disabled",
+    "stderr_excerpt": "",
+    "signal": null
+  }
+}

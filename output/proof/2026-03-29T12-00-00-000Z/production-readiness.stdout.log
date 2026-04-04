@@ -3,7 +3,7 @@
 > bash scripts/production-readiness.sh
 
 Service Butler production readiness
-Checked at 2026-03-29T18:15:46Z
+Checked at 2026-04-03T03:26:51Z
 
 PASS  NEXT_PUBLIC_APP_URL looks valid
 PASS  NEXT_PUBLIC_SUPABASE_URL is set
@@ -20,6 +20,13 @@ PASS  Twilio is explicitly disabled for live-safe production
 PASS  HubSpot is explicitly disabled for live-safe production
 WARN  Smartlead is incomplete: missing SMARTLEAD_API_KEY
 WARN  Inngest is incomplete: missing INNGEST_EVENT_KEY INNGEST_SIGNING_KEY
-WARN  Tenant-scoped readiness checks skipped because OPERATOR_TENANT_ID or OPERATOR_TENANT_NAME is not set.
+PASS  Active territories: 2.
+PASS  Service area is configured on active territories.
+PASS  Active data sources: 9.
+PASS  Live-safe data sources: 9.
+PASS  No active data sources are blocked by terms/compliance.
+PASS  No active data sources are using sample-backed configuration.
+PASS  Recent successful connector runs (7d): 16.
+PASS  Recent source events (7d): 16.
 
-Summary: 8 pass, 8 warn, 0 fail
+Summary: 16 pass, 7 warn, 0 fail

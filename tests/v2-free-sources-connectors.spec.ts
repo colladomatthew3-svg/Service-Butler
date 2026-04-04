@@ -7,6 +7,7 @@ import { overpassConnector } from "../src/lib/v2/connectors/overpass";
 import { incidentConnector } from "../src/lib/v2/connectors/incidents";
 import { socialIntentConnector } from "../src/lib/v2/connectors/social";
 import { permitsConnector } from "../src/lib/v2/connectors/permits";
+import { utilityOutageConnector } from "../src/lib/v2/connectors/utility";
 import { listConnectors } from "../src/lib/v2/connectors/registry";
 import { inferConnectorKey } from "../src/lib/v2/connectors/source-type-map";
 
@@ -18,11 +19,14 @@ test("registry includes all free-source connector keys", () => {
   expect(keys).toContain("disaster.openfema");
   expect(keys).toContain("enrichment.census");
   expect(keys).toContain("property.overpass");
+  expect(keys).toContain("utility.outages");
 });
 
 test("source-type inference resolves social signals to the public distress connector", () => {
   expect(inferConnectorKey("social")).toBe("social.intent.public");
   expect(inferConnectorKey("reddit_distress")).toBe("social.intent.public");
+  expect(inferConnectorKey("utility")).toBe("utility.outages");
+  expect(inferConnectorKey("outage_feed")).toBe("utility.outages");
 });
 
 test("USGS water connector creates flood intelligence events", async () => {
@@ -198,4 +202,36 @@ test("sample-backed fallback connectors fail health until a real live source is 
   await expect(incidentConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
   await expect(socialIntentConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
   await expect(permitsConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+  await expect(utilityOutageConnector.healthcheck(input)).resolves.toMatchObject({ ok: false });
+});
+
+test("utility outage connector normalizes search-style outage records", async () => {
+  const [event] = await utilityOutageConnector.normalize(
+    [
+      {
+        id: "utility-1",
+        title: "Power outage after transformer fire",
+        description: "Thousands without power after transformer fire in Nassau County.",
+        occurred_at: "2026-04-03T10:00:00.000Z",
+        source_name: "Utility Outage Search",
+        source_provenance: "https://example.com/outage-story",
+        city: "Hempstead",
+        state: "NY",
+        postal_code: "11550"
+      }
+    ],
+    {
+      tenantId: "tenant-1",
+      sourceId: "source-utility",
+      sourceType: "utility",
+      config: { terms_status: "approved" }
+    }
+  );
+
+  expect(event?.eventCategory).toBe("power_outage");
+  expect(event?.serviceLineCandidates).toContain("electrical");
+  expect(utilityOutageConnector.classify(event!)).toEqual({
+    opportunityType: "power_outage_signal",
+    serviceLine: "electrical"
+  });
 });

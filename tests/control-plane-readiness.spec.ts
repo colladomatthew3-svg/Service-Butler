@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { buildDataSourceReadinessState, buildEnvironmentReadinessState } from "@/lib/control-plane/readiness";
+import { buildDemoDataSourceSummaries } from "@/lib/control-plane/data-sources";
+import { buildDataSourceReadinessState, buildEnvironmentReadinessState, buyerReadinessNoteForSource } from "@/lib/control-plane/readiness";
 import type { DataSourceSummary } from "@/lib/control-plane/types";
 
 function makeSource(overrides: Partial<DataSourceSummary> = {}): DataSourceSummary {
@@ -100,4 +101,41 @@ test("data source readiness blocks page scraping when Firecrawl credentials are 
       process.env.FIRECRAWL_API_KEY = previousKey;
     }
   }
+});
+
+test("demo fallback data sources fail closed instead of simulating live capture", () => {
+  const sources = buildDemoDataSourceSummaries();
+
+  expect(sources.length).toBeGreaterThan(0);
+  expect(sources.every((source) => source.configured === false)).toBeTruthy();
+  expect(sources.every((source) => source.countsAsRealCapture === false)).toBeTruthy();
+  expect(sources.every((source) => source.captureStatus === "simulated")).toBeTruthy();
+});
+
+test("sample-backed sources are excluded from operator and buyer truth paths", () => {
+  const source = makeSource({
+    name: "Open311 Sample Source",
+    runtimeMode: "simulated",
+    countsAsRealCapture: false,
+    captureStatus: "simulated",
+    config: {
+      sample_records: [{ id: "sample-1", complaint_type: "Flooding" }]
+    }
+  });
+
+  const readiness = buildDataSourceReadinessState(source);
+  const buyerNote = buyerReadinessNoteForSource({
+    name: source.name,
+    configured: source.configured,
+    status: source.status,
+    runtimeMode: source.runtimeMode,
+    termsStatus: source.termsStatus,
+    complianceStatus: source.complianceStatus,
+    config: source.config
+  });
+
+  expect(readiness.mode).toBe("blocked");
+  expect(readiness.blockingIssues.map((issue) => issue.code)).toContain("simulated");
+  expect(readiness.recommendedActions).toContain("Remove sample_records before using this source for live capture or buyer-proof reporting.");
+  expect(buyerNote).toContain("excluded from live capture and buyer-proof metrics");
 });

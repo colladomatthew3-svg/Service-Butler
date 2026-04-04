@@ -97,6 +97,42 @@ Healthcheck must report pass for:
 
 ## 4) Configure connector sources for live ingestion
 
+Before changing source settings, read the current source-depth and buyer-proof posture here:
+
+- [NYC + Long Island Connector Eligibility Matrix](./NYC_LONG_ISLAND_CONNECTOR_MATRIX.md)
+
+Current seeded operator truth:
+
+- NYC is strongest on free public data through NOAA, Open311, USGS, OpenFEMA, Overpass, and Census.
+- Long Island is strongest on NOAA, USGS, OpenFEMA, Overpass, and Census.
+- Long Island Open311 is not legitimately covered by the current seed and should not be sold as Long Island municipal coverage.
+- Public incidents and social/distress are supported in code, but the seed does not configure real Firecrawl page URLs, feeds, or Reddit search terms.
+- Permits require a real provider and are not live just because the source row exists.
+- Mold and biohazard sourcing is currently indirect: strongest through NYC Open311 plus approved public incident pages, not a dedicated homeowner-contact provider.
+
+### Tier 1 / Tier 2 Operator Matrix
+
+| Tier | Source families | Operator role | Qualification path | Buyer-proof posture | Fail-closed rule |
+| --- | --- | --- | --- | --- | --- |
+| Tier 1 | NOAA weather, NYC Open311, USGS water, OpenFEMA, approved public incidents via Firecrawl or feed | Primary restoration signal intake for flood, fire, outage, weather, and municipal demand | `sdr` by default for public-signal opportunities | Source events and opportunities can count only when live, approved, sample-free, and healthy. Lead and job proof still requires verified contact. | If runtime mode is simulated, partial, blocked, missing terms, or missing Firecrawl page config, keep the source blocked or research-only and do not count it in operator throughput or buyer proof. |
+| Tier 2 | Overpass, Census, social or public distress, permits | Supplemental context, enrichment, or provider-dependent signal depth | `sdr` | Context and enrichment may support scoring and prioritization. They do not become buyer-proof lead volume without verified contact, and permits are not live until a real provider exists. | If the source is enrichment-only, provider-missing, or unconfigured, do not present it as lead-ready or live-capturing on operator routes. |
+
+### Fail-Closed Operator Semantics
+
+- No synthetic or demo rows on operator routes in live mode.
+- No public-signal opportunity becomes a lead until verified phone or email plus qualification provenance exists.
+- Sources missing terms approval, provider config, page URLs, or required credentials must remain visibly blocked or partial.
+- Simulated script records can be useful for local validation, but they are never eligible for buyer proof and must not be used to claim pilot readiness.
+
+### Mold / Biohazard Classification-First Truth
+
+- Mold and biohazard are classifications, not dedicated connector families with their own free public homeowner-contact source.
+- The strongest real public classification paths are:
+  - NYC Open311 complaints such as mold, indoor air quality, plumbing, sewage, flooding, and related municipal categories
+  - approved public incident pages or public distress pages mentioning mold, sewage backup, smoke damage, or similar remediation conditions
+  - provider-backed permits only if a real permit source exposes those records
+- Do not claim direct mold or biohazard homeowner lead capture from free public data alone.
+
 Minimum required for permits live path:
 
 ```bash
@@ -123,7 +159,7 @@ export OVERPASS_ENDPOINT="https://overpass-api.de/api/interpreter"
 export OVERPASS_QUERY=""
 ```
 
-If provider endpoint is not available, operator test remains runnable in simulated connector mode while still writing real DB records.
+If provider endpoint is not available, operator test remains runnable in simulated connector mode for local validation, but those simulated rows do not count as live capture, operator throughput, or buyer-proof evidence.
 
 Recommended source config for the high-value intelligence categories:
 

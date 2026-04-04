@@ -56,12 +56,6 @@ type RawSourceEventRow = {
   ingested_at?: string | null;
 };
 
-type DemoBundle = {
-  sourceRows: RawSourceRow[];
-  runRows: RawRunRow[];
-  eventRows: RawSourceEventRow[];
-};
-
 function envTrue(name: string) {
   const value = String(process.env[name] || "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "on" || value === "yes";
@@ -195,6 +189,15 @@ export function computeRuntimeMode(sourceType: string, config: Record<string, un
     return termsStatus === "approved" ? "fully-live" : "live-partial";
   }
 
+  if (normalizedType.includes("utility") || normalizedType.includes("outage")) {
+    const hasSearchTerms =
+      (Array.isArray(config.search_terms) && config.search_terms.some((value) => String(value || "").trim().length > 0)) ||
+      Boolean(String(config.search_query || config.query || "").trim());
+    if (!hasSearchTerms) return "simulated";
+    if (!hasFirecrawlCredential(config)) return "live-partial";
+    return termsStatus === "approved" ? "fully-live" : "live-partial";
+  }
+
   if (normalizedType.includes("incident")) {
     const citizenRestricted = envTrue("SB_ENABLE_CITIZEN_CONNECTOR") === false && String(config.source_provenance || "").toLowerCase().includes("citizen");
     if (citizenRestricted) return "simulated";
@@ -289,241 +292,11 @@ function configuredSummaryFromCatalog(catalogKey: string): DataSourceSummary {
   };
 }
 
-function buildDemoBundle(): DemoBundle {
-  const now = Date.now();
-
-  return {
-    sourceRows: [
-      {
-        id: "demo-weather",
-        source_type: "weather",
-        name: "NOAA Weather Alerts",
-        status: "active",
-        terms_status: "approved",
-        config_encrypted: {
-          latitude: 40.7812,
-          longitude: -73.2462,
-          city: "Brentwood",
-          state: "NY",
-          postal_code: "11717"
-        },
-        reliability_score: 92,
-        freshness_timestamp: new Date(now - 1000 * 60 * 12).toISOString(),
-        provenance: "api.weather.gov"
-      },
-      {
-        id: "demo-permits",
-        source_type: "permits",
-        name: "Building Permits",
-        status: "active",
-        terms_status: "pending_review",
-        config_encrypted: {
-          provider_url: "https://permits.example.com/feed",
-          provider_token: "[redacted]"
-        },
-        reliability_score: 78,
-        freshness_timestamp: new Date(now - 1000 * 60 * 34).toISOString(),
-        provenance: "permits.provider"
-      },
-      {
-        id: "demo-social",
-        source_type: "social",
-        name: "Consumer Distress Signals",
-        status: "paused",
-        terms_status: "pending_review",
-        config_encrypted: {
-          source_name: "Public Distress Signals",
-          platform: "reddit",
-          search_terms: ["flooded basement", "pipe burst"],
-          subreddits: ["homeowners", "plumbing"],
-          sample_records: [{ channel: "reddit", market: "Long Island" }]
-        },
-        reliability_score: 58,
-        freshness_timestamp: new Date(now - 1000 * 60 * 180).toISOString(),
-        provenance: "reddit.com/search.json"
-      },
-      {
-        id: "demo-incidents",
-        source_type: "incident",
-        name: "Public Incident Feed",
-        status: "active",
-        terms_status: "restricted",
-        config_encrypted: {
-          source_name: "Public Incident Feed",
-          sample_records: [{ type: "fire", market: "Suffolk County" }]
-        },
-        reliability_score: 67,
-        freshness_timestamp: new Date(now - 1000 * 60 * 48).toISOString(),
-        provenance: "public.incident.feed"
-      },
-      {
-        id: "demo-water",
-        source_type: "usgs_water",
-        name: "USGS Water Data",
-        status: "active",
-        terms_status: "approved",
-        config_encrypted: {
-          site_codes: "01358000,01371500"
-        },
-        reliability_score: 84,
-        freshness_timestamp: new Date(now - 1000 * 60 * 41).toISOString(),
-        provenance: "api.waterdata.usgs.gov"
-      },
-      {
-        id: "demo-open311",
-        source_type: "open311",
-        name: "Open311 Service Requests",
-        status: "active",
-        terms_status: "approved",
-        config_encrypted: {
-          endpoint: "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=100"
-        },
-        reliability_score: 74,
-        freshness_timestamp: new Date(now - 1000 * 60 * 95).toISOString(),
-        provenance: "open311"
-      },
-      {
-        id: "demo-openfema",
-        source_type: "openfema",
-        name: "OpenFEMA Disasters",
-        status: "active",
-        terms_status: "approved",
-        config_encrypted: {},
-        reliability_score: 81,
-        freshness_timestamp: new Date(now - 1000 * 60 * 80).toISOString(),
-        provenance: "fema.open.gov"
-      },
-      {
-        id: "demo-census",
-        source_type: "census",
-        name: "Census Market Enrichment",
-        status: "active",
-        terms_status: "approved",
-        config_encrypted: {
-          state: "36"
-        },
-        reliability_score: 73,
-        freshness_timestamp: new Date(now - 1000 * 60 * 160).toISOString(),
-        provenance: "api.census.gov"
-      },
-      {
-        id: "demo-overpass",
-        source_type: "overpass",
-        name: "OpenStreetMap Overpass",
-        status: "active",
-        terms_status: "approved",
-        config_encrypted: {
-          endpoint: "https://overpass-api.de/api/interpreter",
-          query: "[out:json];node[shop](40.7,-73.4,40.9,-73.0);out;"
-        },
-        reliability_score: 69,
-        freshness_timestamp: new Date(now - 1000 * 60 * 140).toISOString(),
-        provenance: "overpass-api.de"
-      }
-    ],
-    runRows: [
-      {
-        id: "run-weather",
-        source_id: "demo-weather",
-        status: "completed",
-        completed_at: new Date(now - 1000 * 60 * 12).toISOString(),
-        records_seen: 124,
-        records_created: 18
-      },
-      {
-        id: "run-permits",
-        source_id: "demo-permits",
-        status: "partial",
-        completed_at: new Date(now - 1000 * 60 * 34).toISOString(),
-        records_seen: 76,
-        records_created: 9
-      },
-      {
-        id: "run-incidents",
-        source_id: "demo-incidents",
-        status: "partial",
-        completed_at: new Date(now - 1000 * 60 * 48).toISOString(),
-        records_seen: 19,
-        records_created: 4
-      },
-      {
-        id: "run-water",
-        source_id: "demo-water",
-        status: "completed",
-        completed_at: new Date(now - 1000 * 60 * 41).toISOString(),
-        records_seen: 31,
-        records_created: 7
-      },
-      {
-        id: "run-open311",
-        source_id: "demo-open311",
-        status: "completed",
-        completed_at: new Date(now - 1000 * 60 * 95).toISOString(),
-        records_seen: 48,
-        records_created: 5
-      },
-      {
-        id: "run-openfema",
-        source_id: "demo-openfema",
-        status: "completed",
-        completed_at: new Date(now - 1000 * 60 * 80).toISOString(),
-        records_seen: 12,
-        records_created: 3
-      },
-      {
-        id: "run-census",
-        source_id: "demo-census",
-        status: "completed",
-        completed_at: new Date(now - 1000 * 60 * 160).toISOString(),
-        records_seen: 210,
-        records_created: 22
-      },
-      {
-        id: "run-overpass",
-        source_id: "demo-overpass",
-        status: "completed",
-        completed_at: new Date(now - 1000 * 60 * 140).toISOString(),
-        records_seen: 89,
-        records_created: 11
-      }
-    ],
-    eventRows: [
-      { source_id: "demo-weather", compliance_status: "approved", ingested_at: new Date(now - 1000 * 60 * 12).toISOString() },
-      { source_id: "demo-permits", compliance_status: "pending_review", ingested_at: new Date(now - 1000 * 60 * 34).toISOString() },
-      { source_id: "demo-incidents", compliance_status: "restricted", ingested_at: new Date(now - 1000 * 60 * 48).toISOString() },
-      { source_id: "demo-water", compliance_status: "approved", ingested_at: new Date(now - 1000 * 60 * 41).toISOString() },
-      { source_id: "demo-open311", compliance_status: "approved", ingested_at: new Date(now - 1000 * 60 * 95).toISOString() },
-      { source_id: "demo-openfema", compliance_status: "approved", ingested_at: new Date(now - 1000 * 60 * 80).toISOString() },
-      { source_id: "demo-census", compliance_status: "approved", ingested_at: new Date(now - 1000 * 60 * 160).toISOString() },
-      { source_id: "demo-overpass", compliance_status: "approved", ingested_at: new Date(now - 1000 * 60 * 140).toISOString() }
-    ]
-  };
-}
-
 export function buildDemoDataSourceSummaries() {
-  const demo = buildDemoBundle();
-  const latestRunBySource = new Map<string, RawRunRow>();
-  for (const run of demo.runRows) {
-    if (!latestRunBySource.has(run.source_id)) {
-      latestRunBySource.set(run.source_id, run);
-    }
-  }
-
-  const latestEventBySource = new Map<string, RawSourceEventRow>();
-  for (const event of demo.eventRows) {
-    if (!latestEventBySource.has(event.source_id)) {
-      latestEventBySource.set(event.source_id, event);
-    }
-  }
-
-  const configured = demo.sourceRows.map((row) => buildConfiguredSummary(row, latestRunBySource.get(row.id), latestEventBySource.get(row.id)));
-  const configuredCatalogKeys = new Set(configured.map((row) => row.catalogKey));
-  const missing = dataSourceCatalog
-    .filter((entry) => !configuredCatalogKeys.has(entry.catalogKey))
-    .map((entry) => configuredSummaryFromCatalog(entry.catalogKey));
+  const summaries = dataSourceCatalog.map((entry) => configuredSummaryFromCatalog(entry.catalogKey));
   const orderIndex = new Map(dataSourceCatalog.map((entry, index) => [entry.catalogKey, index]));
 
-  return [...configured, ...missing].sort((a, b) => {
+  return summaries.sort((a, b) => {
     const left = orderIndex.get(a.catalogKey) ?? 999;
     const right = orderIndex.get(b.catalogKey) ?? 999;
     return left - right;

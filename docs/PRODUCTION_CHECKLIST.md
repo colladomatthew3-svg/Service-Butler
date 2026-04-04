@@ -1,100 +1,101 @@
-# Production Checklist
+# Production Readiness Checklist
 
-Use this checklist before deploying Service Butler to a hosted environment.
+Use this as the authoritative release gate for any production-affecting Service Butler push.
+Pair it with [Production Readiness Summary Template](./PRODUCTION_READINESS_SUMMARY_TEMPLATE.md).
 
-## Core environment
+Decision rule:
+- `GO` only when the local gate passes and the live/environment-backed gate confirms the intended target environment.
+- `GO FOR INTERNAL REVIEW ONLY` when local and live gates pass but buyer-proof or live-source coverage is still incomplete.
+- `NO-GO` when any required local or live gate fails, or when target environment truth is inconsistent.
 
-- Set `NEXT_PUBLIC_APP_URL` to the public app origin.
-- Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
-- Set `DEMO_MODE=off`.
-- Set `REVIEW_MODE=off`.
-- Leave `ALLOW_NON_DEV_DEMO_MODE=off` unless you intentionally need a controlled non-dev demo environment.
-- Set `BILLING_MODE` to `stripe` if paid billing should be enforced.
+## 1. Preflight
 
-## Enrichment provider
+- Identify the intended target environment and owner before starting.
+- Confirm the branch and commit SHA that will be released.
+- Confirm unrelated local worktree changes are not part of the release scope.
+- Capture the timestamp and run context you plan to record in the summary.
 
-- Set `SERVICE_BUTLER_ENRICHMENT_URL` to your enrichment API endpoint.
-- Set `SERVICE_BUTLER_ENRICHMENT_TOKEN` if the provider requires bearer auth.
-- Set `SERVICE_BUTLER_ENRICHMENT_PROVIDER` to a short provider name for tracing, for example `attom`, `batchdata`, or `internal-enrichment`.
-- Optionally tune `SERVICE_BUTLER_ENRICHMENT_TIMEOUT_MS`. The default is `4500`.
-- Confirm the provider accepts this JSON payload:
+## 2. Local gate
 
-```json
-{
-  "address": "124 Maple Ave",
-  "city": "Brentwood",
-  "state": "NY",
-  "postalCode": "11717",
-  "serviceType": "Water Mitigation"
-}
+Run these commands in order:
+
+```bash
+npm run typecheck
+npm run build
+npm test -- tests/smoke-home-login.spec.ts tests/smoke-dashboard-entry.spec.ts tests/smoke-demo-lead-to-schedule.spec.ts
+npm run operator-healthcheck
+npm run validate-integrations
+npm run proof:servpro
 ```
 
-- Confirm the provider may return this JSON shape:
+Pass rules:
+- `npm run typecheck` exits `0`
+- `npm run build` exits `0`
+- targeted operator smoke coverage exits `0`
+- `npm run operator-healthcheck` exits `0`
+- `npm run validate-integrations` exits `0`
+- `npm run proof:servpro` writes `output/proof/<timestamp>/summary.md`
 
-```json
-{
-  "provider": "Vendor name",
-  "propertyAddress": "124 Maple Ave",
-  "city": "Brentwood",
-  "state": "NY",
-  "postalCode": "11717",
-  "neighborhood": "North Ridge",
-  "propertyImageLabel": "Parcel image",
-  "propertyImageUrl": "https://example.com/property.jpg",
-  "propertyImageSource": "Vendor parcel media",
-  "propertyValueEstimate": "$542,000",
-  "propertyValueVerification": "verified",
-  "ownerContact": {
-    "name": "Jamie Rivera",
-    "phone": "+1 631 555 0100",
-    "email": "jamie@example.com",
-    "verification": "verified",
-    "confidenceLabel": "Vendor verified"
-  },
-  "notes": [
-    "Owner occupied according to county records."
-  ]
-}
+Notes:
+- Repeat the targeted smoke suite if you touched operator-critical UI, demo-mode behavior, or navigation paths.
+- Treat `proof:servpro` as the release proof artifact, not just a convenience command.
+
+## 3. Live gate
+
+Run these against the intended target environment:
+
+```bash
+npm run check:production
 ```
 
-## Messaging and billing
+Confirm the live target truth:
+- `NEXT_PUBLIC_APP_URL` points at the intended public origin.
+- Supabase URL, anon key, and service role key match the target environment.
+- `WEBHOOK_SHARED_SECRET` is set for any non-local webhook exposure.
+- `DEMO_MODE=off` and `REVIEW_MODE=off` unless a controlled demo is explicitly intended.
+- `ALLOW_NON_DEV_DEMO_MODE=off` unless a controlled non-dev demo is explicitly approved.
+- `SB_TWILIO_SAFE_MODE=true` and `SB_HUBSPOT_SAFE_MODE=true` unless live outbound has been explicitly approved.
+- `SB_USE_V2_READS` and `SB_USE_V2_WRITES` match the rollout plan for the target environment.
 
-- Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` if SMS and voice should be active.
-- Set `HUBSPOT_ACCESS_TOKEN` if HubSpot CRM task sync should be active.
-- Set `POSTMARK_SERVER_TOKEN` or `SENDGRID_API_KEY`, plus `FROM_EMAIL`, for outbound email.
-- Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_PRICE_ID` when `BILLING_MODE=stripe`.
-- Set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` if Inngest workflows run in your deployment.
+Confirm live readiness surfaces:
+- `/api/health/production` returns no required `fail` checks.
+- `/dashboard/scanner` and `/api/scanner/run` behave as live-safe, not synthetic/demo-first.
+- Data sources shown as live in settings are actually backed by approved providers, not sample or simulated records.
+- Buyer-grade counts never include synthetic/demo/sample rows.
 
-## Franchise v2 rollout flags
+## 4. Decision matrix
 
-- Set `SB_USE_V2_WRITES=true` in staging first to dual-write tenant-first records.
-- Keep `SB_USE_V2_READS=false` until parity checks pass.
-- Enable `SB_USE_V2_READS=true` during pilot cutover.
-- Keep `SB_USE_POLYGON_ROUTING=false` until territory geometry validation is complete.
-- Keep `SB_ENABLE_CITIZEN_CONNECTOR=false` unless legal and compliance approvals are complete.
-- Set `WEBHOOK_SHARED_SECRET` before exposing webhook endpoints outside localhost.
-- Keep `SB_TWILIO_SAFE_MODE=true` and `SB_HUBSPOT_SAFE_MODE=true` unless live outbound has been explicitly approved.
+| Status | Use when |
+| --- | --- |
+| `GO` | All local gates pass, the live gate passes, proof artifacts are present, and there are no unresolved blockers. |
+| `GO FOR INTERNAL REVIEW ONLY` | All local and live gates pass, but proof chain or live-source coverage is incomplete for a buyer-facing claim. |
+| `NO-GO` | Any required local or live gate fails, proof artifacts are missing or broken, or target environment truth is inconsistent. |
 
-## Database and data
+## 5. Evidence to capture
 
-- Run Supabase migrations before deployment.
-- Seed only the accounts or operator users you actually want in the environment.
-- Verify `account_settings.weather_lat`, `account_settings.weather_lng`, and `account_settings.weather_location_label` exist for each live account.
-- Verify Row Level Security and service-role usage in the target Supabase project.
+- Branch and commit SHA
+- Target environment name and URL
+- Command outputs or artifact paths for every passed gate
+- `/api/health/production` result
+- `output/proof/<timestamp>/summary.md`
+- Any live-provider or connector warnings
+- Rollback notes and owner
 
-## Safety checks
+## 6. Rollback posture
 
-- Verify `/login` does not show demo login in production.
-- Verify `/api/scanner/run` returns `mode: "live"` for authenticated production requests.
-- Verify scanner opportunities include public-feed or weather-backed live data, not simulated demo data.
-- Verify enrichment falls back gracefully to public-record-only data if the premium vendor is unavailable.
+If the release reveals unsafe live behavior or broken proof semantics, use this rollback order:
 
-## Release verification
+1. `SB_USE_V2_READS=false`
+2. `SB_USE_V2_WRITES=false`
+3. `SB_USE_POLYGON_ROUTING=false` if routing is implicated
 
-- Run `npm run check:production`.
-- Run `npm run typecheck`.
-- Run `npm run build`.
-- Run `npm run proof:servpro` and inspect `output/proof/<timestamp>/summary.md`.
-- Smoke test `/`, `/login`, `/dashboard`, `/dashboard/scanner`, and `/api/weather`.
-- Check `/api/health/production` and confirm required checks return `pass`.
-- Perform one real scanner run with a saved service area and verify opportunities persist.
+Outbound safety switches:
+- Keep or force `SB_TWILIO_SAFE_MODE=true`
+- Keep or force `SB_HUBSPOT_SAFE_MODE=true`
+- If needed, set `SB_DISABLE_TWILIO=true`
+- If needed, set `SB_DISABLE_HUBSPOT=true`
+
+After rollback:
+- Rerun `npm run check:production`
+- Rerun `npm run operator-healthcheck`
+- Preserve `output/proof/<timestamp>/` artifacts for the handoff

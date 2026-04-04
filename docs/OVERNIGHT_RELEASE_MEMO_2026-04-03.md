@@ -1,12 +1,17 @@
 # Overnight Release Memo - 2026-04-03
 
+Status: archived.
+
+Use [docs/PRODUCTION_CHECKLIST.md](/Users/matthewcollado/Downloads/Service%20Butler/docs/PRODUCTION_CHECKLIST.md) and [docs/PRODUCTION_READINESS_SUMMARY_TEMPLATE.md](/Users/matthewcollado/Downloads/Service%20Butler/docs/PRODUCTION_READINESS_SUMMARY_TEMPLATE.md) for the current production push gate and summary format.
+
 ## Recommendation
 
-**GO FOR INTERNAL REVIEW ONLY**
+**ARCHIVED MEMO**
 
 Reason:
-- A morning-ready `GO` requires this exact gate to pass: `npm run typecheck`, `npm run build`, `npm run check:production`, `npm run operator-healthcheck`, `npm run validate-integrations`, `npm run proof:servpro`.
-- This memo does not claim a fresh live-tenant pass on that full gate for the current morning cut.
+- This memo is preserved for historical context only.
+- The active readiness gate now lives in `docs/PRODUCTION_CHECKLIST.md`.
+- The active release summary format now lives in `docs/PRODUCTION_READINESS_SUMMARY_TEMPLATE.md`.
 
 ## Morning-Ready Status Matrix
 

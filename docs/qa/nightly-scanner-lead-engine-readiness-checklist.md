@@ -4,9 +4,12 @@ Use this checklist for the overnight scanner and lead-engine gate. This is narro
 
 Primary references:
 - `docs/PRODUCTION_CHECKLIST.md`
+- `docs/PRODUCTION_READINESS_SUMMARY_TEMPLATE.md`
 - `docs/REAL_OPERATOR_ACTIVATION_RUNBOOK.md`
 - `docs/FRANCHISE_V2_DEPLOYMENT.md`
-- `docs/OVERNIGHT_RELEASE_MEMO_2026-04-03.md`
+- `docs/OVERNIGHT_RELEASE_MEMO_2026-04-03.md` (archived reference only)
+
+For the production push gate, use the checklist and summary template above. This scanner/lead-engine checklist remains a narrower overnight gate.
 
 ## Morning decision rule
 

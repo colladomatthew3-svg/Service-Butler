@@ -7,14 +7,14 @@ const productLinks = [
   { href: "/product", label: "Product" },
   { href: "/solutions", label: "Solutions" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/blog", label: "Blog" },
-  { href: "/login", label: "Product Tour" }
+  { href: "/blog", label: "Resources" },
+  { href: "/login", label: "Try Demo" }
 ] as const;
 
 const companyLinks = [
-  { href: "/", label: "About" },
+  { href: "/", label: "Home" },
   { href: "/blog", label: "Resources" },
-  { href: "/solutions", label: "Customers" }
+  { href: "/solutions", label: "Solutions" }
 ] as const;
 
 const supportLinks = [
@@ -31,8 +31,8 @@ export function Footer() {
           <div className="max-w-md">
             <Logo size={40} className="h-10 w-auto" />
             <p className="mt-5 text-sm leading-7 text-white/78">
-              Service Butler helps restoration and home service teams spot real incidents, claim the best opportunities,
-              and turn them into scheduled work before competitors react.
+              Service Butler helps restoration and home service teams find high-intent opportunities, route the right next action,
+              and turn demand into scheduled work before competitors react.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link href="/login" className={buttonStyles({ size: "sm" })}>

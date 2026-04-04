@@ -51,8 +51,8 @@ export default function LaunchHomepage() {
                   Find the jobs before competitors do and turn them into booked work.
                 </h1>
                 <p className="text-body-lg mt-5 max-w-xl text-semantic-muted">
-                  Service Butler helps your team spot real incidents, surface nearby opportunities, and act fast with
-                  leads your crew can actually schedule.
+                  Service Butler helps your team spot real incidents, surface nearby opportunities, and move quickly from
+                  demand signal to scheduled work.
                 </p>
 
                 <div className="mt-8 flex flex-wrap gap-3">
@@ -191,7 +191,7 @@ export default function LaunchHomepage() {
                 <h2 className="section-title mt-5 text-semantic-text">See how Service Butler helps your team find work and book it faster.</h2>
                 <p className="mt-4 text-lg leading-8 text-semantic-muted">
                   Start with the homepage, open the demo, set the service area, run the scanner, and move an opportunity
-                  into a booked inspection.
+                  into a lead or booked inspection.
                 </p>
               </div>
               <div className="mt-8 flex flex-wrap gap-3">

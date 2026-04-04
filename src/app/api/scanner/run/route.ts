@@ -59,6 +59,16 @@ function buildScannerQualificationFields(op: { source: string; raw?: Record<stri
   };
 }
 
+function buildSyntheticFilteringWarning(filteredCount: number, remainingCount: number) {
+  if (filteredCount <= 0) return null;
+  const candidateWord = filteredCount === 1 ? "candidate" : "candidates";
+  if (remainingCount <= 0) {
+    return `${filteredCount} synthetic scanner ${candidateWord} were discarded. No real public signals remain in the queue.`;
+  }
+  const signalWord = remainingCount === 1 ? "signal" : "signals";
+  return `${filteredCount} synthetic scanner ${candidateWord} were discarded. Only real public ${signalWord} remain in the queue.`;
+}
+
 async function runBurstScanner({
   location,
   categories,
@@ -197,10 +207,9 @@ export async function POST(req: NextRequest) {
 
   const realOpportunities = result.opportunities.filter((op) => !isSyntheticScannerRecord({ source: op.source, raw: op.raw }));
   const filteredSyntheticCount = result.opportunities.length - realOpportunities.length;
-  if (filteredSyntheticCount > 0) {
-    warnings.push(
-      `${filteredSyntheticCount} synthetic scanner candidate${filteredSyntheticCount === 1 ? "" : "s"} were discarded. The queue only keeps real public signals.`
-    );
+  const syntheticWarning = buildSyntheticFilteringWarning(filteredSyntheticCount, realOpportunities.length);
+  if (syntheticWarning) {
+    warnings.push(syntheticWarning);
   }
 
   if (realOpportunities.length > 0) {
@@ -471,7 +480,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (realOpportunities.length === 0 && result.opportunities.length > 0) {
-    warnings.push("No real scanner opportunities remained after synthetic/demo filtering.");
+    warnings.push(
+      filteredSyntheticCount > 0
+        ? `No real scanner opportunities remained after filtering out ${filteredSyntheticCount} synthetic demo candidate${filteredSyntheticCount === 1 ? "" : "s"}.`
+        : "No real scanner opportunities remained after synthetic/demo filtering."
+    );
   }
 
   return NextResponse.json({

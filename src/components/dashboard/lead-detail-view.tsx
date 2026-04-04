@@ -68,6 +68,7 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
   const [lead, setLead] = useState<Lead | null>(null);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [signalsLoading, setSignalsLoading] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [statusDraft, setStatusDraft] = useState("new");
@@ -78,10 +79,13 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
   async function load() {
     setLoading(true);
+    setError(null);
     const res = await fetch(`/api/leads/${leadId}`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !(data as { lead?: Lead }).lead) {
-      showToast((data as { error?: string }).error || "Could not load lead");
+      const message = (data as { error?: string }).error || "Could not load lead";
+      setError(message);
+      showToast(message);
       setLoading(false);
       return;
     }
@@ -250,6 +254,28 @@ export function LeadDetailView({ leadId }: { leadId: string }) {
 
   const missingPhone = !lead?.phone?.trim();
   const scrollToSchedule = () => scheduleSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title="Lead unavailable" subtitle="The lead details could not be loaded right now." />
+        <Card className="border-semantic-border/60 bg-white/78">
+          <CardBody className="space-y-4 py-8">
+            <div className="space-y-2">
+              <p className="text-lg font-semibold text-semantic-text">We could not load this lead.</p>
+              <p className="text-sm text-semantic-muted">{error}</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={load}>Retry</Button>
+              <Link href="/dashboard/leads">
+                <Button variant="secondary">Back to Lead Inbox</Button>
+              </Link>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading || !lead) {
     return (

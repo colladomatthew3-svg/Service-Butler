@@ -243,7 +243,7 @@ test("burst scope scanner route excludes synthetic opportunities from the respon
           !String(opportunity.raw?.source_provenance || "").toLowerCase().includes("operator.synthetic")
       )
     ).toBeTruthy();
-    expect(body.warnings || []).toContain("7 synthetic scanner candidates were discarded. The queue only keeps real public signals.");
+    expect(body.warnings || []).toContain("7 synthetic scanner candidates were discarded. Only real public signals remain in the queue.");
     expect((body.warnings || []).some((warning) => warning.includes("Burst scan covered 7 NYC/LI markets"))).toBeTruthy();
   });
 });

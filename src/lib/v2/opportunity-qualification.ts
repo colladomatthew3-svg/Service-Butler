@@ -100,7 +100,7 @@ export function getOpportunityQualificationSnapshot(input: {
   const nextRecommendedAction =
     asText(explainability.next_recommended_action) ||
     (qualificationStatus === "qualified_contactable"
-      ? "dispatch_to_lead_queue"
+      ? "create_lead"
       : qualificationStatus === "queued_for_sdr"
         ? "await_sdr_review"
         : qualificationStatus === "rejected"
@@ -192,7 +192,7 @@ export function mergeOpportunityQualification(
 }
 
 export function validateQualificationMutation(payload: OpportunityQualificationMutation) {
-  const status = normalizeQualificationStatus(payload.qualification_status) || "research_only";
+  const status = normalizeQualificationStatus(payload.qualification_status);
   const source = asText(payload.qualification_source);
   const notes = asText(payload.qualification_notes);
   const contactName = asText(payload.contact_name);
@@ -200,6 +200,7 @@ export function validateQualificationMutation(payload: OpportunityQualificationM
   const email = asText(payload.email);
   const verificationStatus = asText(payload.verification_status);
 
+  if (!status) return "qualification_status must be one of research_only, queued_for_sdr, qualified_contactable, or rejected";
   if (!source) return "qualification_source is required";
   if (!notes) return "qualification_notes is required";
 
@@ -207,6 +208,7 @@ export function validateQualificationMutation(payload: OpportunityQualificationM
     if (!contactName) return "contact_name is required when qualification_status is qualified_contactable";
     if (!phone && !email) return "phone or email is required when qualification_status is qualified_contactable";
     if (!verificationStatus) return "verification_status is required when qualification_status is qualified_contactable";
+    if (verificationStatus !== "verified") return "verification_status must be verified when qualification_status is qualified_contactable";
   }
 
   return null;

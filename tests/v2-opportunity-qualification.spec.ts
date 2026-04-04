@@ -24,6 +24,24 @@ test("qualification snapshot keeps research-only public signals out of buyer pro
   expect(snapshot.scannerEventId).toBe("scan-1");
 });
 
+test("qualified contactable snapshots default to create lead guidance", () => {
+  const snapshot = getOpportunityQualificationSnapshot({
+    explainability: {
+      qualification_status: "qualified_contactable",
+      qualification_reason_code: "verified_contact_present",
+      verification_status: "verified",
+      contact_name: "Jordan Brooks",
+      phone: "+16315550142"
+    },
+    proofAuthenticity: "live_provider",
+    lifecycleStatus: "qualified",
+    contactStatus: "identified"
+  });
+
+  expect(snapshot.nextRecommendedAction).toBe("create_lead");
+  expect(snapshot.qualificationStatus).toBe("qualified_contactable");
+});
+
 test("qualification update requires provenance for qualified contactable records", () => {
   const validationError = validateQualificationMutation({
     qualification_status: "qualified_contactable",
@@ -32,6 +50,29 @@ test("qualification update requires provenance for qualified contactable records
   });
 
   expect(validationError).toContain("qualification_source");
+});
+
+test("qualification update rejects unknown qualification status values", () => {
+  const validationError = validateQualificationMutation({
+    qualification_status: "maybe_later" as never,
+    qualification_source: "scanner_operator",
+    qualification_notes: "Invalid status"
+  });
+
+  expect(validationError).toContain("qualification_status must be one of");
+});
+
+test("qualification update requires verified contactability for qualified records", () => {
+  const validationError = validateQualificationMutation({
+    qualification_status: "qualified_contactable",
+    contact_name: "Taylor Lead",
+    phone: "631-555-0199",
+    qualification_source: "scanner_operator",
+    qualification_notes: "Needs review",
+    verification_status: "review"
+  });
+
+  expect(validationError).toContain("verification_status must be verified");
 });
 
 test("qualification update stores verified contact provenance without schema changes", () => {

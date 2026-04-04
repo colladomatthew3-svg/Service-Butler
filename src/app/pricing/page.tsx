@@ -11,39 +11,53 @@ const tiers = [
     name: "Starter",
     price: "$99",
     period: "/month",
-    description: "For owner-operators validating local demand intelligence.",
+    description: "Perfect for independent contractors getting started with lead intelligence.",
     badge: null,
     features: [
       "Up to 2 territories",
-      "Core scanner and pipeline views",
-      "Data source health and readiness checks",
-      "Basic lead and workflow tracking"
+      "100 opportunities/month",
+      "AI lead scoring",
+      "Email outreach",
+      "Basic analytics",
+      "Weather alert monitoring",
+      "Community support"
     ]
   },
   {
     name: "Pro",
     price: "$299",
     period: "/month",
-    description: "For growth teams running multi-channel capture and conversion workflows.",
+    description: "For growing companies that need territory management and advanced automation.",
     badge: "Most Popular",
     features: [
       "Up to 10 territories",
-      "Expanded source and connector controls",
-      "Operator-grade outbound and routing workflows",
-      "Advanced dashboard and opportunity intelligence"
+      "Unlimited opportunities",
+      "AI lead scoring & enrichment",
+      "Multi-channel outreach (email, SMS, calls)",
+      "Catastrophe response automation",
+      "Territory routing & assignment",
+      "Advanced analytics & reporting",
+      "CRM integrations",
+      "Priority support"
     ]
   },
   {
     name: "Enterprise",
-    price: "Custom",
-    period: "",
-    description: "For franchise operators and multi-market organizations with strict controls.",
+    price: "$799",
+    period: "/month",
+    description: "For franchise operators managing large multi-location operations.",
     badge: null,
     features: [
-      "Unlimited territories and operator seats",
-      "Network and buyer-proof readiness surfaces",
-      "Custom onboarding and rollout support",
-      "Tenant and compliance policy alignment"
+      "Unlimited territories",
+      "Unlimited opportunities",
+      "Everything in Pro",
+      "Custom data source integrations",
+      "API access",
+      "Role-based access control",
+      "Overflow routing & surge pricing",
+      "Dedicated account manager",
+      "Custom onboarding & training",
+      "SLA guarantee"
     ]
   }
 ] as const;
@@ -56,9 +70,9 @@ export default function PricingPage() {
         <section className="page-section py-16">
           <div className="container text-center">
             <p className="eyebrow justify-center">Pricing</p>
-            <h1 className="title-hero mx-auto mt-6 max-w-4xl text-semantic-text">Transparent plans for every stage of operator maturity.</h1>
+            <h1 className="title-hero mx-auto mt-6 max-w-4xl text-semantic-text">Simple, transparent pricing.</h1>
             <p className="text-body-lg mx-auto mt-4 max-w-3xl text-semantic-muted">
-              Start with a pilot motion, then scale into multi-territory command and buyer-proof operations.
+              Start free for 14 days. No credit card required. Scale as your business grows.
             </p>
           </div>
         </section>
@@ -84,7 +98,7 @@ export default function PricingPage() {
                 </ul>
                 <div className="mt-6">
                   <Link href="/login" className={buttonStyles({ fullWidth: true })}>
-                    {tier.name === "Enterprise" ? "Contact Sales" : "Try Demo"}
+                    {tier.name === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
@@ -99,16 +113,20 @@ export default function PricingPage() {
             <div className="mt-8 space-y-6">
               {[
                 {
-                  q: "Can we change plans as we grow?",
-                  a: "Yes. Plans can be upgraded as your territory footprint and operator workflow needs expand."
+                  q: "Can I change plans later?",
+                  a: "Yes, you can upgrade or downgrade at any time. Changes take effect at your next billing cycle."
                 },
                 {
-                  q: "What counts as a live source?",
-                  a: "A source counts as live when terms and compliance are approved, credentials are configured, and runtime mode is not simulated."
+                  q: "What counts as an opportunity?",
+                  a: "An opportunity is any lead signal detected from your connected data sources, weather alerts, permit data, or manual entries."
                 },
                 {
-                  q: "Do you support pilot onboarding?",
-                  a: "Yes. Service Butler supports pilot activation with source readiness checks and operator runbooks."
+                  q: "Do you offer annual discounts?",
+                  a: "Yes. Annual pricing can be structured for larger rollouts and enterprise plans."
+                },
+                {
+                  q: "Is there a free trial?",
+                  a: "Every plan includes a 14-day free trial with full access. No credit card is required to get started."
                 }
               ].map((faq) => (
                 <div key={faq.q}>

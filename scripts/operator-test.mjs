@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
@@ -41,6 +42,54 @@ loadEnvFromFile(path.join(process.cwd(), ".env"));
 function envTrue(name) {
   const value = String(process.env[name] || "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "on" || value === "yes";
+}
+
+function parseSupabaseHost(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function parseSupabasePort(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.port) return Number(parsed.port);
+    return parsed.protocol === "https:" ? 443 : 80;
+  } catch {
+    return null;
+  }
+}
+
+function isLocalSupabaseUrl(url) {
+  const hostname = parseSupabaseHost(url);
+  return hostname === "127.0.0.1" || hostname === "localhost";
+}
+
+async function isPortListening(host, port) {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host, port });
+    let settled = false;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(result);
+    };
+
+    socket.setTimeout(1000);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+async function canReachSupabase(supabase) {
+  const { error } = await supabase.from("accounts").select("id", { head: true, count: "exact" }).limit(1);
+  return !error;
 }
 
 function printSimulated() {
@@ -387,6 +436,19 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 
+  if (!(await canReachSupabase(supabase))) {
+    const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+    const host = parseSupabaseHost(supabaseUrl);
+    const port = parseSupabasePort(supabaseUrl);
+    const localDbDown = isLocalSupabaseUrl(supabaseUrl) && host && port !== null && !(await isPortListening(host, port));
+
+    throw new Error(
+      localDbDown
+        ? "Local Supabase is not reachable. Start it with `npm run db:start`, run `npm run db:push`, then retry `npm run operator:seed` and `npm run operator-test`."
+        : "Operator test could not reach Supabase. Confirm the configured URL/key pair and that the target project is reachable."
+    );
+  }
+
   const tenantId = await resolveOperatorTenantId(supabase);
 
   const { data: source, error: sourceError } = await supabase
@@ -694,6 +756,38 @@ async function main() {
 }
 
 main().catch((error) => {
+  if (error instanceof Error && error.message.includes("Local Supabase is not reachable")) {
+    console.error(error.message);
+    process.exit(1);
+  }
+
+  if (error instanceof Error && error.message.includes("Operator test could not reach Supabase")) {
+    console.error(error.message);
+    process.exit(1);
+  }
+
+  if (error instanceof TypeError && error.message === "fetch failed") {
+    const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+    const host = parseSupabaseHost(supabaseUrl);
+    const port = parseSupabasePort(supabaseUrl);
+
+    const finish = async () => {
+      const localDbDown = isLocalSupabaseUrl(supabaseUrl) && host && port !== null && !(await isPortListening(host, port));
+      if (localDbDown) {
+        console.error("Local Supabase is not reachable. Start it with `npm run db:start`, run `npm run db:push`, then retry `npm run operator:seed` and `npm run operator-test`.");
+      } else {
+        console.error("Operator test could not reach Supabase. Confirm the configured URL/key pair and that the target project is reachable.");
+      }
+      process.exit(1);
+    };
+
+    finish().catch(() => {
+      console.error("Operator test could not reach Supabase. Confirm the configured URL/key pair and that the target project is reachable.");
+      process.exit(1);
+    });
+    return;
+  }
+
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

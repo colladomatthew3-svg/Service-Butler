@@ -26,3 +26,30 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  e2e-smoke:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm install
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke E2E
+        run: npm run test:e2e -- tests/smoke-home-login.spec.ts tests/smoke-dashboard-entry.spec.ts tests/smoke-demo-lead-to-schedule.spec.ts
+        env:
+          PLAYWRIGHT_START_SERVER: "true"
+          DEMO_MODE: "true"
+          ALLOW_NON_DEV_DEMO_MODE: "true"

@@ -33,6 +33,7 @@
     "verified-leads:export": "node scripts/export-verified-leads.mjs",
     "lead-engine": "npm run operator-test && npm run sdr-agent && npm run verified-leads:export",
     "validate-integrations": "mkdir -p .tmp/operator && npx tsc scripts/validate-integrations.ts --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir .tmp/operator && node .tmp/operator/scripts/validate-integrations.js",
+    "runtime:mark-stale-runs": "node scripts/mark-stale-connector-runs.mjs",
     "db:start": "npx supabase start",
     "db:reset": "npx supabase db reset",
     "db:push": "npx supabase db push --local",

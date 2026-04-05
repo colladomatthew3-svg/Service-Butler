@@ -6,6 +6,8 @@ import type { ConnectorAdapter, ConnectorNormalizedEvent, ConnectorPullInput } f
 import { logV2AuditEvent } from "@/lib/v2/audit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+type ConnectorRunMode = "standard" | "replay";
+
 function toPoint(lat?: number | null, lon?: number | null) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return `POINT(${Number(lon)} ${Number(lat)})`;
@@ -252,6 +254,35 @@ function validateNormalizedEvent(event: ConnectorNormalizedEvent) {
     valid: failures.length === 0,
     failures
   };
+}
+
+function normalizeRunResultStatus(value: unknown): V2ConnectorRunResult["status"] | null {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (
+    normalized === "completed" ||
+    normalized === "failed" ||
+    normalized === "partial" ||
+    normalized === "stale" ||
+    normalized === "replayed"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+async function touchRunHeartbeat({
+  supabase,
+  runId
+}: {
+  supabase: SupabaseClient;
+  runId: string;
+}) {
+  await supabase
+    .from("v2_connector_runs")
+    .update({
+      heartbeat_at: new Date().toISOString()
+    })
+    .eq("id", runId);
 }
 
 async function upsertIncidentClusterFromEvent({
@@ -679,7 +710,10 @@ export async function runConnectorForSource({
   sourceType,
   sourceConfig,
   actorUserId,
-  connector
+  connector,
+  runMode = "standard",
+  replayedFromRunId = null,
+  idempotencyKey = null
 }: {
   supabase: SupabaseClient;
   tenantId: string;
@@ -688,6 +722,9 @@ export async function runConnectorForSource({
   sourceConfig: Record<string, unknown>;
   actorUserId: string;
   connector: ConnectorAdapter;
+  runMode?: ConnectorRunMode;
+  replayedFromRunId?: string | null;
+  idempotencyKey?: string | null;
 }): Promise<V2ConnectorRunResult & { runId: string }> {
   const runStart = new Date().toISOString();
   const { data: runRow, error: runError } = await supabase
@@ -697,12 +734,43 @@ export async function runConnectorForSource({
       tenant_id: tenantId,
       status: "running",
       started_at: runStart,
-      metadata: { connector_key: connector.key, source_type: sourceType }
+      heartbeat_at: runStart,
+      idempotency_key: idempotencyKey,
+      replayed_from_run_id: replayedFromRunId,
+      metadata: {
+        connector_key: connector.key,
+        source_type: sourceType,
+        run_mode: runMode,
+        replayed_from_run_id: replayedFromRunId
+      }
     })
     .select("id")
     .single();
 
   if (runError || !runRow?.id) {
+    if ((runError as { code?: string } | null)?.code === "23505" && idempotencyKey) {
+      const { data: existingRun, error: existingRunError } = await supabase
+        .from("v2_connector_runs")
+        .select("id,status,records_seen,records_created,error_summary")
+        .eq("tenant_id", tenantId)
+        .eq("source_id", sourceId)
+        .eq("idempotency_key", idempotencyKey)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!existingRunError && existingRun?.id) {
+        const status = normalizeRunResultStatus(existingRun.status) || "partial";
+        return {
+          runId: String(existingRun.id),
+          status,
+          recordsSeen: Number(existingRun.records_seen || 0),
+          recordsCreated: Number(existingRun.records_created || 0),
+          errorSummary: String(existingRun.error_summary || "")
+        };
+      }
+    }
+
     throw new Error(runError?.message || "Could not create connector run");
   }
 
@@ -726,6 +794,7 @@ export async function runConnectorForSource({
       .update({
         status: "failed",
         completed_at: new Date().toISOString(),
+        heartbeat_at: new Date().toISOString(),
         error_summary: reason
       })
       .eq("id", runId);
@@ -739,18 +808,23 @@ export async function runConnectorForSource({
     };
   }
 
+  let createdCount = 0;
+  let invalidCount = 0;
+  let multiSignalCount = 0;
+  let totalFreshness = 0;
+  let totalReliability = 0;
+  let recordsSeen = 0;
+
   try {
     const pulled = await connector.pull(pullInput);
     const normalizedEvents = await connector.normalize(pulled, pullInput);
     const vertical = await resolveTenantVertical(supabase, tenantId);
 
-    let createdCount = 0;
-    let invalidCount = 0;
-    let multiSignalCount = 0;
-    let totalFreshness = 0;
-    let totalReliability = 0;
+    for (let index = 0; index < normalizedEvents.length; index += 1) {
+      const event = normalizedEvents[index];
+      if (!event) continue;
+      recordsSeen += 1;
 
-    for (const event of normalizedEvents) {
       const validation = validateNormalizedEvent(event);
       if (!validation.valid) {
         invalidCount += 1;
@@ -824,26 +898,35 @@ export async function runConnectorForSource({
 
       if (opportunity.multiSignal) multiSignalCount += 1;
       createdCount += 1;
+
+      if ((index + 1) % 5 === 0) {
+        await touchRunHeartbeat({ supabase, runId });
+      }
     }
 
-    const status = createdCount === normalizedEvents.length ? "completed" : "partial";
+    await touchRunHeartbeat({ supabase, runId });
+
+    const baseStatus = createdCount === normalizedEvents.length ? "completed" : "partial";
+    const status: V2ConnectorRunResult["status"] = runMode === "replay" ? "replayed" : baseStatus;
     await supabase
       .from("v2_connector_runs")
       .update({
         status,
         completed_at: new Date().toISOString(),
-        records_seen: normalizedEvents.length,
+        heartbeat_at: new Date().toISOString(),
+        records_seen: recordsSeen,
         records_created: createdCount,
         metadata: {
           connector_key: connector.key,
           source_type: sourceType,
+          run_mode: runMode,
+          replayed_from_run_id: replayedFromRunId,
           terms_status: compliance.termsStatus,
-          avg_data_freshness_score:
-            normalizedEvents.length > 0 ? Math.round(totalFreshness / normalizedEvents.length) : 0,
-          avg_source_reliability:
-            normalizedEvents.length > 0 ? Math.round(totalReliability / normalizedEvents.length) : 0,
+          avg_data_freshness_score: recordsSeen > 0 ? Math.round(totalFreshness / recordsSeen) : 0,
+          avg_source_reliability: recordsSeen > 0 ? Math.round(totalReliability / recordsSeen) : 0,
           invalid_events: invalidCount,
-          multi_signal_opportunities: multiSignalCount
+          multi_signal_opportunities: multiSignalCount,
+          replay_result_status: baseStatus
         }
       })
       .eq("id", runId);
@@ -854,21 +937,22 @@ export async function runConnectorForSource({
       actorId: actorUserId,
       entityType: "connector_run",
       entityId: runId,
-      action: "connector_run_completed",
+      action: status === "replayed" ? "connector_run_replayed" : "connector_run_completed",
       before: null,
       after: {
         source_id: sourceId,
         connector_key: connector.key,
-        records_seen: normalizedEvents.length,
+        records_seen: recordsSeen,
         records_created: createdCount,
         invalid_events: invalidCount,
-        multi_signal_opportunities: multiSignalCount
+        multi_signal_opportunities: multiSignalCount,
+        run_mode: runMode
       }
     });
 
     return {
       runId,
-      recordsSeen: normalizedEvents.length,
+      recordsSeen,
       recordsCreated: createdCount,
       status
     };
@@ -879,6 +963,9 @@ export async function runConnectorForSource({
       .update({
         status: "failed",
         completed_at: new Date().toISOString(),
+        heartbeat_at: new Date().toISOString(),
+        records_seen: recordsSeen,
+        records_created: createdCount,
         error_summary: message
       })
       .eq("id", runId);
@@ -896,8 +983,8 @@ export async function runConnectorForSource({
 
     return {
       runId,
-      recordsSeen: 0,
-      recordsCreated: 0,
+      recordsSeen,
+      recordsCreated: createdCount,
       status: "failed",
       errorSummary: message
     };

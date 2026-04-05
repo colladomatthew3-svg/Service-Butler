@@ -12,13 +12,14 @@ import {
 import { dispatchOutreach } from "@/lib/v2/outreach-orchestrator";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { routeOpportunityV2 } from "@/lib/v2/routing-engine";
+import type { V2ConnectorRunStatus } from "@/lib/v2/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type SdrSourceRunResult = {
   sourceId: string;
   sourceType: string;
   connectorKey: string;
-  status: "completed" | "failed" | "partial" | "skipped";
+  status: V2ConnectorRunStatus | "skipped";
   recordsSeen: number;
   recordsCreated: number;
   error?: string;

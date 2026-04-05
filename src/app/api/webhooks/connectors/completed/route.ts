@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     tenantId?: string;
     runId?: string;
-    status?: "completed" | "partial" | "failed";
+    status?: "completed" | "partial" | "failed" | "stale" | "replayed";
     recordsSeen?: number;
     recordsCreated?: number;
     errorSummary?: string | null;

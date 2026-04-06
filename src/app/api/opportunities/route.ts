@@ -7,6 +7,7 @@ import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from
 import { deriveOpportunityPipelineStage } from "@/lib/v2/opportunity-pipeline";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { classifySourceLane, opportunityPriorityScore } from "@/lib/v2/source-lanes";
+import { deriveOpportunityActionability } from "@/lib/v2/opportunity-actionability";
 
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -61,6 +62,7 @@ export async function GET(req: NextRequest) {
 
       const opportunityIds = (data || []).map((row) => String(row.id));
       const verifiedLeadOpportunityIds = new Set<string>();
+      const latestAssignmentByOpportunity = new Map<string, Record<string, unknown>>();
 
       if (opportunityIds.length > 0) {
         const { data: leadRows, error: leadError } = await v2Context.supabase
@@ -75,6 +77,21 @@ export async function GET(req: NextRequest) {
           if (leadCountsAsReal(lead as Record<string, unknown>)) {
             verifiedLeadOpportunityIds.add(String((lead as Record<string, unknown>).opportunity_id || ""));
           }
+        }
+
+        const { data: assignments, error: assignmentError } = await v2Context.supabase
+          .from("v2_assignments")
+          .select("id,opportunity_id,status,assigned_tenant_id,sla_due_at,assignment_reason,created_at")
+          .eq("tenant_id", v2Context.franchiseTenantId)
+          .in("opportunity_id", opportunityIds)
+          .order("created_at", { ascending: false });
+
+        if (assignmentError) return NextResponse.json({ error: assignmentError.message }, { status: 400 });
+
+        for (const assignment of (assignments || []) as Array<Record<string, unknown>>) {
+          const opportunityId = String(assignment.opportunity_id || "");
+          if (!opportunityId || latestAssignmentByOpportunity.has(opportunityId)) continue;
+          latestAssignmentByOpportunity.set(opportunityId, assignment);
         }
       }
 
@@ -108,6 +125,14 @@ export async function GET(req: NextRequest) {
             urgencyScore: row.urgency_score,
             jobLikelihoodScore: row.job_likelihood_score,
             sourceReliabilityScore: row.source_reliability_score
+          });
+          const assignment = latestAssignmentByOpportunity.get(String(row.id || "")) || null;
+          const actionability = deriveOpportunityActionability({
+            lifecycleStatus: row.lifecycle_status,
+            routingStatus: row.routing_status,
+            contactStatus: row.contact_status,
+            explainability,
+            assignment
           });
           const dispatchReady = qualificationAllowsDispatch(qualification);
           const countsAsRealCapture = proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived";
@@ -159,10 +184,26 @@ export async function GET(req: NextRequest) {
             source_provenance: typeof explainability.source_provenance === "string" ? explainability.source_provenance : null,
             priority_score: priorityScore,
             next_recommended_action: qualification.nextRecommendedAction,
+            recommended_next_action: actionability.recommendedNextAction,
+            recommended_action_reason: actionability.recommendedActionReason,
+            recommended_action_sla_minutes: actionability.recommendedActionSlaMinutes,
+            freshness_score: actionability.freshnessScore,
+            confidence_score: actionability.confidenceScore,
+            territory_relevance: actionability.territoryRelevance,
+            review_required: actionability.reviewRequired,
+            assignment_id: actionability.assignmentId,
+            assignment_status: actionability.assignmentStatus,
+            assigned_tenant_id: actionability.assignedTenantId,
+            assignment_sla_due_at: actionability.assignmentSlaDueAt,
+            assignment_reason: actionability.assignmentReason,
+            can_route_now: actionability.canRouteNow,
+            can_accept_assignment: actionability.canAcceptAssignment,
+            can_escalate_assignment: actionability.canEscalateAssignment,
+            can_convert_to_job: actionability.canConvertToJob,
             research_only: qualification.researchOnly,
             requires_sdr_qualification: qualification.requiresSdrQualification,
             verification_status: qualification.verificationStatus,
-            dispatch_ready: dispatchReady,
+            dispatch_ready: dispatchReady || actionability.dispatchReady,
             counts_as_real_capture: countsAsRealCapture,
             counts_as_real_lead: countsAsRealCapture && verifiedLeadOpportunityIds.has(String(row.id)),
             raw: {

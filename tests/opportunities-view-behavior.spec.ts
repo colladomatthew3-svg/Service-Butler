@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { getPrimaryAction, getSourceLane, type Opportunity } from "../src/components/dashboard/opportunities-view";
+import { getInlineActions, getPrimaryAction, getSourceLane, type Opportunity } from "../src/components/dashboard/opportunities-view";
 
 function makeOpportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   return {
@@ -145,6 +145,58 @@ test("mold_biohazard opportunities remain SDR-gated until verified contact is di
     expect.objectContaining({
       href: "/dashboard/outbound?opportunity=opp-biohazard-qualified",
       label: "Launch buyer flow"
+    })
+  );
+});
+
+test("review-required opportunities stay routed to review lane", () => {
+  const item = makeOpportunity({
+    id: "opp-review",
+    review_required: true,
+    can_route_now: false,
+    can_convert_to_job: false
+  });
+
+  expect(getPrimaryAction(item)).toEqual(
+    expect.objectContaining({
+      href: "/dashboard/scanner?queue=sdr&opportunity=opp-review",
+      label: "Review required"
+    })
+  );
+});
+
+test("inline actions expose routing and assignment controls when available", () => {
+  const item = makeOpportunity({
+    id: "opp-actions",
+    can_route_now: true,
+    can_accept_assignment: true,
+    can_escalate_assignment: true,
+    can_convert_to_job: false
+  });
+
+  expect(getInlineActions(item)).toEqual([
+    { type: "route", label: "Route now" },
+    { type: "accept", label: "Accept assignment" },
+    { type: "escalate", label: "Escalate" }
+  ]);
+});
+
+test("inline actions include convert-to-job when dispatch-ready", () => {
+  const item = makeOpportunity({
+    id: "opp-convert",
+    can_convert_to_job: true,
+    dispatch_ready: true,
+    qualification_status: "qualified_contactable",
+    verification_status: "verified",
+    research_only: false,
+    requires_sdr_qualification: false
+  });
+
+  expect(getInlineActions(item)).toContainEqual({ type: "convert", label: "Convert to job" });
+  expect(getPrimaryAction(item)).toEqual(
+    expect.objectContaining({
+      href: "/dashboard/jobs",
+      label: "Ready to convert"
     })
   );
 });

@@ -72,6 +72,70 @@ function responseWindowFromUrgency(urgency: number) {
   return "24-72h";
 }
 
+function clamp(value: number, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  return {};
+}
+
+function isIncidentFamilyEvent(event: ConnectorNormalizedEvent, opportunityType?: string) {
+  const normalized = `${event.eventType || ""} ${event.eventCategory || ""} ${opportunityType || ""}`.toLowerCase();
+  return normalized.includes("incident") || normalized.includes("fire") || normalized.includes("water") || normalized.includes("storm");
+}
+
+function territoryRelevanceFromEvent(event: ConnectorNormalizedEvent, geographyPrecision: number) {
+  const hasPoint = Number.isFinite(event.latitude) && Number.isFinite(event.longitude);
+  const hasPostal = Boolean(String(event.postalCode || "").trim());
+  const hasCityState = Boolean(String(event.city || "").trim() && String(event.state || "").trim());
+  if ((hasPoint && hasPostal) || geographyPrecision >= 88) return "high";
+  if (hasPoint || hasPostal || hasCityState || geographyPrecision >= 65) return "medium";
+  return "low";
+}
+
+function recommendIncidentNextAction({
+  event,
+  confidenceScore,
+  urgencyScore,
+  freshnessScore,
+  geographyPrecision
+}: {
+  event: ConnectorNormalizedEvent;
+  confidenceScore: number;
+  urgencyScore: number;
+  freshnessScore: number;
+  geographyPrecision: number;
+}) {
+  const territoryRelevance = territoryRelevanceFromEvent(event, geographyPrecision);
+
+  if (confidenceScore >= 75 && urgencyScore >= 80 && freshnessScore >= 70 && territoryRelevance === "high") {
+    return {
+      action: "dispatch_now",
+      reason: "high confidence incident with strong territory relevance and active urgency",
+      slaMinutes: 15,
+      territoryRelevance
+    };
+  }
+
+  if (confidenceScore >= 60 && freshnessScore >= 50 && territoryRelevance !== "low") {
+    return {
+      action: "verify_location_then_route",
+      reason: "credible incident signal requires quick location confirmation before dispatch",
+      slaMinutes: 30,
+      territoryRelevance
+    };
+  }
+
+  return {
+    action: "collect_secondary_signal",
+    reason: "low-confidence or weakly located incident should be validated before operator outreach",
+    slaMinutes: 60,
+    territoryRelevance
+  };
+}
+
 function classifyLikelyJobType(opportunityType: string, primaryServiceLine: string) {
   const normalized = `${opportunityType} ${primaryServiceLine}`.toLowerCase();
   if (normalized.includes("water") || normalized.includes("flood")) return "water mitigation";
@@ -98,36 +162,56 @@ function scoreInputsForEvent(
   options: {
     vertical?: FranchiseVertical;
     signalCategory?: string;
+    incidentFamily?: boolean;
   } = {}
 ) {
   const occurredAt = new Date(event.occurredAt).getTime();
   const now = Date.now();
   const minutes = Number.isFinite(occurredAt) ? Math.max(0, Math.round((now - occurredAt) / 60000)) : 120;
+  const normalized = asRecord(event.normalizedPayload);
+  const hasPoint = Number.isFinite(event.latitude) && Number.isFinite(event.longitude);
+  const hasPostal = Boolean(String(event.postalCode || "").trim());
+  const incidentFamily = Boolean(options.incidentFamily);
 
-  const geographyMatch = event.postalCode
+  const geographyMatch = hasPostal
     ? 92
-    : event.city && event.state
-      ? 80
-      : event.locationText
-        ? 68
-        : 35;
+    : hasPoint
+      ? 84
+      : event.city && event.state
+        ? 72
+        : event.locationText
+          ? 58
+          : 32;
 
-  const geographyPrecision = Number.isFinite(event.latitude) && Number.isFinite(event.longitude)
-    ? event.postalCode
+  const geographyPrecision = hasPoint
+    ? hasPostal
       ? 96
-      : 84
-    : event.postalCode
+      : 82
+    : hasPostal
       ? 78
-      : 48;
+      : 42;
 
   const serviceLineFit = (event.serviceLineCandidates?.length || 0) > 1 ? 84 : event.serviceLine ? 78 : 45;
+  const freshnessScore = toBoundedScore(normalized.data_freshness_score, deriveFreshnessScore(event.occurredAt));
+  const timestampConfidenceRaw = String(normalized.timestamp_confidence || "source").trim().toLowerCase();
+  const timestampConfidence = timestampConfidenceRaw === "source" ? 100 : timestampConfidenceRaw === "inferred" ? 52 : 72;
+  const sparseLocationPenalty = !hasPoint && !hasPostal ? 18 : !hasPoint ? 8 : 0;
+  const weakSignalPenalty = Number(event.supportingSignalsCount ?? 1) <= 1 ? 8 : 0;
+  const lowReliabilityPenalty = Number(event.sourceReliability ?? 50) < 50 ? 10 : 0;
+  const inferredPenalty = timestampConfidenceRaw === "inferred" ? 18 : 0;
+  const falsePositiveRisk = clamp(
+    sparseLocationPenalty + weakSignalPenalty + lowReliabilityPenalty + inferredPenalty - Math.min(14, freshnessScore / 8)
+  );
 
   return {
     sourceType: event.eventType,
     eventRecencyMinutes: minutes,
     severity: Number(event.severityHint ?? event.severity ?? 50),
-    geographyMatch,
-    geographyPrecision,
+    geographyMatch: incidentFamily && !hasPostal && !hasPoint ? Math.max(30, geographyMatch - 16) : geographyMatch,
+    geographyPrecision: incidentFamily && !hasPostal && !hasPoint ? Math.max(25, geographyPrecision - 18) : geographyPrecision,
+    freshnessScore,
+    timestampConfidence,
+    falsePositiveRisk,
     propertyTypeFit: 55,
     serviceLineFit,
     priorCustomerMatch: 40,
@@ -139,6 +223,33 @@ function scoreInputsForEvent(
     signalCategory: options.signalCategory,
     vertical: options.vertical
   };
+}
+
+function shouldSuppressIncidentOpportunity({
+  event,
+  confidenceScore,
+  freshnessScore,
+  falsePositiveRisk
+}: {
+  event: ConnectorNormalizedEvent;
+  confidenceScore: number;
+  freshnessScore: number;
+  falsePositiveRisk: number;
+}) {
+  if (!isIncidentFamilyEvent(event)) return { suppress: false, reason: "" };
+
+  const hasPreciseLocation = Boolean(String(event.postalCode || "").trim()) || (Number.isFinite(event.latitude) && Number.isFinite(event.longitude));
+  const lowSeverity = toBoundedScore(event.severityHint ?? event.severity, 50) < 45;
+  const sparseSignals = Number(event.supportingSignalsCount ?? 1) <= 1;
+
+  if (!hasPreciseLocation && freshnessScore <= 20 && falsePositiveRisk >= 55) {
+    return { suppress: true, reason: "low-location-confidence and stale incident signal" };
+  }
+  if (confidenceScore < 40 && (lowSeverity || sparseSignals)) {
+    return { suppress: true, reason: "weak incident confidence below suppression threshold" };
+  }
+
+  return { suppress: false, reason: "" };
 }
 
 async function resolveTenantVertical(supabase: SupabaseClient, tenantId: string) {
@@ -383,7 +494,9 @@ async function resolveOpportunityCandidate({
 }) {
   let query = supabase
     .from("v2_opportunities")
-    .select("id,urgency_score,job_likelihood_score,source_reliability_score,catastrophe_linkage_score,created_at,explainability_json,title,description")
+    .select(
+      "id,urgency_score,job_likelihood_score,source_reliability_score,catastrophe_linkage_score,incident_cluster_id,location,postal_code,created_at,explainability_json,title,description"
+    )
     .eq("tenant_id", tenantId)
     .eq("service_line", serviceLine)
     .order("created_at", { ascending: false })
@@ -416,7 +529,9 @@ async function loadOpportunityCandidateById({
 }) {
   const { data, error } = await supabase
     .from("v2_opportunities")
-    .select("id,urgency_score,job_likelihood_score,source_reliability_score,catastrophe_linkage_score,created_at,explainability_json,title,description")
+    .select(
+      "id,urgency_score,job_likelihood_score,source_reliability_score,catastrophe_linkage_score,incident_cluster_id,location,postal_code,created_at,explainability_json,title,description"
+    )
     .eq("tenant_id", tenantId)
     .eq("id", opportunityId)
     .maybeSingle();
@@ -438,25 +553,34 @@ function mergeOpportunityScores({
 }) {
   const explainability = (existing.explainability_json || {}) as Record<string, unknown>;
   const priorSignalCount = Math.max(1, Number(explainability.signal_count || 1));
-  const nextSignalCount = priorSignalCount + 1;
-
   const existingSourceTypes = Array.isArray(explainability.source_types)
-    ? explainability.source_types.map((v) => String(v))
+    ? explainability.source_types.map((v) => String(v).trim()).filter(Boolean)
     : [];
-  const sourceTypes = Array.from(new Set([...existingSourceTypes, sourceType]));
+  const normalizedSourceType = String(sourceType || "").trim().toLowerCase();
+  const existingNormalized = existingSourceTypes.map((value) => value.toLowerCase());
+  const isSameSourceTypeRepeat = normalizedSourceType ? existingNormalized.includes(normalizedSourceType) : false;
+  const sourceTypes = isSameSourceTypeRepeat
+    ? existingSourceTypes
+    : Array.from(new Set([...existingSourceTypes, String(sourceType || "").trim()])).filter(Boolean);
+  const nextSignalCount = isSameSourceTypeRepeat ? priorSignalCount : priorSignalCount + 1;
+  const agreementBoost = isSameSourceTypeRepeat ? 0 : Math.min(12, Math.max(0, (sourceTypes.length - 1) * 5));
+  const maxLift = isSameSourceTypeRepeat ? 2 : 10;
 
-  const agreementBoost = Math.min(12, Math.max(0, (sourceTypes.length - 1) * 5));
+  const weightedAverage = (current: unknown, next: number) => {
+    const currentValue = Number(current || 0);
+    const raw = Math.max(0, Math.min(100, Math.round((currentValue * priorSignalCount + next + agreementBoost) / nextSignalCount)));
+    return isSameSourceTypeRepeat ? Math.min(currentValue + maxLift, raw) : raw;
+  };
 
-  const weightedAverage = (current: unknown, next: number) =>
-    Math.max(0, Math.min(100, Math.round((Number(current || 0) * priorSignalCount + next + agreementBoost) / nextSignalCount)));
-
-  const confidenceScore = Math.max(
+  const priorConfidence = Number(explainability.confidence_score || incomingConfidence);
+  const rawConfidence = Math.max(
     0,
     Math.min(
       100,
-      Math.round(((Number(explainability.confidence_score || incomingConfidence) * priorSignalCount + incomingConfidence) / nextSignalCount + agreementBoost) / 1.05)
+      Math.round(((priorConfidence * priorSignalCount + incomingConfidence) / nextSignalCount + agreementBoost) / 1.05)
     )
   );
+  const confidenceScore = isSameSourceTypeRepeat ? Math.min(priorConfidence + maxLift, rawConfidence) : rawConfidence;
 
   return {
     urgencyScore: weightedAverage(existing.urgency_score, incoming.urgencyScore),
@@ -468,6 +592,37 @@ function mergeOpportunityScores({
     sourceTypes,
     multiSignal: nextSignalCount > 1 && sourceTypes.length > 1
   };
+}
+
+function shouldMergeIncidentCandidate({
+  candidate,
+  event,
+  clusterId,
+  eventCategory
+}: {
+  candidate: Record<string, unknown>;
+  event: ConnectorNormalizedEvent;
+  clusterId: string | null;
+  eventCategory: string;
+}) {
+  const explainability = asRecord(candidate.explainability_json);
+  const existingCategory = String(explainability.event_category || "");
+  if (existingCategory && existingCategory.toLowerCase() === eventCategory.toLowerCase()) return true;
+
+  const existingCluster = String(candidate.incident_cluster_id || "");
+  if (clusterId && existingCluster && existingCluster === clusterId) return true;
+
+  const existingPostal = String(candidate.postal_code || "").trim();
+  const incomingPostal = String(event.postalCode || "").trim();
+  if (existingPostal && incomingPostal && existingPostal === incomingPostal) return true;
+
+  const existingPoint = parseLatLngFromPoint(candidate.location);
+  if (existingPoint && Number.isFinite(event.latitude) && Number.isFinite(event.longitude)) {
+    const distance = haversineMeters(existingPoint.lat, existingPoint.lng, Number(event.latitude), Number(event.longitude));
+    if (distance <= 8_000) return true;
+  }
+
+  return false;
 }
 
 async function upsertOpportunityFromEvent({
@@ -494,16 +649,18 @@ async function upsertOpportunityFromEvent({
   const postalCode = String(event.postalCode || parsePostalFromText(String(event.locationText || "")) || "").trim();
   const likelyJobType = String(event.likelyJobType || classifyLikelyJobType(classification.opportunityType, primaryServiceLine));
   const signalCategory = resolveSignalCategory(event, classification.opportunityType);
+  const incidentFamily = isIncidentFamilyEvent(event, classification.opportunityType);
   const scoring = computeOpportunityScores(
     scoreInputsForEvent(event, 55, {
       vertical,
-      signalCategory
+      signalCategory,
+      incidentFamily
     })
   );
   const dedupInput = buildDedupInputForEvent(event, primaryServiceLine);
   const duplicate = await checkOpportunityDuplicate(supabase, tenantId, dedupInput, vertical);
 
-  const candidate =
+  let candidate =
     (duplicate.isDuplicate
       ? await loadOpportunityCandidateById({
           supabase,
@@ -518,6 +675,26 @@ async function upsertOpportunityFromEvent({
       postalCode: postalCode || null
     }));
 
+  if (incidentFamily && candidate?.id) {
+    const allowMerge = shouldMergeIncidentCandidate({
+      candidate,
+      event,
+      clusterId,
+      eventCategory: signalCategory
+    });
+    if (!allowMerge) candidate = null;
+  }
+
+  const incidentAction = incidentFamily
+    ? recommendIncidentNextAction({
+        event,
+        confidenceScore: scoring.confidenceScore,
+        urgencyScore: scoring.urgencyScore,
+        freshnessScore: Number(scoring.explainability.freshness_score || 0),
+        geographyPrecision: Number(scoring.explainability.geography_precision || 0)
+      })
+    : null;
+
   const baseExplainability = injectDedupKey(
     {
       ...scoring.explainability,
@@ -531,7 +708,13 @@ async function upsertOpportunityFromEvent({
       signal_count: 1,
       source_types: [event.eventType],
       multi_signal: false,
-      event_category: signalCategory
+      event_category: signalCategory,
+      incident_family: incidentFamily,
+      recommended_next_action: incidentAction?.action ?? "route_standard",
+      recommended_action_reason: incidentAction?.reason ?? "default routing path",
+      recommended_action_sla_minutes: incidentAction?.slaMinutes ?? 45,
+      territory_relevance: incidentAction?.territoryRelevance ?? "medium",
+      review_required: Boolean(incidentAction && incidentAction.action !== "dispatch_now")
     } as Record<string, unknown>,
     dedupInput
   );
@@ -701,7 +884,8 @@ export const connectorRunnerInternals = {
   resolveSignalCategory,
   resolveTenantVertical,
   scoreInputsForEvent,
-  upsertIncidentClusterFromEvent
+  upsertIncidentClusterFromEvent,
+  shouldSuppressIncidentOpportunity
 };
 
 export async function runConnectorForSource({
@@ -850,10 +1034,12 @@ export async function runConnectorForSource({
       const locationPoint = toPoint(event.latitude, event.longitude);
       const classification = connector.classify(event);
       const signalCategory = resolveSignalCategory(event, classification.opportunityType);
+      const incidentFamily = isIncidentFamilyEvent(event, classification.opportunityType);
       const eventScoring = computeOpportunityScores(
         scoreInputsForEvent(event, 50, {
           vertical,
-          signalCategory
+          signalCategory,
+          incidentFamily
         })
       );
 
@@ -886,6 +1072,17 @@ export async function runConnectorForSource({
 
       if (sourceEventError || !sourceEvent?.id) {
         throw new Error(sourceEventError?.message || "Failed writing source event");
+      }
+
+      const suppression = shouldSuppressIncidentOpportunity({
+        event,
+        confidenceScore: eventScoring.confidenceScore,
+        freshnessScore: Number(eventScoring.explainability.freshness_score || 0),
+        falsePositiveRisk: Number(eventScoring.explainability.false_positive_risk || 0)
+      });
+      if (suppression.suppress) {
+        invalidCount += 1;
+        continue;
       }
 
       const cluster = await upsertIncidentClusterFromEvent({

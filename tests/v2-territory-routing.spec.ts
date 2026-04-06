@@ -190,3 +190,86 @@ test("routing intelligence inputs prefer primary service line and tighten SLA fo
 
   expect(slaMinutes).toBe(15);
 });
+
+test("incident low-confidence context prevents ultra-fast SLA despite urgency", () => {
+  const slaMinutes = routingInternals.computeSlaMinutes({
+    urgencyScore: 93,
+    catastropheLinkageScore: 82,
+    hasClusterMembership: true,
+    estimatedResponseWindow: "0-4h",
+    incidentFamily: true,
+    confidenceScore: 44,
+    freshnessScore: 30,
+    geographyPrecision: 40,
+    territoryRelevance: "low"
+  });
+
+  expect(slaMinutes).toBe(45);
+});
+
+test("incident high-confidence high-relevance context keeps fast SLA", () => {
+  const slaMinutes = routingInternals.computeSlaMinutes({
+    urgencyScore: 93,
+    catastropheLinkageScore: 82,
+    hasClusterMembership: true,
+    estimatedResponseWindow: "0-4h",
+    incidentFamily: true,
+    confidenceScore: 86,
+    freshnessScore: 90,
+    geographyPrecision: 92,
+    territoryRelevance: "high"
+  });
+
+  expect(slaMinutes).toBe(15);
+});
+
+test("zip routing prefers exact service-line territory over non-matching rows", async () => {
+  const original = featureFlags.usePolygonRouting;
+  (featureFlags as { usePolygonRouting: boolean }).usePolygonRouting = false;
+
+  const { mock } = createTerritorySupabaseMock({
+    rows: [
+      {
+        id: "t-nonmatch",
+        tenant_id: "tenant-1",
+        zip_codes: ["10001"],
+        service_lines: ["electrical"],
+        capacity_json: {},
+        hours_json: {}
+      },
+      {
+        id: "t-match",
+        tenant_id: "tenant-1",
+        zip_codes: ["10001"],
+        service_lines: ["restoration"],
+        capacity_json: {},
+        hours_json: {}
+      }
+    ],
+    polygonTerritoryId: null
+  });
+
+  const territory = await findTerritoryForOpportunity({
+    supabase: mock,
+    tenantId: "tenant-1",
+    postalCode: "10001",
+    serviceLine: "restoration",
+    latitude: null,
+    longitude: null
+  });
+
+  expect(territory?.id).toBe("t-match");
+
+  (featureFlags as { usePolygonRouting: boolean }).usePolygonRouting = original;
+});
+
+test("routing inputs extract postal code from location text when explicit postal is missing", () => {
+  const input = routingInternals.resolveRoutingInputs({
+    service_line: "restoration",
+    location_text: "Albany, NY 12207",
+    location: null,
+    explainability_json: {}
+  });
+
+  expect(input.postalCode).toBe("12207");
+});

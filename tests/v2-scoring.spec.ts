@@ -97,3 +97,88 @@ test("v2 scoring applies vertical and preferred-signal modifiers when supplied",
   expect(restorationStorm.explainability.vertical_key).toBe("restoration");
   expect(restorationStorm.explainability.preferred_signal).toBeTruthy();
 });
+
+test("fresh severe local incident ranks above stale weak incident", () => {
+  const staleWeak = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 72 * 60,
+    severity: 28,
+    geographyMatch: 35,
+    propertyTypeFit: 45,
+    serviceLineFit: 50,
+    priorCustomerMatch: 15,
+    contactAvailability: 30,
+    supportingSignalsCount: 1,
+    catastropheSignal: 20,
+    sourceReliability: 55,
+    freshnessScore: 15,
+    timestampConfidence: 52,
+    falsePositiveRisk: 65
+  });
+
+  const freshSevereLocal = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 10,
+    severity: 92,
+    geographyMatch: 92,
+    propertyTypeFit: 70,
+    serviceLineFit: 88,
+    priorCustomerMatch: 30,
+    contactAvailability: 55,
+    supportingSignalsCount: 3,
+    catastropheSignal: 86,
+    sourceReliability: 70,
+    freshnessScore: 92,
+    timestampConfidence: 100,
+    falsePositiveRisk: 12
+  });
+
+  const rank = { low: 0, medium: 1, high: 2, enterprise: 3 } as const;
+  expect(freshSevereLocal.urgencyScore).toBeGreaterThan(staleWeak.urgencyScore);
+  expect(freshSevereLocal.jobLikelihoodScore).toBeGreaterThan(staleWeak.jobLikelihoodScore);
+  expect(freshSevereLocal.confidenceScore).toBeGreaterThan(staleWeak.confidenceScore);
+  expect(rank[freshSevereLocal.revenueBand]).toBeGreaterThan(rank[staleWeak.revenueBand]);
+});
+
+test("inferred timestamp lowers incident confidence even with similar recency", () => {
+  const sourced = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 20,
+    severity: 74,
+    geographyMatch: 78,
+    geographyPrecision: 80,
+    propertyTypeFit: 60,
+    serviceLineFit: 76,
+    priorCustomerMatch: 24,
+    contactAvailability: 48,
+    supportingSignalsCount: 2,
+    catastropheSignal: 68,
+    sourceReliability: 76,
+    signalAgreement: 78,
+    freshnessScore: 84,
+    timestampConfidence: 100,
+    falsePositiveRisk: 20
+  });
+
+  const inferred = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 20,
+    severity: 74,
+    geographyMatch: 78,
+    geographyPrecision: 40,
+    propertyTypeFit: 60,
+    serviceLineFit: 76,
+    priorCustomerMatch: 24,
+    contactAvailability: 48,
+    supportingSignalsCount: 1,
+    catastropheSignal: 68,
+    sourceReliability: 42,
+    signalAgreement: 38,
+    freshnessScore: 34,
+    timestampConfidence: 52,
+    falsePositiveRisk: 68
+  });
+
+  expect(inferred.confidenceScore).toBeLessThan(sourced.confidenceScore);
+  expect(Number(inferred.explainability.timestamp_confidence)).toBeLessThan(Number(sourced.explainability.timestamp_confidence));
+});

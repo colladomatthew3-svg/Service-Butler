@@ -15,6 +15,7 @@ export type V2LifecycleStatus = "new" | "qualified" | "assigned" | "contacted" |
 export type V2AssignmentStatus = "pending_acceptance" | "accepted" | "escalated" | "complete" | "rejected";
 
 export type V2RevenueBand = "low" | "medium" | "high" | "enterprise";
+export type V2ConnectorRunStatus = "queued" | "running" | "completed" | "failed" | "partial" | "stale" | "replayed";
 
 export type V2OpportunityScoreVector = {
   urgencyScore: number;
@@ -48,7 +49,7 @@ export type V2AssignmentDecision = {
 export type V2ConnectorRunResult = {
   recordsSeen: number;
   recordsCreated: number;
-  status: "completed" | "failed" | "partial";
+  status: "completed" | "failed" | "partial" | "stale" | "replayed";
   errorSummary?: string;
 };
 

@@ -149,7 +149,15 @@ function redactPreview(value: unknown, depth = 0): unknown {
 
 function normalizeRunStatus(value: unknown) {
   const raw = asText(value).toLowerCase();
-  if (raw === "completed" || raw === "partial" || raw === "failed" || raw === "running" || raw === "queued") {
+  if (
+    raw === "completed" ||
+    raw === "partial" ||
+    raw === "failed" ||
+    raw === "running" ||
+    raw === "queued" ||
+    raw === "stale" ||
+    raw === "replayed"
+  ) {
     return raw;
   }
   return "";
@@ -256,7 +264,7 @@ function deriveRuntimeMode({
   }
 
   const runStatus = normalizeRunStatus(latestRun?.status);
-  if (runStatus === "completed") return "fully-live";
+  if (runStatus === "completed" || runStatus === "replayed") return "fully-live";
   return "live-partial";
 }
 

@@ -4,6 +4,7 @@ import { featureFlags } from "@/lib/config/feature-flags";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from "@/lib/v2/opportunity-qualification";
+import { deriveOpportunityPipelineStage } from "@/lib/v2/opportunity-pipeline";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { classifySourceLane, opportunityPriorityScore } from "@/lib/v2/source-lanes";
 
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
       let query = v2Context.supabase
         .from("v2_opportunities")
         .select(
-          "id,opportunity_type,service_line,title,description,location_text,postal_code,urgency_score,job_likelihood_score,contactability_score,source_reliability_score,revenue_band,catastrophe_linkage_score,routing_status,lifecycle_status,contact_status,explainability_json,created_at"
+          "id,source_event_id,opportunity_type,service_line,title,description,location_text,postal_code,urgency_score,job_likelihood_score,contactability_score,source_reliability_score,revenue_band,catastrophe_linkage_score,routing_status,lifecycle_status,contact_status,explainability_json,created_at"
         )
         .eq("tenant_id", v2Context.franchiseTenantId)
         .order("created_at", { ascending: false })
@@ -110,6 +111,18 @@ export async function GET(req: NextRequest) {
           });
           const dispatchReady = qualificationAllowsDispatch(qualification);
           const countsAsRealCapture = proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived";
+          const pipelineStage = deriveOpportunityPipelineStage({
+            lifecycleStatus: row.lifecycle_status,
+            routingStatus: row.routing_status,
+            contactStatus: row.contact_status,
+            sourceEventId: row.source_event_id,
+            opportunityType: row.opportunity_type,
+            serviceLine: row.service_line,
+            urgencyScore: row.urgency_score,
+            jobLikelihoodScore: row.job_likelihood_score,
+            sourceReliabilityScore: row.source_reliability_score,
+            explainability
+          });
 
           return {
             id: row.id,
@@ -138,6 +151,7 @@ export async function GET(req: NextRequest) {
             suggested_action: null,
             recommended_action: null,
             status: row.lifecycle_status,
+            pipeline_stage: pipelineStage,
             qualification_status: qualification.qualificationStatus,
             qualification_reason_code: qualification.qualificationReasonCode,
             proof_authenticity: qualification.proofAuthenticity,

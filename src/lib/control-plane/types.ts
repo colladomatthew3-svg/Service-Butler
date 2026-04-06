@@ -12,7 +12,9 @@ export type ReadinessIssueCode =
   | "simulated"
   | "live_partial"
   | "blocked_by_terms"
-  | "not_live_in_environment";
+  | "not_live_in_environment"
+  | "stale_data"
+  | "rollout_blocked";
 
 export type ReadinessIssue = {
   code: ReadinessIssueCode;
@@ -48,6 +50,8 @@ export type DataSourceSummary = {
   configured: boolean;
   status: DataSourceStatus;
   runtimeMode: DataSourceRuntimeMode;
+  rolloutState: "shadow" | "pilot" | "live" | "disabled";
+  readinessStatus: "pass" | "warn" | "fail" | "unknown";
   termsStatus: DataSourceTermsStatus;
   complianceStatus: DataSourceTermsStatus;
   freshness: number;
@@ -61,6 +65,11 @@ export type DataSourceSummary = {
   recordsCreated: number;
   recordsUpdated: number;
   provenance: string | null;
+  freshnessSlaMinutes: number;
+  healthStatus: "ok" | "degraded" | "failed" | "unknown";
+  healthDetail: string | null;
+  lastHealthCheckedAt: string | null;
+  lastHealthLatencyMs: number | null;
   liveRequirements: string[];
   buyerReadinessNote: string;
   captureStatus: DataSourceCaptureStatus;
@@ -75,6 +84,9 @@ export type DataSourceMutationPayload = {
   name?: string;
   status?: Exclude<DataSourceStatus, "not_configured">;
   termsStatus?: Exclude<DataSourceTermsStatus, "unknown">;
+  complianceStatus?: Exclude<DataSourceTermsStatus, "unknown">;
+  rolloutState?: "shadow" | "pilot" | "live" | "disabled";
+  freshnessSlaMinutes?: number;
   reliabilityScore?: number;
   provenance?: string;
   config?: Record<string, unknown>;

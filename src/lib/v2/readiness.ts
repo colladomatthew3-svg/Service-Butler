@@ -12,6 +12,7 @@ export type ProductionReadinessTenantSummary = {
   serviceAreaConfigured: boolean;
   activeDataSources: number;
   liveSafeDataSources: number;
+  tier1FreshSources: number;
 };
 
 export type ProductionReadinessSummary = {
@@ -354,6 +355,7 @@ async function resolveTenantSummary(
   const activeTerritories = await countActiveRows(supabase, "v2_territories", tenantId);
   const activeDataSources = await countActiveRows(supabase, "v2_data_sources", tenantId, "status", "active");
   const liveSafeDataSources = await countLiveSafeSources(supabase, tenantId);
+  const tier1FreshSources = await countTier1FreshSources(supabase, tenantId);
   const serviceAreaConfigured = await hasConfiguredServiceArea(supabase, tenantId);
 
   return {
@@ -362,7 +364,8 @@ async function resolveTenantSummary(
     activeTerritories,
     serviceAreaConfigured,
     activeDataSources,
-    liveSafeDataSources
+    liveSafeDataSources,
+    tier1FreshSources
   };
 }
 
@@ -411,6 +414,26 @@ async function countLiveSafeSources(supabase: SupabaseClient, tenantId: string) 
   }
 }
 
+async function countTier1FreshSources(supabase: SupabaseClient, tenantId: string) {
+  try {
+    const sources = await getDataSourceSummaries({ supabase, tenantId });
+    const now = Date.now();
+    return sources.filter((source) => {
+      if (source.status !== "active") return false;
+      if (source.runtimeMode === "simulated") return false;
+      if (!["incident", "weather"].includes(String(source.sourceType || "").toLowerCase())) return false;
+      const ts = source.latestEventAt || source.freshnessTimestamp;
+      if (!ts) return false;
+      const parsed = new Date(ts).getTime();
+      if (!Number.isFinite(parsed)) return false;
+      const slaMinutes = Math.max(30, Number(source.freshnessSlaMinutes || 360));
+      return now - parsed <= slaMinutes * 60 * 1000;
+    }).length;
+  } catch {
+    return 0;
+  }
+}
+
 async function checkTenantReadiness(tenant: ProductionReadinessTenantSummary | null): Promise<ProductionReadinessCheck[]> {
   if (!tenant) {
     return [
@@ -418,7 +441,8 @@ async function checkTenantReadiness(tenant: ProductionReadinessTenantSummary | n
       warn("active_territories", false, "No tenant context available for territory validation."),
       warn("service_area", false, "No tenant context available for service area validation."),
       warn("active_data_sources", false, "No tenant context available for data source validation."),
-      warn("live_safe_sources", false, "No tenant context available for live-safe source validation.")
+      warn("live_safe_sources", false, "No tenant context available for live-safe source validation."),
+      warn("tier1_freshness", false, "No tenant context available for Tier-1 freshness validation.")
     ];
   }
 
@@ -448,6 +472,12 @@ async function checkTenantReadiness(tenant: ProductionReadinessTenantSummary | n
     checks.push(pass("live_safe_sources", true, `Live-safe data sources: ${tenant.liveSafeDataSources}.`, String(tenant.liveSafeDataSources)));
   } else {
     checks.push(fail("live_safe_sources", true, "No live-safe data sources are active.", String(tenant.liveSafeDataSources)));
+  }
+
+  if (tenant.tier1FreshSources > 0) {
+    checks.push(pass("tier1_freshness", true, `Fresh Tier-1 sources (incident/weather): ${tenant.tier1FreshSources}.`, String(tenant.tier1FreshSources)));
+  } else {
+    checks.push(fail("tier1_freshness", true, "No fresh Tier-1 incident/weather sources within freshness SLA.", String(tenant.tier1FreshSources)));
   }
 
   return checks;

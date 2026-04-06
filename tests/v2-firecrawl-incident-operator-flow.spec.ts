@@ -29,7 +29,7 @@ test("Firecrawl-backed incident source creates an operator-facing opportunity", 
               title: "County flood response bulletin",
               description: "Basement flooding and emergency response activity",
               sourceURL: "https://county.example.gov/incidents/flood-response",
-              publishedTime: "2026-03-16T10:00:00.000Z"
+              publishedTime: new Date().toISOString()
             }
           }
         }),
@@ -213,6 +213,7 @@ test("Firecrawl-backed incident source creates an operator-facing opportunity", 
         source_name: "County Incidents",
         terms_status: "approved",
         use_firecrawl: true,
+        max_event_age_hours: 9999,
         firecrawl_api_key: "fc-test-key",
         page_urls: ["https://county.example.gov/incidents/flood-response"],
         location_text: "Buffalo, NY"
@@ -228,6 +229,14 @@ test("Firecrawl-backed incident source creates an operator-facing opportunity", 
     expect(opportunities[0]?.title).toBe("County flood response bulletin");
     expect(opportunities[0]?.opportunity_type).toBe("flood_incident");
     expect(opportunities[0]?.service_line).toBe("restoration");
+    expect(opportunities[0]?.contact_status).toBe("identified");
+    expect(opportunities[0]?.routing_status).toBe("pending");
+    expect(opportunities[0]?.lifecycle_status).toBe("new");
+    const explainability = (opportunities[0]?.explainability_json as Record<string, unknown>) || {};
+    expect(typeof explainability.confidence_score).toBe("number");
+    expect(typeof explainability.signal_count).toBe("number");
+    expect(Array.isArray(explainability.source_types)).toBeTruthy();
+    expect(typeof explainability.event_category).toBe("string");
     expect(String((sourceEvents[0]?.normalized_payload as Record<string, unknown>)?.source_provenance || "")).toBe(
       "https://county.example.gov/incidents/flood-response"
     );

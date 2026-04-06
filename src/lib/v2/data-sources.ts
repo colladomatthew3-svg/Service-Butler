@@ -14,6 +14,8 @@ export type DataSourceMutationPayload = {
   active?: boolean;
   termsStatus?: string;
   complianceStatus?: string;
+  rolloutState?: "shadow" | "pilot" | "live" | "disabled";
+  freshnessSlaMinutes?: number;
   provenance?: string;
   reliabilityScore?: number;
   freshnessTimestamp?: string | null;
@@ -33,6 +35,8 @@ export type DataSourceSummary = {
   status: string;
   termsStatus: string;
   complianceStatus: string;
+  rolloutState: "shadow" | "pilot" | "live" | "disabled";
+  readinessStatus: "pass" | "warn" | "fail" | "unknown";
   runtimeMode: DataSourceRuntimeMode;
   provenance: string;
   reliabilityScore: number;
@@ -48,6 +52,11 @@ export type DataSourceSummary = {
   latestEventComplianceStatus: string | null;
   latestEventFreshnessScore: number | null;
   latestEventReliabilityScore: number | null;
+  freshnessSlaMinutes: number;
+  healthStatus: "ok" | "degraded" | "failed" | "unknown";
+  healthDetail: string | null;
+  lastHealthCheckedAt: string | null;
+  lastHealthLatencyMs: number | null;
   complianceFlags: Record<string, unknown>;
   rateLimitPolicy: Record<string, unknown>;
   configPreview: Record<string, unknown>;
@@ -187,6 +196,24 @@ function normalizeStatus(value: unknown) {
   return raw || "paused";
 }
 
+function normalizeRolloutState(value: unknown): DataSourceSummary["rolloutState"] {
+  const normalized = asText(value).toLowerCase();
+  if (normalized === "shadow" || normalized === "pilot" || normalized === "live" || normalized === "disabled") return normalized;
+  return "pilot";
+}
+
+function normalizeReadinessStatus(value: unknown): DataSourceSummary["readinessStatus"] {
+  const normalized = asText(value).toLowerCase();
+  if (normalized === "pass" || normalized === "warn" || normalized === "fail" || normalized === "unknown") return normalized;
+  return "unknown";
+}
+
+function normalizeHealthStatus(value: unknown): DataSourceSummary["healthStatus"] {
+  const normalized = asText(value).toLowerCase();
+  if (normalized === "ok" || normalized === "degraded" || normalized === "failed" || normalized === "unknown") return normalized;
+  return "unknown";
+}
+
 function latestBySource<T extends Record<string, unknown>>(rows: T[], sourceKey = "source_id") {
   const latest = new Map<string, T>();
   for (const row of rows) {
@@ -255,7 +282,10 @@ function deriveRuntimeMode({
   latestRun?: Record<string, unknown> | null;
   policyAllowed: boolean;
 }): DataSourceRuntimeMode {
+  const rolloutState = normalizeRolloutState(sourceRow.rollout_state);
   if (normalizeStatus(sourceRow.status) !== "active") return "simulated";
+  if (rolloutState === "disabled") return "simulated";
+  if (rolloutState === "shadow") return "live-partial";
   if (!policyAllowed) return "live-partial";
 
   const termsStatus = asText(sourceRow.terms_status || sourceRow.compliance_status).toLowerCase();
@@ -313,10 +343,10 @@ export async function getDataSourceSummaries({
     { data: eventRows, error: eventError }
   ] = await Promise.all([
     supabase
-      .from("v2_data_sources")
-      .select(
-        "id,source_type,name,status,terms_status,provenance,reliability_score,freshness_timestamp,rate_limit_policy,compliance_flags,config_encrypted,compliance_status,created_at,updated_at"
-      )
+    .from("v2_data_sources")
+    .select(
+      "id,source_type,name,status,terms_status,provenance,reliability_score,freshness_timestamp,freshness_sla_minutes,rate_limit_policy,compliance_flags,config_encrypted,compliance_status,rollout_state,readiness_status,health_status,health_detail,last_health_checked_at,last_health_latency_ms,created_at,updated_at"
+    )
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false }),
     supabase
@@ -354,7 +384,7 @@ export async function getDataSourceSummaries({
     const latestRun = latestRuns.get(sourceId) || null;
     const latestEvent = latestEvents.get(sourceId) || null;
     const termsStatus = asText(latestEvent?.compliance_status || sourceRow.terms_status || compliancePolicy?.termsStatus || "pending_review");
-    const complianceStatus = asText(latestEvent?.compliance_status || sourceRow.compliance_status || termsStatus || compliancePolicy?.termsStatus || "pending_review");
+    const complianceStatus = asText(sourceRow.compliance_status || termsStatus || compliancePolicy?.termsStatus || "pending_review");
     const runtimeMode = deriveRuntimeMode({
       sourceRow: {
         ...sourceRow,
@@ -376,6 +406,8 @@ export async function getDataSourceSummaries({
       status: normalizeStatus(sourceRow.status),
       termsStatus,
       complianceStatus,
+      rolloutState: normalizeRolloutState(sourceRow.rollout_state),
+      readinessStatus: normalizeReadinessStatus(sourceRow.readiness_status),
       runtimeMode,
       provenance: asText(sourceRow.provenance),
       reliabilityScore: asNumber(sourceRow.reliability_score, 0),
@@ -391,6 +423,11 @@ export async function getDataSourceSummaries({
       latestEventComplianceStatus: asText(latestEvent?.compliance_status) || null,
       latestEventFreshnessScore: latestEvent ? asNumber(latestEvent.data_freshness_score, 0) : null,
       latestEventReliabilityScore: latestEvent ? asNumber(latestEvent.source_reliability_score, 0) : null,
+      freshnessSlaMinutes: Math.max(30, asNumber(sourceRow.freshness_sla_minutes, 360)),
+      healthStatus: normalizeHealthStatus(sourceRow.health_status),
+      healthDetail: asText(sourceRow.health_detail) || null,
+      lastHealthCheckedAt: asText(sourceRow.last_health_checked_at) || null,
+      lastHealthLatencyMs: sourceRow.last_health_latency_ms != null ? asNumber(sourceRow.last_health_latency_ms, 0) : null,
       complianceFlags: parseRecord(sourceRow.compliance_flags),
       rateLimitPolicy: parseRecord(sourceRow.rate_limit_policy),
       configPreview: buildSourceConfigPreview(sourceRow)
@@ -425,7 +462,7 @@ export async function fetchDataSourceRow({
   const { data, error } = await supabase
     .from("v2_data_sources")
     .select(
-      "id,tenant_id,source_type,name,status,terms_status,provenance,reliability_score,freshness_timestamp,rate_limit_policy,compliance_flags,config_encrypted,compliance_status,created_at,updated_at"
+      "id,tenant_id,source_type,name,status,terms_status,provenance,reliability_score,freshness_timestamp,freshness_sla_minutes,rate_limit_policy,compliance_flags,config_encrypted,compliance_status,rollout_state,readiness_status,health_status,health_detail,last_health_checked_at,last_health_latency_ms,created_at,updated_at"
     )
     .eq("tenant_id", tenantId)
     .eq("id", sourceId)
@@ -450,7 +487,7 @@ function buildStoredConfigValue(
     merged.connector_key = connectorKey;
   }
 
-  return merged;
+  return JSON.stringify(merged);
 }
 
 export function buildDataSourceInsertPayload({
@@ -479,9 +516,13 @@ export function buildDataSourceInsertPayload({
     provenance: asText(body.provenance) || null,
     reliability_score: asNumber(body.reliabilityScore, 0),
     freshness_timestamp: body.freshnessTimestamp || new Date().toISOString(),
+    freshness_sla_minutes: Math.max(30, asNumber(body.freshnessSlaMinutes, 360)),
     rate_limit_policy: body.rateLimitPolicy || {},
     compliance_flags: body.complianceFlags || {},
     compliance_status: asText(body.complianceStatus) || termsStatus,
+    rollout_state: body.rolloutState || "pilot",
+    readiness_status: "unknown",
+    readiness_reasons: [],
     config_encrypted: buildStoredConfigValue(body.config, connectorKey, {})
   };
 }
@@ -499,6 +540,8 @@ export function buildDataSourceUpdatePayload(
   }
   if (body.termsStatus != null) payload.terms_status = asText(body.termsStatus) || "pending_review";
   if (body.complianceStatus != null) payload.compliance_status = asText(body.complianceStatus) || null;
+  if (body.rolloutState != null) payload.rollout_state = normalizeRolloutState(body.rolloutState);
+  if (body.freshnessSlaMinutes != null) payload.freshness_sla_minutes = Math.max(30, asNumber(body.freshnessSlaMinutes, 360));
   if (body.provenance != null) payload.provenance = asText(body.provenance) || null;
   if (body.reliabilityScore != null) payload.reliability_score = asNumber(body.reliabilityScore, 0);
   if (body.freshnessTimestamp !== undefined) payload.freshness_timestamp = body.freshnessTimestamp || null;
@@ -580,6 +623,16 @@ export async function runDataSourceConnector({
   });
 
   if (!health.ok) {
+    await supabase
+      .from("v2_data_sources")
+      .update({
+        health_status: "failed",
+        health_detail: asText(health.detail) || "Connector healthcheck failed",
+        last_health_checked_at: new Date().toISOString(),
+        last_health_latency_ms: Number.isFinite(health.latencyMs) ? Number(health.latencyMs) : null
+      })
+      .eq("tenant_id", tenantId)
+      .eq("id", sourceId);
     return {
       sourceSummary: sourceSummaryBeforeRun,
       health: summarizedHealth,
@@ -609,6 +662,17 @@ export async function runDataSourceConnector({
   });
 
   const sourceSummary = await getDataSourceSummary({ supabase, tenantId, sourceId });
+  await supabase
+    .from("v2_data_sources")
+    .update({
+      health_status: run.status === "failed" ? "failed" : run.status === "partial" || run.status === "stale" ? "degraded" : "ok",
+      health_detail: run.errorSummary || (run.status === "replayed" ? "Replay run completed" : "Connector run completed"),
+      last_health_checked_at: new Date().toISOString(),
+      freshness_timestamp: sourceSummary.latestEventAt || sourceSummary.freshnessTimestamp,
+      last_health_latency_ms: Number.isFinite(health.latencyMs) ? Number(health.latencyMs) : null
+    })
+    .eq("tenant_id", tenantId)
+    .eq("id", sourceId);
   return {
     sourceSummary,
     health: summarizeConnectorHealth({ sourceSummary, health, connectorKey }),
@@ -634,6 +698,16 @@ export async function probeDataSourceHealth({
   if (!connector) throw new Error(`Connector not found for key ${connectorKey}`);
 
   const health = await connector.healthcheck(connectorConfig.input);
+  await supabase
+    .from("v2_data_sources")
+    .update({
+      health_status: health.ok ? "ok" : "failed",
+      health_detail: asText(health.detail) || (health.ok ? "Connector reachable" : "Connector healthcheck failed"),
+      last_health_checked_at: new Date().toISOString(),
+      last_health_latency_ms: Number.isFinite(health.latencyMs) ? Number(health.latencyMs) : null
+    })
+    .eq("tenant_id", tenantId)
+    .eq("id", sourceId);
   const sourceSummary = await getDataSourceSummary({ supabase, tenantId, sourceId });
 
   return {

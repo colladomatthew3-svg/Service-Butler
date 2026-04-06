@@ -47,6 +47,14 @@ function usesSampleRecords(source: DataSourceSummary) {
   return Array.isArray(source.config.sample_records) && source.config.sample_records.length > 0;
 }
 
+function isStaleForSla(source: DataSourceSummary) {
+  if (!source.freshnessTimestamp) return true;
+  const timestamp = new Date(source.freshnessTimestamp).getTime();
+  if (!Number.isFinite(timestamp)) return true;
+  const ageMinutes = Math.max(0, Math.round((Date.now() - timestamp) / 60000));
+  return ageMinutes > Math.max(30, Number(source.freshnessSlaMinutes || 360));
+}
+
 export function buildEnvironmentReadinessState(reason: string, detail?: string): ReadinessState {
   return {
     mode: "blocked",
@@ -66,6 +74,24 @@ export function buildDataSourceReadinessState(source: DataSourceSummary): Readin
       issue("not_configured", `${source.name} is not configured yet.`, "Add the source to this tenant and save the required config before using it.")
     );
     recommendedActions.push("Add the source to the tenant control plane.");
+  }
+
+  if (source.rolloutState === "disabled") {
+    blockingIssues.push(
+      issue("rollout_blocked", `${source.name} is disabled by rollout policy.`, "Set rollout_state to pilot or live to allow buyer-proof capture.")
+    );
+    recommendedActions.push("Set rollout_state to pilot or live.");
+  }
+
+  if (source.rolloutState === "shadow") {
+    blockingIssues.push(
+      issue(
+        "rollout_blocked",
+        `${source.name} is in shadow rollout mode.`,
+        "Shadow mode is visible to operators, but blocked from buyer-proof capture until promoted."
+      )
+    );
+    recommendedActions.push("Promote rollout_state from shadow to pilot/live when source quality is verified.");
   }
 
   if (termsBlocked(source.termsStatus) || termsBlocked(source.complianceStatus)) {
@@ -121,6 +147,17 @@ export function buildDataSourceReadinessState(source: DataSourceSummary): Readin
     recommendedActions.push("Clear the remaining live gating issue before using this source in buyer-proof flows.");
   }
 
+  if ((source.sourceType === "incident" || source.sourceType === "weather") && isStaleForSla(source)) {
+    blockingIssues.push(
+      issue(
+        "stale_data",
+        `${source.name} data is stale for its freshness SLA.`,
+        `freshness_timestamp=${source.freshnessTimestamp || "none"} exceeds freshness_sla_minutes=${source.freshnessSlaMinutes}.`
+      )
+    );
+    recommendedActions.push("Run source healthcheck and connector run to refresh Tier-1 data before buyer-proof usage.");
+  }
+
   return {
     mode: blockingIssues.length > 0 ? "blocked" : "live",
     live: blockingIssues.length === 0,
@@ -131,7 +168,7 @@ export function buildDataSourceReadinessState(source: DataSourceSummary): Readin
 }
 
 export function buyerReadinessNoteForSource(
-  source: Pick<DataSourceSummary, "name" | "configured" | "status" | "runtimeMode" | "termsStatus" | "complianceStatus"> & {
+  source: Pick<DataSourceSummary, "name" | "configured" | "status" | "runtimeMode" | "rolloutState" | "termsStatus" | "complianceStatus"> & {
     config?: Record<string, unknown>;
   }
 ) {
@@ -144,6 +181,12 @@ export function buyerReadinessNoteForSource(
   }
   if (termsBlocked(source.termsStatus) || termsBlocked(source.complianceStatus)) {
     return `Blocked for live proof until ${source.termsStatus.replace(/_/g, " ")} terms/compliance are cleared.`;
+  }
+  if (source.rolloutState === "disabled") {
+    return "Disabled by rollout policy. Not eligible for live capture.";
+  }
+  if (source.rolloutState === "shadow") {
+    return "Shadow rollout only. Visible to operators, excluded from buyer-proof capture.";
   }
   if (source.runtimeMode === "simulated") {
     return "Visible to operators, but still simulated and excluded from buyer-proof metrics.";

@@ -15,6 +15,8 @@ function makeSource(overrides: Partial<DataSourceSummary> = {}): DataSourceSumma
     configured: true,
     status: "active",
     runtimeMode: "fully-live",
+    rolloutState: "live",
+    readinessStatus: "pass",
     termsStatus: "approved",
     complianceStatus: "approved",
     freshness: 92,
@@ -28,6 +30,11 @@ function makeSource(overrides: Partial<DataSourceSummary> = {}): DataSourceSumma
     recordsCreated: 4,
     recordsUpdated: 2,
     provenance: "api.weather.gov",
+    freshnessSlaMinutes: 360,
+    healthStatus: "ok",
+    healthDetail: "Connector healthy",
+    lastHealthCheckedAt: new Date().toISOString(),
+    lastHealthLatencyMs: 120,
     liveRequirements: [],
     buyerReadinessNote: "Live-safe and eligible for buyer-proof reporting.",
     captureStatus: "capturing_live",
@@ -129,6 +136,7 @@ test("sample-backed sources are excluded from operator and buyer truth paths", (
     configured: source.configured,
     status: source.status,
     runtimeMode: source.runtimeMode,
+    rolloutState: source.rolloutState,
     termsStatus: source.termsStatus,
     complianceStatus: source.complianceStatus,
     config: source.config
@@ -138,4 +146,40 @@ test("sample-backed sources are excluded from operator and buyer truth paths", (
   expect(readiness.blockingIssues.map((issue) => issue.code)).toContain("simulated");
   expect(readiness.recommendedActions).toContain("Remove sample_records before using this source for live capture or buyer-proof reporting.");
   expect(buyerNote).toContain("excluded from live capture and buyer-proof metrics");
+});
+
+test("stale Tier-1 sources block readiness with explicit stale_data issue", () => {
+  const staleTimestamp = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+  const readiness = buildDataSourceReadinessState(
+    makeSource({
+      sourceType: "incident",
+      name: "Incident Feed",
+      freshnessTimestamp: staleTimestamp,
+      freshnessSlaMinutes: 180
+    })
+  );
+
+  expect(readiness.mode).toBe("blocked");
+  expect(readiness.blockingIssues.map((issue) => issue.code)).toContain("stale_data");
+});
+
+test("shadow rollout mode blocks buyer-proof readiness until promoted", () => {
+  const source = makeSource({
+    rolloutState: "shadow"
+  });
+  const readiness = buildDataSourceReadinessState(source);
+  const buyerNote = buyerReadinessNoteForSource({
+    name: source.name,
+    configured: source.configured,
+    status: source.status,
+    runtimeMode: source.runtimeMode,
+    rolloutState: source.rolloutState,
+    termsStatus: source.termsStatus,
+    complianceStatus: source.complianceStatus,
+    config: source.config
+  });
+
+  expect(readiness.mode).toBe("blocked");
+  expect(readiness.blockingIssues.map((issue) => issue.code)).toContain("rollout_blocked");
+  expect(buyerNote).toContain("Shadow rollout only");
 });

@@ -33,10 +33,18 @@ type RawSourceRow = {
   name: string;
   status: Exclude<DataSourceStatus, "not_configured">;
   terms_status: Exclude<DataSourceTermsStatus, "unknown">;
+  compliance_status?: Exclude<DataSourceTermsStatus, "unknown"> | null;
+  rollout_state?: "shadow" | "pilot" | "live" | "disabled" | null;
+  readiness_status?: "pass" | "warn" | "fail" | "unknown" | null;
   rate_limit_policy?: Record<string, unknown> | null;
   config_encrypted?: unknown;
   reliability_score?: number | null;
   freshness_timestamp?: string | null;
+  freshness_sla_minutes?: number | null;
+  health_status?: "ok" | "degraded" | "failed" | "unknown" | null;
+  health_detail?: string | null;
+  last_health_checked_at?: string | null;
+  last_health_latency_ms?: number | null;
   provenance?: string | null;
 };
 
@@ -116,6 +124,24 @@ function normalizeTermsStatus(value: unknown): DataSourceTermsStatus {
   if (normalized === "approved" || normalized === "restricted" || normalized === "pending_review" || normalized === "blocked") {
     return normalized;
   }
+  return "unknown";
+}
+
+function normalizeRolloutState(value: unknown): DataSourceSummary["rolloutState"] {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "shadow" || normalized === "pilot" || normalized === "live" || normalized === "disabled") return normalized;
+  return "pilot";
+}
+
+function normalizeReadinessStatus(value: unknown): DataSourceSummary["readinessStatus"] {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "pass" || normalized === "warn" || normalized === "fail" || normalized === "unknown") return normalized;
+  return "unknown";
+}
+
+function normalizeHealthStatus(value: unknown): DataSourceSummary["healthStatus"] {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "ok" || normalized === "degraded" || normalized === "failed" || normalized === "unknown") return normalized;
   return "unknown";
 }
 
@@ -223,8 +249,12 @@ export function computeRuntimeMode(sourceType: string, config: Record<string, un
   return termsStatus === "approved" ? "fully-live" : "live-partial";
 }
 
-function resolveCaptureStatus(summary: Pick<DataSourceSummary, "configured" | "status" | "runtimeMode" | "termsStatus" | "complianceStatus" | "config" | "latestRunStatus">) {
+function resolveCaptureStatus(
+  summary: Pick<DataSourceSummary, "configured" | "status" | "runtimeMode" | "termsStatus" | "complianceStatus" | "config" | "latestRunStatus" | "rolloutState">
+) {
   if (!summary.configured || summary.status === "not_configured" || hasSampleRecords(summary.config)) return "simulated" as const;
+  if (summary.rolloutState === "disabled") return "blocked" as const;
+  if (summary.rolloutState === "shadow") return "live_safe_partial" as const;
   if (summary.termsStatus !== "approved" || summary.complianceStatus !== "approved") return "blocked" as const;
   if (summary.runtimeMode === "live-partial") return "live_safe_partial" as const;
   if (summary.runtimeMode === "simulated") return "simulated" as const;
@@ -237,6 +267,7 @@ function buildBuyerReadinessNote(input: {
   configured: boolean;
   status: DataSourceStatus;
   runtimeMode: DataSourceRuntimeMode;
+  rolloutState: DataSourceSummary["rolloutState"];
   termsStatus: DataSourceTermsStatus;
   complianceStatus: DataSourceTermsStatus;
   config: Record<string, unknown>;
@@ -261,6 +292,8 @@ function configuredSummaryFromCatalog(catalogKey: string): DataSourceSummary {
     configured: false,
     status: "not_configured",
     runtimeMode: computeRuntimeMode(catalog.sourceType, catalog.defaultConfig, catalog.defaultTermsStatus),
+    rolloutState: "pilot",
+    readinessStatus: "unknown",
     termsStatus: catalog.defaultTermsStatus,
     complianceStatus: catalog.defaultTermsStatus,
     freshness: 0,
@@ -274,12 +307,18 @@ function configuredSummaryFromCatalog(catalogKey: string): DataSourceSummary {
     recordsCreated: 0,
     recordsUpdated: 0,
     provenance: catalog.defaultProvenance,
+    freshnessSlaMinutes: 360,
+    healthStatus: "unknown",
+    healthDetail: null,
+    lastHealthCheckedAt: null,
+    lastHealthLatencyMs: null,
     liveRequirements: catalog.liveRequirements,
     buyerReadinessNote: buildBuyerReadinessNote({
       name: catalog.name,
       configured: false,
       status: "not_configured",
       runtimeMode: computeRuntimeMode(catalog.sourceType, catalog.defaultConfig, catalog.defaultTermsStatus),
+      rolloutState: "pilot",
       termsStatus: catalog.defaultTermsStatus,
       complianceStatus: catalog.defaultTermsStatus,
       config: catalog.defaultConfig
@@ -312,9 +351,10 @@ function buildConfiguredSummary(
   const connectorKey = catalog?.connectorKey || inferConnectorKey(row.source_type);
   const config = parseDataSourceConfig(row.config_encrypted);
   const termsStatus = normalizeTermsStatus(row.terms_status);
+  const rolloutState = normalizeRolloutState(row.rollout_state);
+  const readinessStatus = normalizeReadinessStatus(row.readiness_status);
   const connector = getConnectorByKey(connectorKey);
-  const complianceStatus =
-    connector?.compliancePolicy({
+  const policyTermsStatus = connector?.compliancePolicy({
       tenantId: "",
       sourceId: String(row.id),
       sourceType: String(row.source_type),
@@ -323,11 +363,11 @@ function buildConfiguredSummary(
         terms_status: row.terms_status,
         source_provenance: row.provenance
       }
-    }).termsStatus ||
-    normalizeTermsStatus(latestEvent?.compliance_status) ||
-    termsStatus;
+    }).termsStatus;
+  const complianceStatus = normalizeTermsStatus(row.compliance_status || policyTermsStatus || latestEvent?.compliance_status || termsStatus);
 
-  const runtimeMode = computeRuntimeMode(row.source_type, config, termsStatus);
+  const runtimeModeBase = computeRuntimeMode(row.source_type, config, termsStatus);
+  const runtimeMode: DataSourceRuntimeMode = rolloutState === "disabled" ? "simulated" : rolloutState === "shadow" ? "live-partial" : runtimeModeBase;
   const freshnessTimestamp = latestEvent?.ingested_at || row.freshness_timestamp || null;
   const recordsUpdated = Number((latestRun?.metadata as Record<string, unknown> | null)?.opportunities_updated || 0);
   const summary = {
@@ -341,6 +381,8 @@ function buildConfiguredSummary(
     configured: true,
     status: row.status,
     runtimeMode,
+    rolloutState,
+    readinessStatus,
     termsStatus,
     complianceStatus,
     freshness: freshnessScore(freshnessTimestamp),
@@ -354,12 +396,18 @@ function buildConfiguredSummary(
     recordsCreated: Number(latestRun?.records_created || 0),
     recordsUpdated,
     provenance: row.provenance || catalog?.defaultProvenance || null,
+    freshnessSlaMinutes: Math.max(30, Number(row.freshness_sla_minutes || 360)),
+    healthStatus: normalizeHealthStatus(row.health_status),
+    healthDetail: row.health_detail || null,
+    lastHealthCheckedAt: row.last_health_checked_at || null,
+    lastHealthLatencyMs: row.last_health_latency_ms != null ? Number(row.last_health_latency_ms) : null,
     liveRequirements: catalog?.liveRequirements || [],
     buyerReadinessNote: buildBuyerReadinessNote({
       name: row.name || catalog?.name || row.source_type,
       configured: true,
       status: row.status,
       runtimeMode,
+      rolloutState,
       termsStatus,
       complianceStatus,
       config
@@ -394,7 +442,9 @@ export async function listDataSourceSummaries({
 
   const { data: sourceRows, error: sourceError } = await (supabase as any)
     .from("v2_data_sources")
-    .select("id,source_type,name,status,terms_status,rate_limit_policy,config_encrypted,reliability_score,freshness_timestamp,provenance")
+    .select(
+      "id,source_type,name,status,terms_status,compliance_status,rollout_state,readiness_status,rate_limit_policy,config_encrypted,reliability_score,freshness_timestamp,freshness_sla_minutes,health_status,health_detail,last_health_checked_at,last_health_latency_ms,provenance"
+    )
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: true })
     .limit(200);
@@ -487,7 +537,12 @@ export function buildCreatePayloadFromMutation(payload: DataSourceMutationPayloa
     provenance: String(payload.provenance || catalog.defaultProvenance).trim() || null,
     rate_limit_policy: payload.rateLimitPolicy || {},
     config_encrypted: stringifyDataSourceConfig(config),
-    freshness_timestamp: null
+    freshness_timestamp: null,
+    compliance_status: payload.complianceStatus || payload.termsStatus || catalog.defaultTermsStatus,
+    rollout_state: payload.rolloutState || "pilot",
+    freshness_sla_minutes: Math.max(30, Number(payload.freshnessSlaMinutes || 360)),
+    readiness_status: "unknown",
+    readiness_reasons: []
   };
 }
 
@@ -496,6 +551,9 @@ export function buildUpdatePayloadFromMutation(payload: DataSourceMutationPayloa
   if (payload.name != null) update.name = String(payload.name).trim();
   if (payload.status != null) update.status = payload.status;
   if (payload.termsStatus != null) update.terms_status = payload.termsStatus;
+  if (payload.complianceStatus != null) update.compliance_status = payload.complianceStatus;
+  if (payload.rolloutState != null) update.rollout_state = payload.rolloutState;
+  if (payload.freshnessSlaMinutes != null) update.freshness_sla_minutes = Math.max(30, Math.round(Number(payload.freshnessSlaMinutes) || 360));
   if (payload.reliabilityScore != null) update.reliability_score = clampScore(payload.reliabilityScore);
   if (payload.provenance != null) update.provenance = String(payload.provenance).trim() || null;
   if (payload.rateLimitPolicy != null) update.rate_limit_policy = payload.rateLimitPolicy;

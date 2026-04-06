@@ -74,6 +74,19 @@ function hasConfiguredIncidentFeed(input: ConnectorPullInput) {
   return Boolean(String(input.config.feed_url || input.config.endpoint || "").trim());
 }
 
+function freshnessSlaHours(input: ConnectorPullInput) {
+  const configured = Number(input.config.max_event_age_hours ?? input.config.freshness_sla_hours ?? 48);
+  if (!Number.isFinite(configured)) return 48;
+  return Math.max(1, Math.min(168, Math.round(configured)));
+}
+
+function parseOccurredAt(raw: unknown) {
+  const text = String(raw || "").trim();
+  if (!text) return null;
+  const parsed = new Date(text);
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+}
+
 async function pullIncidentPages(input: ConnectorPullInput) {
   const pages = await scrapeConfiguredPagesWithFirecrawl({
     config: input.config,
@@ -112,6 +125,9 @@ export const incidentConnector: ConnectorAdapter = {
     const scrapedPages = await pullIncidentPages(input);
     if (scrapedPages.length > 0) return scrapedPages;
 
+    const liveConfigured = hasConfiguredIncidentPages(input) || hasConfiguredIncidentFeed(input);
+    if (liveConfigured) return [];
+
     const sample = input.config.sample_records;
     if (Array.isArray(sample)) {
       return sample.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
@@ -123,15 +139,24 @@ export const incidentConnector: ConnectorAdapter = {
     const defaultSourceName = String(input.config.connector_name || input.config.source_name || "Generic Incident Feed");
     const defaultSourceProvenance = String(input.config.source_provenance || "public.incident.feed");
 
-    return records.map((record, index): ConnectorNormalizedEvent => {
+    const maxAgeHours = freshnessSlaHours(input);
+    const cutoffMs = Date.now() - maxAgeHours * 60 * 60 * 1000;
+
+    return records
+      .map((record, index): ConnectorNormalizedEvent | null => {
       const category = classifyIncidentCategory(record);
       const lines = serviceLineCandidates(category);
       const urgency = toNumber(record.urgency_hint, category.includes("emergency") ? 84 : 70);
       const severity = toNumber(record.severity, category.includes("fire") ? 82 : 68);
       const title = String(record.title || record.incident_type || `Incident ${index + 1}`);
-      const occurredAt = String(record.occurred_at || record.created_at || new Date().toISOString());
+      const sourceOccurredAt = parseOccurredAt(record.occurred_at || record.created_at);
+      const occurredAt = sourceOccurredAt || new Date().toISOString();
+      const timestampConfidence = sourceOccurredAt ? "source" : "inferred";
       const sourceName = String(record.provider || record.source_name || defaultSourceName);
       const sourceProvenance = String(record.source_provenance || defaultSourceProvenance);
+      const occurredAtMs = new Date(occurredAt).getTime();
+      if (!Number.isFinite(occurredAtMs)) return null;
+      if (occurredAtMs < cutoffMs) return null;
 
       return {
         occurredAt,
@@ -163,10 +188,14 @@ export const incidentConnector: ConnectorAdapter = {
         normalizedPayload: {
           incident_category: category,
           source_provenance: sourceProvenance,
+          timestamp_confidence: timestampConfidence,
+          timestamp_reason: sourceOccurredAt ? "source_event_timestamp" : "missing_source_timestamp",
+          data_freshness_score: sourceOccurredAt ? undefined : 0,
           connector_version: CONNECTOR_VERSION
         }
       };
-    });
+    })
+      .filter((event): event is ConnectorNormalizedEvent => Boolean(event));
   },
 
   dedupeKey(event) {
@@ -228,7 +257,7 @@ export const incidentConnector: ConnectorAdapter = {
     if (hasConfiguredIncidentFeed(input)) {
       return {
         ok: true,
-        detail: "Incident feed endpoint configured"
+        detail: "Incident feed endpoint configured (live-mode, no sample fallback)"
       };
     }
 

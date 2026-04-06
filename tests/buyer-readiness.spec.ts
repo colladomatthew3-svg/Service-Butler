@@ -13,6 +13,8 @@ test("data-source readiness blocks simulated and terms-gated sources", () => {
     configured: true,
     status: "active",
     runtimeMode: "simulated",
+    rolloutState: "pilot",
+    readinessStatus: "unknown",
     termsStatus: "pending_review",
     complianceStatus: "pending_review",
     freshness: 0,
@@ -26,6 +28,11 @@ test("data-source readiness blocks simulated and terms-gated sources", () => {
     recordsCreated: 0,
     recordsUpdated: 0,
     provenance: "permits.provider",
+    freshnessSlaMinutes: 360,
+    healthStatus: "unknown",
+    healthDetail: null,
+    lastHealthCheckedAt: null,
+    lastHealthLatencyMs: null,
     liveRequirements: ["Provider URL"],
     buyerReadinessNote: "",
     captureStatus: "simulated",
@@ -47,6 +54,7 @@ test("buyer readiness note tells the truth about live-safe sources", () => {
       configured: true,
       status: "active",
       runtimeMode: "fully-live",
+      rolloutState: "live",
       termsStatus: "approved",
       complianceStatus: "approved"
     })

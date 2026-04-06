@@ -2,11 +2,10 @@ import { checkOpportunityDuplicate, injectDedupKey } from "@/lib/v2/deduplicatio
 import { type FranchiseVertical, getVertical } from "@/lib/v2/franchise-verticals";
 import { computeOpportunityScores } from "@/lib/v2/scoring";
 import type { V2ConnectorRunResult } from "@/lib/v2/types";
+import { type ConnectorRunMode, normalizeConnectorRunMode, sanitizeIdempotencyKey } from "@/lib/v2/connector-run-request";
 import type { ConnectorAdapter, ConnectorNormalizedEvent, ConnectorPullInput } from "@/lib/v2/connectors/types";
 import { logV2AuditEvent } from "@/lib/v2/audit";
 import type { SupabaseClient } from "@supabase/supabase-js";
-
-type ConnectorRunMode = "standard" | "replay";
 
 function toPoint(lat?: number | null, lon?: number | null) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
@@ -259,6 +258,8 @@ function validateNormalizedEvent(event: ConnectorNormalizedEvent) {
 function normalizeRunResultStatus(value: unknown): V2ConnectorRunResult["status"] | null {
   const normalized = String(value || "").trim().toLowerCase();
   if (
+    normalized === "queued" ||
+    normalized === "running" ||
     normalized === "completed" ||
     normalized === "failed" ||
     normalized === "partial" ||
@@ -726,6 +727,10 @@ export async function runConnectorForSource({
   replayedFromRunId?: string | null;
   idempotencyKey?: string | null;
 }): Promise<V2ConnectorRunResult & { runId: string }> {
+  const normalizedRunMode = normalizeConnectorRunMode(runMode);
+  const normalizedReplaySource = String(replayedFromRunId || "").trim() || null;
+  const normalizedIdempotencyKey = sanitizeIdempotencyKey(idempotencyKey) || null;
+
   const runStart = new Date().toISOString();
   const { data: runRow, error: runError } = await supabase
     .from("v2_connector_runs")
@@ -735,26 +740,26 @@ export async function runConnectorForSource({
       status: "running",
       started_at: runStart,
       heartbeat_at: runStart,
-      idempotency_key: idempotencyKey,
-      replayed_from_run_id: replayedFromRunId,
+      idempotency_key: normalizedIdempotencyKey,
+      replayed_from_run_id: normalizedReplaySource,
       metadata: {
         connector_key: connector.key,
         source_type: sourceType,
-        run_mode: runMode,
-        replayed_from_run_id: replayedFromRunId
+        run_mode: normalizedRunMode,
+        replayed_from_run_id: normalizedReplaySource
       }
     })
     .select("id")
     .single();
 
   if (runError || !runRow?.id) {
-    if ((runError as { code?: string } | null)?.code === "23505" && idempotencyKey) {
+    if ((runError as { code?: string } | null)?.code === "23505" && normalizedIdempotencyKey) {
       const { data: existingRun, error: existingRunError } = await supabase
         .from("v2_connector_runs")
-        .select("id,status,records_seen,records_created,error_summary")
+        .select("id,status,records_seen,records_created,error_summary,idempotency_key,replayed_from_run_id,metadata")
         .eq("tenant_id", tenantId)
         .eq("source_id", sourceId)
-        .eq("idempotency_key", idempotencyKey)
+        .eq("idempotency_key", normalizedIdempotencyKey)
         .order("started_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -766,6 +771,9 @@ export async function runConnectorForSource({
           status,
           recordsSeen: Number(existingRun.records_seen || 0),
           recordsCreated: Number(existingRun.records_created || 0),
+          idempotencyKey: String(existingRun.idempotency_key || normalizedIdempotencyKey || ""),
+          replayedFromRunId: existingRun.replayed_from_run_id ? String(existingRun.replayed_from_run_id) : null,
+          runMode: String((existingRun.metadata as Record<string, unknown> | null)?.run_mode || normalizedRunMode) === "replay" ? "replay" : "standard",
           errorSummary: String(existingRun.error_summary || "")
         };
       }
@@ -907,7 +915,7 @@ export async function runConnectorForSource({
     await touchRunHeartbeat({ supabase, runId });
 
     const baseStatus = createdCount === normalizedEvents.length ? "completed" : "partial";
-    const status: V2ConnectorRunResult["status"] = runMode === "replay" ? "replayed" : baseStatus;
+    const status: V2ConnectorRunResult["status"] = normalizedRunMode === "replay" ? "replayed" : baseStatus;
     await supabase
       .from("v2_connector_runs")
       .update({
@@ -919,14 +927,15 @@ export async function runConnectorForSource({
         metadata: {
           connector_key: connector.key,
           source_type: sourceType,
-          run_mode: runMode,
-          replayed_from_run_id: replayedFromRunId,
+          run_mode: normalizedRunMode,
+          replayed_from_run_id: normalizedReplaySource,
           terms_status: compliance.termsStatus,
           avg_data_freshness_score: recordsSeen > 0 ? Math.round(totalFreshness / recordsSeen) : 0,
           avg_source_reliability: recordsSeen > 0 ? Math.round(totalReliability / recordsSeen) : 0,
           invalid_events: invalidCount,
           multi_signal_opportunities: multiSignalCount,
-          replay_result_status: baseStatus
+          replay_result_status: baseStatus,
+          idempotency_key: normalizedIdempotencyKey
         }
       })
       .eq("id", runId);
@@ -946,7 +955,8 @@ export async function runConnectorForSource({
         records_created: createdCount,
         invalid_events: invalidCount,
         multi_signal_opportunities: multiSignalCount,
-        run_mode: runMode
+        run_mode: normalizedRunMode,
+        idempotency_key: normalizedIdempotencyKey
       }
     });
 
@@ -954,7 +964,10 @@ export async function runConnectorForSource({
       runId,
       recordsSeen,
       recordsCreated: createdCount,
-      status
+      status,
+      runMode: normalizedRunMode,
+      replayedFromRunId: normalizedReplaySource,
+      idempotencyKey: normalizedIdempotencyKey
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown connector run failure";
@@ -986,6 +999,9 @@ export async function runConnectorForSource({
       recordsSeen,
       recordsCreated: createdCount,
       status: "failed",
+      runMode: normalizedRunMode,
+      replayedFromRunId: normalizedReplaySource,
+      idempotencyKey: normalizedIdempotencyKey,
       errorSummary: message
     };
   }

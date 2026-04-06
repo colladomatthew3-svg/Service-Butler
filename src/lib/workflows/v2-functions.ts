@@ -1,19 +1,24 @@
 import { inngest } from "@/lib/workflows/client";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { buildConnectorRunIdempotencyKey, normalizeConnectorRunMode } from "@/lib/v2/connector-run-request";
 import { getConnectorByKey } from "@/lib/v2/connectors/registry";
 import { runConnectorForSource } from "@/lib/v2/connectors/runner";
 import { inferConnectorKey } from "@/lib/v2/connectors/source-type-map";
 import { logV2AuditEvent } from "@/lib/v2/audit";
+import { markStaleConnectorRuns, resolveStaleAfterMinutes } from "@/lib/v2/runtime-watchdog";
 
 export const v2ConnectorRunRequested = inngest.createFunction(
   { id: "v2_connector_run_requested" },
   { event: "v2/connector.run.requested" },
   async ({ event, step }) => {
-    const { tenantId, sourceId, connectorKey, actorUserId } = event.data as {
+    const { tenantId, sourceId, connectorKey, actorUserId, idempotencyKey, runMode, replayedFromRunId } = event.data as {
       tenantId: string;
       sourceId: string;
       connectorKey?: string;
       actorUserId?: string;
+      idempotencyKey?: string;
+      runMode?: string;
+      replayedFromRunId?: string;
     };
 
     const supabase = getSupabaseAdminClient();
@@ -48,7 +53,19 @@ export const v2ConnectorRunRequested = inngest.createFunction(
           config_encrypted: source.config_encrypted
         },
         actorUserId: actorUserId || "system",
-        connector
+        connector,
+        runMode: normalizeConnectorRunMode(runMode),
+        replayedFromRunId: String(replayedFromRunId || "").trim() || null,
+        idempotencyKey: buildConnectorRunIdempotencyKey({
+          entrypoint: "inngest_connector_run_requested",
+          tenantId,
+          sourceId: String(source.id),
+          connectorKey: key,
+          runMode: normalizeConnectorRunMode(runMode),
+          replayedFromRunId: String(replayedFromRunId || "").trim() || null,
+          providedKey: String(idempotencyKey || "").trim() || String((event as { id?: string } | null)?.id || ""),
+          requestedAt: String((event as { ts?: string } | null)?.ts || "")
+        })
       })
     );
 
@@ -56,6 +73,28 @@ export const v2ConnectorRunRequested = inngest.createFunction(
       ok: result.status !== "failed",
       ...result,
       connectorKey: key
+    };
+  }
+);
+
+export const v2ConnectorRunStaleWatchdog = inngest.createFunction(
+  { id: "v2_connector_run_stale_watchdog" },
+  { cron: "*/15 * * * *" },
+  async ({ step }) => {
+    const supabase = getSupabaseAdminClient();
+    const staleAfterMinutes = resolveStaleAfterMinutes(process.env.CONNECTOR_STALE_AFTER_MINUTES, 45);
+
+    const staleMarked = await step.run("mark-stale-connector-runs", async () =>
+      markStaleConnectorRuns({
+        supabase,
+        staleAfterMinutes
+      })
+    );
+
+    return {
+      ok: true,
+      staleMarked,
+      staleAfterMinutes
     };
   }
 );

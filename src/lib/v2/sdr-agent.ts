@@ -1,5 +1,6 @@
 import { enrichOpportunityLive } from "@/lib/services/enrichment";
 import { logV2AuditEvent } from "@/lib/v2/audit";
+import { buildConnectorRunIdempotencyKey } from "@/lib/v2/connector-run-request";
 import { getConnectorByKey } from "@/lib/v2/connectors/registry";
 import { runConnectorForSource } from "@/lib/v2/connectors/runner";
 import { inferConnectorKey } from "@/lib/v2/connectors/source-type-map";
@@ -63,6 +64,7 @@ export type SdrAgentRunOptions = {
   dryRun?: boolean;
   legacyAccountId?: string | null;
   dualWriteLegacy?: boolean;
+  connectorRunIdempotencyPrefix?: string;
 };
 
 export type SdrAgentRunResult = {
@@ -307,12 +309,14 @@ async function runSourceConnectors({
   supabase,
   tenantId,
   actorUserId,
-  sources
+  sources,
+  idempotencyPrefix
 }: {
   supabase: SupabaseClient;
   tenantId: string;
   actorUserId: string;
   sources: Array<Record<string, unknown>>;
+  idempotencyPrefix: string;
 }): Promise<SdrSourceRunResult[]> {
   const results: SdrSourceRunResult[] = [];
 
@@ -370,7 +374,14 @@ async function runSourceConnectors({
       sourceType,
       sourceConfig,
       actorUserId,
-      connector
+      connector,
+      idempotencyKey: buildConnectorRunIdempotencyKey({
+        entrypoint: "sdr_agent_connectors",
+        tenantId,
+        sourceId: String(source.id),
+        connectorKey,
+        providedKey: `${idempotencyPrefix}:${String(source.id)}`
+      })
     });
 
     results.push({
@@ -413,7 +424,8 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
     autoOutreach = false,
     enableEnrichment = true,
     dryRun = false,
-    dualWriteLegacy = true
+    dualWriteLegacy = true,
+    connectorRunIdempotencyPrefix = `sdr:${tenantId}:${new Date().toISOString().slice(0, 16)}`
   } = options;
 
   const enterpriseTenantId = toString(options.enterpriseTenantId) || tenantId;
@@ -432,7 +444,8 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
       supabase,
       tenantId,
       actorUserId,
-      sources
+      sources,
+      idempotencyPrefix: connectorRunIdempotencyPrefix
     });
     connectorRuns.push(...sourceRuns);
   }

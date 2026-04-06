@@ -6,9 +6,9 @@ import {
   newLeadFollowup,
   reviewRequest
 } from "@/lib/workflows/functions";
-import { v2AssignmentSlaWatch, v2ConnectorRunRequested } from "@/lib/workflows/v2-functions";
+import { v2AssignmentSlaWatch, v2ConnectorRunRequested, v2ConnectorRunStaleWatchdog } from "@/lib/workflows/v2-functions";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [missedCallFollowup, newLeadFollowup, reviewRequest, campaignDispatch, v2ConnectorRunRequested, v2AssignmentSlaWatch]
+  functions: [missedCallFollowup, newLeadFollowup, reviewRequest, campaignDispatch, v2ConnectorRunRequested, v2AssignmentSlaWatch, v2ConnectorRunStaleWatchdog]
 });

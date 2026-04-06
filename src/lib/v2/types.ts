@@ -49,7 +49,10 @@ export type V2AssignmentDecision = {
 export type V2ConnectorRunResult = {
   recordsSeen: number;
   recordsCreated: number;
-  status: "completed" | "failed" | "partial" | "stale" | "replayed";
+  status: V2ConnectorRunStatus;
+  runMode?: "standard" | "replay";
+  replayedFromRunId?: string | null;
+  idempotencyKey?: string | null;
   errorSummary?: string;
 };
 

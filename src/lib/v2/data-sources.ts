@@ -2,6 +2,7 @@ import { getConnectorByKey, listConnectors } from "@/lib/v2/connectors/registry"
 import { inferConnectorKey } from "@/lib/v2/connectors/source-type-map";
 import type { ConnectorAdapter, ConnectorHealth, ConnectorPullInput } from "@/lib/v2/connectors/types";
 import { runConnectorForSource } from "@/lib/v2/connectors/runner";
+import { buildConnectorRunIdempotencyKey, normalizeConnectorRunMode, type ConnectorRunMode } from "@/lib/v2/connector-run-request";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type DataSourceRuntimeMode = "fully-live" | "live-partial" | "simulated";
@@ -546,13 +547,19 @@ export async function runDataSourceConnector({
   tenantId,
   sourceId,
   actorUserId,
-  connectorKeyOverride
+  connectorKeyOverride,
+  idempotencyKey,
+  runMode,
+  replayedFromRunId
 }: {
   supabase: SupabaseClient;
   tenantId: string;
   sourceId: string;
   actorUserId: string;
   connectorKeyOverride?: string;
+  idempotencyKey?: string;
+  runMode?: ConnectorRunMode;
+  replayedFromRunId?: string | null;
 }) {
   const sourceRow = await fetchDataSourceRow({ supabase, tenantId, sourceId });
   if (normalizeStatus(sourceRow.status) !== "active") {
@@ -587,7 +594,18 @@ export async function runDataSourceConnector({
     sourceType: String(sourceRow.source_type || "unknown"),
     sourceConfig: connectorConfig.input.config,
     actorUserId,
-    connector
+    connector,
+    runMode: normalizeConnectorRunMode(runMode),
+    replayedFromRunId: replayedFromRunId ? String(replayedFromRunId) : null,
+    idempotencyKey: buildConnectorRunIdempotencyKey({
+      entrypoint: "lib_v2_data_sources",
+      tenantId,
+      sourceId,
+      connectorKey: connector.key,
+      runMode,
+      replayedFromRunId,
+      providedKey: idempotencyKey
+    })
   });
 
   const sourceSummary = await getDataSourceSummary({ supabase, tenantId, sourceId });

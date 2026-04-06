@@ -5,6 +5,7 @@ import { featureFlags } from "@/lib/config/feature-flags";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { getConnectorByKey } from "@/lib/v2/connectors/registry";
 import { runConnectorForSource } from "@/lib/v2/connectors/runner";
+import { buildConnectorRunIdempotencyKey, normalizeConnectorRunMode } from "@/lib/v2/connector-run-request";
 import { inferConnectorKey } from "@/lib/v2/connectors/source-type-map";
 import { computeRuntimeMode } from "@/lib/control-plane/data-sources";
 import type { AccountRole } from "@/types/domain";
@@ -65,6 +66,9 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     sourceId?: string;
     connectorKey?: string;
+    idempotencyKey?: string;
+    runMode?: string;
+    replayedFromRunId?: string;
   };
 
   let sources: Array<Record<string, unknown>> = [];
@@ -146,7 +150,19 @@ export async function POST(req: NextRequest) {
       sourceType: String(source.source_type || "unknown"),
       sourceConfig,
       actorUserId: context.userId,
-      connector
+      connector,
+      runMode: normalizeConnectorRunMode(body.runMode),
+      replayedFromRunId: String(body.replayedFromRunId || "").trim() || null,
+      idempotencyKey: buildConnectorRunIdempotencyKey({
+        entrypoint: "api_connectors_runs",
+        tenantId: context.franchiseTenantId,
+        sourceId: String(source.id),
+        connectorKey: connector.key,
+        runMode: normalizeConnectorRunMode(body.runMode),
+        replayedFromRunId: String(body.replayedFromRunId || "").trim() || null,
+        providedKey: String(body.idempotencyKey || "").trim() || req.headers.get("x-idempotency-key"),
+        requestedAt: req.headers.get("x-requested-at")
+      })
     });
 
     results.push({

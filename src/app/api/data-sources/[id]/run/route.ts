@@ -4,6 +4,7 @@ import { featureFlags } from "@/lib/config/feature-flags";
 import { buildDataSourceReadinessState, buildEnvironmentReadinessState } from "@/lib/control-plane/readiness";
 import { getDataSourceSummaryById } from "@/lib/control-plane/data-sources";
 import { isDemoMode } from "@/lib/services/review-mode";
+import { buildConnectorRunIdempotencyKey, normalizeConnectorRunMode } from "@/lib/v2/connector-run-request";
 import { runDataSourceConnector } from "@/lib/v2/data-sources";
 import { getV2TenantContext } from "@/lib/v2/context";
 import type { AccountRole } from "@/types/domain";
@@ -32,7 +33,12 @@ export async function POST(req: NextRequest, contextArg: { params: Promise<{ id:
   const sourceId = String(id || "").trim();
   if (!sourceId) return NextResponse.json({ error: "Source id is required" }, { status: 400 });
 
-  const body = (await req.json().catch(() => ({}))) as { connectorKey?: string };
+  const body = (await req.json().catch(() => ({}))) as {
+    connectorKey?: string;
+    idempotencyKey?: string;
+    runMode?: string;
+    replayedFromRunId?: string;
+  };
 
   try {
     const sourceSummary = await getDataSourceSummaryById({
@@ -62,7 +68,19 @@ export async function POST(req: NextRequest, contextArg: { params: Promise<{ id:
       tenantId: context.franchiseTenantId,
       sourceId,
       actorUserId: context.userId,
-      connectorKeyOverride: String(body.connectorKey || "").trim() || undefined
+      connectorKeyOverride: String(body.connectorKey || "").trim() || undefined,
+      runMode: normalizeConnectorRunMode(body.runMode),
+      replayedFromRunId: String(body.replayedFromRunId || "").trim() || null,
+      idempotencyKey: buildConnectorRunIdempotencyKey({
+        entrypoint: "api_data_source_run",
+        tenantId: context.franchiseTenantId,
+        sourceId,
+        connectorKey: String(body.connectorKey || "").trim() || sourceSummary.connectorKey,
+        runMode: normalizeConnectorRunMode(body.runMode),
+        replayedFromRunId: String(body.replayedFromRunId || "").trim() || null,
+        providedKey: String(body.idempotencyKey || "").trim() || req.headers.get("x-idempotency-key"),
+        requestedAt: req.headers.get("x-requested-at")
+      })
     });
 
     return NextResponse.json(result);

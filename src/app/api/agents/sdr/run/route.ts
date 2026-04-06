@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { assertRole } from "@/lib/auth/rbac";
 import { featureFlags } from "@/lib/config/feature-flags";
 import { isDemoMode } from "@/lib/services/review-mode";
+import { buildConnectorRunIdempotencyKey } from "@/lib/v2/connector-run-request";
 import { getV2TenantContext } from "@/lib/v2/context";
 import { runSdrAgentV2 } from "@/lib/v2/sdr-agent";
 import type { AccountRole } from "@/types/domain";
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     enableEnrichment?: boolean;
     dryRun?: boolean;
     dualWriteLegacy?: boolean;
+    idempotencyKey?: string;
   };
 
   try {
@@ -58,7 +60,17 @@ export async function POST(req: NextRequest) {
       autoOutreach: body.autoOutreach ?? false,
       enableEnrichment: body.enableEnrichment ?? true,
       dryRun: body.dryRun ?? false,
-      dualWriteLegacy: body.dualWriteLegacy ?? true
+      dualWriteLegacy: body.dualWriteLegacy ?? true,
+      connectorRunIdempotencyPrefix:
+        String(body.idempotencyKey || "").trim() ||
+        req.headers.get("x-idempotency-key") ||
+        buildConnectorRunIdempotencyKey({
+          entrypoint: "api_agents_sdr_run",
+          tenantId: context.franchiseTenantId,
+          sourceId: "multi-source",
+          connectorKey: "sdr-agent",
+          requestedAt: req.headers.get("x-requested-at")
+        })
     });
 
     return NextResponse.json({ ok: true, result });
@@ -67,4 +79,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
-

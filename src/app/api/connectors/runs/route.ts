@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   if (body.sourceId) {
     const { data, error } = await context.supabase
       .from("v2_data_sources")
-      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags,terms_status,provenance")
+      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags,terms_status,compliance_status,rollout_state,provenance")
       .eq("tenant_id", context.franchiseTenantId)
       .eq("id", body.sourceId)
       .maybeSingle();
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
   } else {
     const { data, error } = await context.supabase
       .from("v2_data_sources")
-      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags,terms_status,provenance")
+      .select("id,source_type,name,config_encrypted,rate_limit_policy,compliance_flags,terms_status,compliance_status,rollout_state,provenance")
       .eq("tenant_id", context.franchiseTenantId)
       .eq("status", "active")
       .limit(20);
@@ -105,9 +105,21 @@ export async function POST(req: NextRequest) {
       compliance_flags: source.compliance_flags,
       config_encrypted: source.config_encrypted,
       terms_status: source.terms_status,
+      compliance_status: source.compliance_status,
+      rollout_state: source.rollout_state,
       source_provenance: source.provenance,
       ...decryptedConfig
     };
+    const rolloutState = String(source.rollout_state || "pilot").toLowerCase();
+    if (rolloutState === "disabled" || rolloutState === "shadow") {
+      results.push({
+        sourceId: source.id,
+        status: "failed",
+        runtimeMode: rolloutState === "disabled" ? "simulated" : "live-partial",
+        error: `Source rollout_state=${rolloutState} blocks direct connector execution`
+      });
+      continue;
+    }
     const runtimeMode = computeRuntimeMode(
       String(source.source_type || "unknown"),
       sourceConfig,

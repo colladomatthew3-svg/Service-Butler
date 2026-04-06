@@ -62,7 +62,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       .update(payload)
       .eq("tenant_id", context.franchiseTenantId)
       .eq("id", sourceId)
-      .select("id,tenant_id,source_type,name,status,terms_status,provenance,reliability_score,freshness_timestamp,rate_limit_policy,compliance_flags,config_encrypted,compliance_status,created_at,updated_at")
+      .select(
+        "id,tenant_id,source_type,name,status,terms_status,compliance_status,rollout_state,readiness_status,provenance,reliability_score,freshness_timestamp,freshness_sla_minutes,health_status,health_detail,last_health_checked_at,last_health_latency_ms,rate_limit_policy,compliance_flags,config_encrypted,created_at,updated_at"
+      )
       .maybeSingle();
 
     if (error || !data?.id) {

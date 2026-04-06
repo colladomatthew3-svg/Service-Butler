@@ -38,6 +38,22 @@ export type Opportunity = {
   source_lane?: SourceLaneKey | null;
   priority_score?: number | null;
   next_recommended_action?: string | null;
+  recommended_next_action?: string | null;
+  recommended_action_reason?: string | null;
+  recommended_action_sla_minutes?: number | null;
+  freshness_score?: number | null;
+  confidence_score?: number | null;
+  territory_relevance?: string | null;
+  review_required?: boolean;
+  assignment_id?: string | null;
+  assignment_status?: string | null;
+  assigned_tenant_id?: string | null;
+  assignment_sla_due_at?: string | null;
+  assignment_reason?: string | null;
+  can_route_now?: boolean;
+  can_accept_assignment?: boolean;
+  can_escalate_assignment?: boolean;
+  can_convert_to_job?: boolean;
   research_only?: boolean;
   requires_sdr_qualification?: boolean;
   counts_as_real_capture?: boolean;
@@ -69,6 +85,8 @@ export function OpportunitiesView() {
   const [sourceFilter, setSourceFilter] = useState<SourceLaneFilter>("all");
   const [qualificationFilter, setQualificationFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionBusyKey, setActionBusyKey] = useState<string | null>(null);
 
   async function loadOpportunities() {
     setLoading(true);
@@ -84,6 +102,40 @@ export function OpportunitiesView() {
       setOpportunities([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runRowAction({
+    opportunityId,
+    action,
+    assignmentId
+  }: {
+    opportunityId: string;
+    action: "route" | "accept" | "escalate" | "convert";
+    assignmentId?: string | null;
+  }) {
+    const key = `${action}:${opportunityId}`;
+    setActionBusyKey(key);
+    setNotice(null);
+    try {
+      let endpoint = "";
+      if (action === "route") endpoint = `/api/opportunities/${encodeURIComponent(opportunityId)}/route`;
+      if (action === "accept") endpoint = `/api/assignments/${encodeURIComponent(String(assignmentId || ""))}/accept`;
+      if (action === "escalate") endpoint = `/api/assignments/${encodeURIComponent(String(assignmentId || ""))}/reject`;
+      if (action === "convert") endpoint = `/api/opportunities/${encodeURIComponent(opportunityId)}/convert`;
+      if (!endpoint) throw new Error("Unsupported action");
+
+      const response = await fetch(endpoint, { method: "POST" });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Action failed");
+
+      const label = action === "route" ? "Opportunity routed" : action === "accept" ? "Assignment accepted" : action === "escalate" ? "Assignment escalated" : "Opportunity converted to job";
+      setNotice(label);
+      await loadOpportunities();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Action failed");
+    } finally {
+      setActionBusyKey(null);
     }
   }
 
@@ -207,6 +259,10 @@ export function OpportunitiesView() {
         </CardBody>
       </Card>
 
+      {notice ? (
+        <div className="rounded-xl border border-semantic-border bg-semantic-surface px-4 py-3 text-sm text-semantic-text">{notice}</div>
+      ) : null}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4">
           <div>
@@ -248,6 +304,7 @@ export function OpportunitiesView() {
                   const sourceLane = getSourceLane(item);
                   const summary = item.distress_context_summary || item.confidence_reasoning || item.description || "Source-backed demand signal.";
                   const sourceBadges = getSourceBadges(item);
+                  const inlineActions = getInlineActions(item);
                   return (
                     <tr key={item.id}>
                       <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-4 first:rounded-none last:rounded-none">
@@ -274,6 +331,9 @@ export function OpportunitiesView() {
                             {formatRelativeTime(item.created_at)}
                             {item.signal_count ? ` · ${item.signal_count} corroborating signals` : ""}
                           </p>
+                          <p className="text-[11px] text-semantic-muted">
+                            Freshness {formatPercent(item.freshness_score)} · Confidence {formatPercent(item.confidence_score)} · Territory {String(item.territory_relevance || "unknown")}
+                          </p>
                         </div>
                       </TD>
                       <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-4 first:rounded-none last:rounded-none">
@@ -290,9 +350,17 @@ export function OpportunitiesView() {
                             Priority {formatPercent(getPriorityScore(item))} · Urgency {formatPercent(item.urgency_score)}
                           </p>
                           <p className="text-xs text-semantic-muted">
-                            {(item.next_recommended_action || "review_signal").replace(/_/g, " ")}
+                            {(item.recommended_next_action || item.next_recommended_action || "review_signal").replace(/_/g, " ")}
                             {item.qualification_reason_code ? ` · ${item.qualification_reason_code.replace(/_/g, " ")}` : ""}
                           </p>
+                          {item.recommended_action_reason ? <p className="text-xs text-semantic-muted">{item.recommended_action_reason}</p> : null}
+                          {item.review_required ? <Badge variant="warning">Review required</Badge> : null}
+                          {item.assignment_status ? (
+                            <p className="text-xs text-semantic-muted">
+                              Assignment {item.assignment_status.replace(/_/g, " ")}
+                              {item.assignment_sla_due_at ? ` · SLA ${formatRelativeTime(item.assignment_sla_due_at)}` : ""}
+                            </p>
+                          ) : null}
                         </div>
                       </TD>
                       <TD className="border-b border-semantic-border/70 bg-transparent px-0 py-4 text-right first:rounded-none last:rounded-none">
@@ -300,6 +368,31 @@ export function OpportunitiesView() {
                           <Link href={action.href} className={buttonStyles({ size: "sm", variant: action.variant })}>
                             {action.label}
                           </Link>
+                          {inlineActions.length > 0 ? (
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {inlineActions.map((inlineAction) => {
+                                const busy = actionBusyKey === `${inlineAction.type}:${item.id}`;
+                                return (
+                                  <Button
+                                    key={`${item.id}-${inlineAction.type}`}
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={busy || Boolean(actionBusyKey)}
+                                    onClick={() =>
+                                      void runRowAction({
+                                        opportunityId: item.id,
+                                        action: inlineAction.type,
+                                        assignmentId: item.assignment_id
+                                      })
+                                    }
+                                  >
+                                    {busy ? "Working..." : inlineAction.label}
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
                           <p className="max-w-[12rem] text-right text-xs leading-5 text-semantic-muted">{action.note}</p>
                         </div>
                       </TD>
@@ -401,6 +494,24 @@ function scannerOpportunityHref(item: Opportunity, queue?: "sdr") {
 }
 
 export function getPrimaryAction(item: Opportunity) {
+  if (item.review_required) {
+    return {
+      href: scannerOpportunityHref(item, "sdr"),
+      label: "Review required",
+      variant: "secondary" as const,
+      note: "Opportunity is gated pending verification/review before dispatch or conversion."
+    };
+  }
+
+  if (item.can_convert_to_job) {
+    return {
+      href: `/dashboard/jobs`,
+      label: "Ready to convert",
+      variant: "primary" as const,
+      note: "Dispatch-ready incident. Convert directly to booked job from this queue."
+    };
+  }
+
   if (item.dispatch_ready) {
     return {
       href: `/dashboard/outbound?opportunity=${encodeURIComponent(item.id)}`,
@@ -443,6 +554,15 @@ export function getPrimaryAction(item: Opportunity) {
     variant: "secondary" as const,
     note: "Review the opportunity, confirm fit, and decide whether it belongs in the SDR lane."
   };
+}
+
+export function getInlineActions(item: Opportunity): Array<{ type: "route" | "accept" | "escalate" | "convert"; label: string }> {
+  const actions: Array<{ type: "route" | "accept" | "escalate" | "convert"; label: string }> = [];
+  if (item.can_route_now) actions.push({ type: "route", label: "Route now" });
+  if (item.can_accept_assignment) actions.push({ type: "accept", label: "Accept assignment" });
+  if (item.can_escalate_assignment) actions.push({ type: "escalate", label: "Escalate" });
+  if (item.can_convert_to_job) actions.push({ type: "convert", label: "Convert to job" });
+  return actions;
 }
 
 export function getSourceLane(item: Opportunity): SourceLaneKey {

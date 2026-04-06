@@ -143,14 +143,36 @@ function computeSlaMinutes({
   urgencyScore,
   catastropheLinkageScore,
   hasClusterMembership,
-  estimatedResponseWindow
+  estimatedResponseWindow,
+  confidenceScore,
+  freshnessScore,
+  geographyPrecision,
+  incidentFamily,
+  territoryRelevance
 }: {
   urgencyScore: number;
   catastropheLinkageScore: number;
   hasClusterMembership: boolean;
   estimatedResponseWindow: string;
+  confidenceScore?: number;
+  freshnessScore?: number;
+  geographyPrecision?: number;
+  incidentFamily?: boolean;
+  territoryRelevance?: string;
 }) {
   const responseWindow = estimatedResponseWindow.trim().toLowerCase();
+  const baseConfidence = Number.isFinite(confidenceScore) ? Number(confidenceScore) : 100;
+  const baseFreshness = Number.isFinite(freshnessScore) ? Number(freshnessScore) : 100;
+  const basePrecision = Number.isFinite(geographyPrecision) ? Number(geographyPrecision) : 100;
+  const relevance = String(territoryRelevance || "").trim().toLowerCase();
+
+  if (incidentFamily && (baseConfidence < 55 || baseFreshness < 45 || basePrecision < 55 || relevance === "low")) {
+    return 45;
+  }
+
+  if (incidentFamily && (baseConfidence < 65 || baseFreshness < 60 || basePrecision < 65 || relevance === "medium")) {
+    return 30;
+  }
 
   if (responseWindow === "0-4h" || urgencyScore >= 90) return 15;
   if (hasClusterMembership && catastropheLinkageScore >= 65) return 20;
@@ -171,6 +193,11 @@ function resolveRoutingInputs(opportunity: Record<string, unknown>) {
     catastropheLinkageScore: Number(opportunity.catastrophe_linkage_score || 0),
     hasClusterMembership: Boolean(opportunity.incident_cluster_id),
     estimatedResponseWindow: String(explainability.estimated_response_window || "24-72h"),
+    confidenceScore: Number(explainability.confidence_score || 0),
+    freshnessScore: Number(explainability.freshness_score || 0),
+    geographyPrecision: Number(explainability.geography_precision || 0),
+    incidentFamily: Boolean(explainability.incident_family),
+    territoryRelevance: String(explainability.territory_relevance || "unknown"),
     postalCode: String(opportunity.postal_code || parsePostalCode(String(opportunity.location_text || "")) || "") || null,
     latLng: parseLatLng(opportunity.location)
   };
@@ -276,7 +303,12 @@ async function computeDecision({
     urgencyScore,
     catastropheLinkageScore: catastrophe,
     hasClusterMembership,
-    estimatedResponseWindow
+    estimatedResponseWindow,
+    confidenceScore: input.confidenceScore,
+    freshnessScore: input.freshnessScore,
+    geographyPrecision: input.geographyPrecision,
+    incidentFamily: input.incidentFamily,
+    territoryRelevance: input.territoryRelevance
   });
 
   const { data: candidateRules } = await supabase
@@ -327,6 +359,10 @@ async function computeDecision({
   });
 
   if (territory) {
+    const territoryServiceLines = pickFirstStringArray(territory.service_lines);
+    const serviceLineMatch =
+      territoryServiceLines.length === 0 || territoryServiceLines.includes(serviceLine) || territoryServiceLines.includes("general");
+
     const pressure = await estimateCapacityPressure({
       supabase,
       assignedTenantId: tenantId
@@ -350,6 +386,16 @@ async function computeDecision({
       };
     }
 
+    if (!serviceLineMatch) {
+      return {
+        assignedTenantId: tenantId,
+        backupTenantId: backupTenant,
+        escalationTenantId: enterpriseTenantId,
+        reason: "territory_service_line_fallback",
+        slaMinutes: Math.max(45, baselineSlaMinutes)
+      };
+    }
+
     return {
       assignedTenantId: tenantId,
       backupTenantId: backupTenant,
@@ -369,7 +415,7 @@ async function computeDecision({
     assignedTenantId: tenantId,
     backupTenantId: fallbackBackup,
     escalationTenantId: enterpriseTenantId,
-    reason: "fallback",
+    reason: input.incidentFamily && (input.confidenceScore < 55 || input.territoryRelevance === "low") ? "manual_review_fallback" : "fallback",
     slaMinutes: Math.max(baselineSlaMinutes, 60)
   };
 }
@@ -428,6 +474,10 @@ export async function routeOpportunityV2({
         primary_service_line: primaryServiceLine,
         urgency_score: Number(opportunity.urgency_score || 0),
         catastrophe_linkage_score: Number(opportunity.catastrophe_linkage_score || 0),
+        confidence_score: Number(explainability.confidence_score || 0),
+        freshness_score: Number(explainability.freshness_score || 0),
+        geography_precision: Number(explainability.geography_precision || 0),
+        territory_relevance: String(explainability.territory_relevance || "unknown"),
         cluster_member: Boolean(opportunity.incident_cluster_id),
         estimated_response_window: estimatedResponseWindow
       }

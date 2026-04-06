@@ -19,6 +19,9 @@ type ScoreInput = {
   sourceReliability: number;
   signalAgreement?: number;
   geographyPrecision?: number;
+  freshnessScore?: number;
+  timestampConfidence?: number;
+  falsePositiveRisk?: number;
   /** Optional: franchise vertical for vertical-aware scoring */
   vertical?: FranchiseVertical;
   /** Optional: signal category for preferred-signal boost */
@@ -55,24 +58,36 @@ export function computeOpportunityScores(input: ScoreInput): V2OpportunityScoreV
   const severityScore = clamp(adjustedSeverity + (input.vertical?.scoreModifiers.severityBoost ?? 0));
   const geographyScore = clamp(input.geographyMatch);
   const geographyPrecision = clamp(input.geographyPrecision ?? input.geographyMatch);
+  const freshnessScore = clamp(input.freshnessScore ?? recencyScore);
+  const timestampConfidence = clamp(input.timestampConfidence ?? 100);
+  const falsePositiveRisk = clamp(
+    input.falsePositiveRisk ??
+      (100 - geographyPrecision) * 0.4 + (100 - freshnessScore) * 0.35 + (100 - timestampConfidence) * 0.25
+  );
   const contactabilityScore = clamp(input.contactAvailability * 0.75 + input.priorCustomerMatch * 0.25);
   const signalAgreementScore = clamp(input.signalAgreement ?? Math.min(100, input.supportingSignalsCount * 16));
 
   const baseJobLikelihood = clamp(
     severityScore * 0.24 +
-      recencyScore * 0.19 +
+      recencyScore * 0.12 +
+      freshnessScore * 0.13 +
       geographyScore * 0.14 +
+      geographyPrecision * 0.05 +
       clamp(input.serviceLineFit) * 0.17 +
       clamp(input.propertyTypeFit) * 0.1 +
       clamp(input.supportingSignalsCount * 12) * 0.1 +
-      clamp(input.priorCustomerMatch) * 0.06
+      clamp(input.priorCustomerMatch) * 0.06 -
+      falsePositiveRisk * 0.07
   );
 
   const baseUrgency = clamp(
-    severityScore * 0.42 +
-      recencyScore * 0.3 +
+    severityScore * 0.35 +
+      recencyScore * 0.18 +
+      freshnessScore * 0.2 +
       clamp(input.catastropheSignal) * 0.18 +
-      sourceUrgencyBoost(input.sourceType)
+      timestampConfidence * 0.07 +
+      sourceUrgencyBoost(input.sourceType) -
+      falsePositiveRisk * 0.08
   );
 
   // Apply vertical modifiers (seasonal, preferred signal boost, multipliers)
@@ -90,11 +105,14 @@ export function computeOpportunityScores(input: ScoreInput): V2OpportunityScoreV
   const catastropheLinkageScore = clamp(input.catastropheSignal * 0.8 + severityScore * 0.2);
   const sourceReliabilityScore = clamp(input.sourceReliability);
   const confidenceScore = clamp(
-    sourceReliabilityScore * 0.35 +
-      recencyScore * 0.2 +
-      signalAgreementScore * 0.2 +
-      geographyPrecision * 0.15 +
-      severityScore * 0.1
+    sourceReliabilityScore * 0.28 +
+      recencyScore * 0.12 +
+      freshnessScore * 0.2 +
+      signalAgreementScore * 0.16 +
+      geographyPrecision * 0.14 +
+      timestampConfidence * 0.1 +
+      severityScore * 0.08 -
+      falsePositiveRisk * 0.08
   );
 
   const blendedRevenueSignal = clamp(jobLikelihoodScore * 0.62 + urgencyScore * 0.18 + contactabilityScore * 0.2);
@@ -113,6 +131,9 @@ export function computeOpportunityScores(input: ScoreInput): V2OpportunityScoreV
       severity: severityScore,
       geography_match: geographyScore,
       geography_precision: geographyPrecision,
+      freshness_score: freshnessScore,
+      timestamp_confidence: timestampConfidence,
+      false_positive_risk: falsePositiveRisk,
       property_type_fit: clamp(input.propertyTypeFit),
       service_line_fit: clamp(input.serviceLineFit),
       prior_customer_match: clamp(input.priorCustomerMatch),

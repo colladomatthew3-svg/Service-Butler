@@ -131,3 +131,147 @@ test("runner builds address-level dedup input from normalized connector events",
     sourceType: "permit.city"
   });
 });
+
+test("score merge does not inflate signal count for repeated source type", () => {
+  const incoming = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 12,
+    severity: 80,
+    geographyMatch: 84,
+    geographyPrecision: 84,
+    propertyTypeFit: 60,
+    serviceLineFit: 84,
+    priorCustomerMatch: 30,
+    contactAvailability: 50,
+    supportingSignalsCount: 2,
+    catastropheSignal: 74,
+    sourceReliability: 72,
+    signalAgreement: 80
+  });
+
+  const merged = connectorRunnerInternals.mergeOpportunityScores({
+    existing: {
+      urgency_score: 76,
+      job_likelihood_score: 70,
+      source_reliability_score: 75,
+      catastrophe_linkage_score: 68,
+      explainability_json: {
+        signal_count: 1,
+        confidence_score: 72,
+        source_types: ["incidents.generic"]
+      }
+    },
+    incoming,
+    incomingConfidence: incoming.confidenceScore,
+    sourceType: "incidents.generic"
+  });
+
+  expect(merged.signalCount).toBe(1);
+  expect(merged.sourceTypes).toEqual(["incidents.generic"]);
+});
+
+test("runner score inputs carry incident timestamp and freshness context", () => {
+  const input = connectorRunnerInternals.scoreInputsForEvent(
+    {
+      occurredAt: "2026-03-20T12:00:00.000Z",
+      dedupeKey: "incident-1",
+      eventType: "incidents.generic",
+      eventCategory: "water_incident",
+      title: "Water incident",
+      locationText: "Somewhere in NY",
+      serviceLine: "restoration",
+      supportingSignalsCount: 1,
+      sourceReliability: 40,
+      normalizedPayload: {
+        timestamp_confidence: "inferred",
+        data_freshness_score: 24
+      },
+      rawPayload: {}
+    },
+    50,
+    {
+      incidentFamily: true
+    }
+  );
+
+  expect(input.timestampConfidence).toBe(52);
+  expect(input.freshnessScore).toBe(24);
+  expect(input.falsePositiveRisk).toBeGreaterThanOrEqual(40);
+  expect(input.geographyPrecision).toBeLessThan(40);
+});
+
+test("weak inferred incident signals produce lower confidence than sourced signals", () => {
+  const sourced = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 20,
+    severity: 74,
+    geographyMatch: 78,
+    geographyPrecision: 80,
+    propertyTypeFit: 60,
+    serviceLineFit: 76,
+    priorCustomerMatch: 24,
+    contactAvailability: 48,
+    supportingSignalsCount: 2,
+    catastropheSignal: 68,
+    sourceReliability: 76,
+    signalAgreement: 78
+  });
+
+  const inferredWeak = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 20,
+    severity: 74,
+    geographyMatch: 78,
+    geographyPrecision: 40,
+    propertyTypeFit: 60,
+    serviceLineFit: 76,
+    priorCustomerMatch: 24,
+    contactAvailability: 48,
+    supportingSignalsCount: 1,
+    catastropheSignal: 68,
+    sourceReliability: 42,
+    signalAgreement: 38
+  });
+
+  expect(inferredWeak.confidenceScore).toBeLessThan(sourced.confidenceScore);
+  expect(inferredWeak.explainability.signal_agreement).toBe(38);
+});
+
+test("score merge does not increase signal count when incoming source type already exists", () => {
+  const incoming = computeOpportunityScores({
+    sourceType: "incidents.generic",
+    eventRecencyMinutes: 12,
+    severity: 80,
+    geographyMatch: 84,
+    geographyPrecision: 84,
+    propertyTypeFit: 60,
+    serviceLineFit: 84,
+    priorCustomerMatch: 30,
+    contactAvailability: 50,
+    supportingSignalsCount: 2,
+    catastropheSignal: 74,
+    sourceReliability: 72,
+    signalAgreement: 80
+  });
+
+  const merged = connectorRunnerInternals.mergeOpportunityScores({
+    existing: {
+      urgency_score: 76,
+      job_likelihood_score: 70,
+      source_reliability_score: 75,
+      catastrophe_linkage_score: 68,
+      explainability_json: {
+        signal_count: 1,
+        confidence_score: 72,
+        source_types: ["incidents.generic"]
+      }
+    },
+    incoming,
+    incomingConfidence: incoming.confidenceScore,
+    sourceType: "incidents.generic"
+  });
+
+  expect(merged.sourceTypes.filter((value) => value === "incidents.generic")).toHaveLength(1);
+  expect(merged.signalCount).toBe(1);
+  expect(merged.multiSignal).toBeFalsy();
+});

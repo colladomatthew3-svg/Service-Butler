@@ -1,4 +1,5 @@
 import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from "@/lib/v2/opportunity-qualification";
+import { findLeadMatch, mergeContactChannels } from "@/lib/v2/lead-matching";
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -7,6 +8,10 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function asArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
 }
 
 function toSlaSchedule(slaMinutes: unknown) {
@@ -74,29 +79,84 @@ export async function convertOpportunityToJobV2(input: ConvertOpportunityToJobIn
     throw new Error("Opportunity requires review/verified contact before conversion");
   }
 
-  const { data: existingLead } = await (supabase
-    .from("v2_leads")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("opportunity_id", opportunityId)
-    .maybeSingle() as SupabaseSingleResult);
+  const incomingChannels = {
+    phone: qualification.phone || null,
+    email: qualification.email || null,
+    verification_status: qualification.verificationStatus || "verified",
+    contact_provenance: qualification.qualificationSource || "operator_queue_conversion",
+    verification_reasons: asArray(explainability.sdr_verification_reasons),
+    contact_evidence: ["conversion", qualification.phone ? "phone" : "", qualification.email ? "email" : ""].filter(Boolean)
+  };
 
-  let leadId = existingLead?.id ? asText(existingLead.id) : "";
+  const existingLeadsResponse = (await (supabase
+    .from("v2_leads")
+    .select("id,opportunity_id,contact_channels_json,property_address,city,state,postal_code,created_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(200))) as unknown as { data?: Array<Record<string, unknown>> | null; error?: { message?: string } | null };
+
+  if (existingLeadsResponse.error) throw new Error(existingLeadsResponse.error.message || "Failed loading existing leads");
+
+  const matchedLead = findLeadMatch({
+    existing: ((existingLeadsResponse.data || []) as Array<Record<string, unknown>>).map((row) => {
+      const channels = asRecord(row.contact_channels_json);
+      return {
+        id: asText(row.id),
+        opportunityId: asText(row.opportunity_id) || null,
+        phone: asText(channels.phone),
+        email: asText(channels.email),
+        address: asText(row.property_address) || null,
+        city: asText(row.city) || null,
+        state: asText(row.state) || null,
+        postalCode: asText(row.postal_code) || null,
+        serviceType: asText(opportunity.service_line) || null,
+        createdAt: asText(row.created_at) || null
+      };
+    }),
+    incoming: {
+      opportunityId,
+      phone: qualification.phone || null,
+      email: qualification.email || null,
+      address: asText(explainability.address) || asText(opportunity.location_text) || null,
+      city: asText(explainability.city) || null,
+      state: asText(explainability.state) || null,
+      postalCode: asText(opportunity.postal_code) || null,
+      serviceType: asText(opportunity.service_line) || null
+    }
+  });
+
+  let leadId = matchedLead.matchedLeadId || "";
   let created = false;
 
-  if (!leadId) {
+  if (leadId && matchedLead.shouldUpdate) {
+    const existingRow = ((existingLeadsResponse.data || []) as Array<Record<string, unknown>>).find((row) => asText(row.id) === leadId) || null;
+    if (existingRow) {
+      const mergedChannels = mergeContactChannels(asRecord(existingRow.contact_channels_json), {
+        ...incomingChannels,
+        dedupe_reasons: [matchedLead.reason]
+      });
+      await (supabase
+        .from("v2_leads")
+        .update({
+          opportunity_id: asText(existingRow.opportunity_id) || opportunityId,
+          contact_name: qualification.contactName || asText(explainability.contact_name) || asText(opportunity.title) || "Incident contact",
+          contact_channels_json: mergedChannels,
+          property_address: asText(existingRow.property_address) || asText(explainability.address) || asText(opportunity.location_text) || null,
+          city: asText(existingRow.city) || asText(explainability.city) || null,
+          state: asText(existingRow.state) || asText(explainability.state) || null,
+          postal_code: asText(existingRow.postal_code) || asText(opportunity.postal_code) || null,
+          updated_at: nowIso
+        })
+        .eq("id", leadId)) as unknown as { error?: { message?: string } | null };
+    }
+  } else if (!leadId) {
     const { data: insertedLead, error: leadError } = await (supabase
       .from("v2_leads")
       .insert({
         tenant_id: tenantId,
         opportunity_id: opportunityId,
         contact_name: qualification.contactName || asText(explainability.contact_name) || asText(opportunity.title) || "Incident contact",
-        contact_channels_json: {
-          phone: qualification.phone || null,
-          email: qualification.email || null,
-          verification_status: qualification.verificationStatus || "verified",
-          contact_provenance: qualification.qualificationSource || "operator_queue_conversion"
-        },
+        contact_channels_json: incomingChannels,
         property_address: asText(explainability.address) || asText(opportunity.location_text) || null,
         city: asText(explainability.city) || null,
         state: asText(explainability.state) || null,

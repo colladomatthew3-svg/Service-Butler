@@ -10,6 +10,7 @@ import {
   normalizePhone,
   verifyLeadContactCandidate
 } from "@/lib/v2/lead-verification";
+import { findLeadMatch, mergeContactChannels } from "@/lib/v2/lead-matching";
 import { dispatchOutreach } from "@/lib/v2/outreach-orchestrator";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { routeOpportunityV2 } from "@/lib/v2/routing-engine";
@@ -305,6 +306,10 @@ async function findActiveSources({
   return (data || []) as Array<Record<string, unknown>>;
 }
 
+function uniqueStrings(values: unknown[]) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
 async function runSourceConnectors({
   supabase,
   tenantId,
@@ -480,13 +485,15 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
   const sourceEventIds = opportunities
     .map((row) => toString(row.source_event_id))
     .filter(Boolean);
+  const legacyAccountId = options.legacyAccountId ?? (dualWriteLegacy ? await resolveTenantLegacyAccountId({ supabase, tenantId }) : null);
 
-  const [{ data: existingLeads }, { data: sourceEvents }, { data: assignments }] = await Promise.all([
+  const [{ data: existingLeads }, { data: sourceEvents }, { data: assignments }, { data: legacyLeads }] = await Promise.all([
     supabase
       .from("v2_leads")
-      .select("id,opportunity_id,contact_channels_json,property_address,city,state,postal_code")
+      .select("id,opportunity_id,contact_name,contact_channels_json,property_address,city,state,postal_code,created_at")
       .eq("tenant_id", tenantId)
-      .in("opportunity_id", opportunityIds),
+      .order("created_at", { ascending: false })
+      .limit(250),
     sourceEventIds.length > 0
       ? supabase
           .from("v2_source_events")
@@ -497,14 +504,24 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
       .from("v2_assignments")
       .select("id,opportunity_id,status")
       .eq("tenant_id", tenantId)
-      .in("opportunity_id", opportunityIds)
+      .in("opportunity_id", opportunityIds),
+    dualWriteLegacy && legacyAccountId
+      ? supabase
+          .from("leads")
+          .select("id,name,phone,service_type,address,city,state,postal_code,requested_timeframe,notes,created_at")
+          .eq("account_id", legacyAccountId)
+          .order("created_at", { ascending: false })
+          .limit(250)
+      : Promise.resolve({ data: [] })
   ]);
+  const existingLeadRows = ((existingLeads || []) as Array<Record<string, unknown>>).slice();
+  const legacyLeadRows = ((legacyLeads || []) as Array<Record<string, unknown>>).slice();
 
   const leadByOpportunity = new Map<string, string>();
   const existingPhones = new Set<string>();
   const existingEmails = new Set<string>();
   const existingAddresses = new Set<string>();
-  for (const row of (existingLeads || []) as Array<Record<string, unknown>>) {
+  for (const row of existingLeadRows) {
     const oppId = toString(row.opportunity_id);
     const leadId = toString(row.id);
     if (oppId && leadId) leadByOpportunity.set(oppId, leadId);
@@ -537,7 +554,6 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
     if (!assignmentByOpportunity.has(oppId)) assignmentByOpportunity.set(oppId, row);
   }
 
-  const legacyAccountId = options.legacyAccountId ?? (dualWriteLegacy ? await resolveTenantLegacyAccountId({ supabase, tenantId }) : null);
   let routedCount = 0;
   let outreachSentCount = 0;
   let opportunitiesQualified = 0;
@@ -668,10 +684,38 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
       do_not_contact: doNotContact
     };
 
+    const leadMatch = findLeadMatch({
+      existing: existingLeadRows.map((row) => {
+        const channels = parseObject(row.contact_channels_json);
+        return {
+          id: toString(row.id),
+          opportunityId: toString(row.opportunity_id) || null,
+          phone: toString(channels.phone) || null,
+          email: toString(channels.email) || null,
+          address: toString(row.property_address) || null,
+          city: toString(row.city) || null,
+          state: toString(row.state) || null,
+          postalCode: toString(row.postal_code) || null,
+          serviceType: serviceLine || null,
+          createdAt: toString(row.created_at) || null
+        };
+      }),
+      incoming: {
+        opportunityId,
+        phone: ownerPhone || null,
+        email: ownerEmail || null,
+        address: propertyAddress || null,
+        city: city || null,
+        state: state || null,
+        postalCode: postalCode || cityState.postalCode || null,
+        serviceType: serviceLine || null
+      }
+    });
+
     if (dryRun) {
       created.push({
         opportunityId,
-        leadId: "dry-run",
+        leadId: leadMatch.matchedLeadId || "dry-run",
         verificationScore: combinedVerificationScore,
         verificationReasons: combinedReasons,
         verificationStatus: contactVerification.status,
@@ -683,18 +727,63 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
       continue;
     }
 
-    const { data: leadRow, error: leadError } = await supabase
-      .from("v2_leads")
-      .insert(leadPayload)
-      .select("id")
-      .single();
+    let leadId = leadMatch.matchedLeadId || "";
+    if (leadId) {
+      if (leadMatch.shouldUpdate) {
+        const existingLeadRow = existingLeadRows.find((row) => toString(row.id) === leadId) || null;
+        if (existingLeadRow) {
+          const mergedChannels = mergeContactChannels(parseObject(existingLeadRow.contact_channels_json), {
+            ...leadPayload.contact_channels_json,
+            dedupe_reasons: [leadMatch.reason]
+          });
 
-    if (leadError || !leadRow?.id) {
-      skipped.push({ opportunityId, reasons: [`lead_create_failed:${leadError?.message || "unknown"}`] });
-      continue;
+          const leadUpdate = (await supabase
+            .from("v2_leads")
+            .update({
+              opportunity_id: toString(existingLeadRow.opportunity_id) || opportunityId,
+              contact_name: toString(existingLeadRow.contact_name) || ownerName || null,
+              contact_channels_json: mergedChannels,
+              property_address: toString(existingLeadRow.property_address) || propertyAddress || null,
+              city: toString(existingLeadRow.city) || city || null,
+              state: toString(existingLeadRow.state) || state || null,
+              postal_code: toString(existingLeadRow.postal_code) || postalCode || cityState.postalCode || null,
+              lead_status: leadStatus,
+              do_not_contact: doNotContact,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", leadId)) as unknown as { error?: { message?: string } | null };
+
+          if (leadUpdate.error) {
+            skipped.push({ opportunityId, reasons: [`lead_update_failed:${leadUpdate.error.message || "unknown"}`] });
+            continue;
+          }
+        }
+      }
+    } else {
+      const { data: leadRow, error: leadError } = await supabase
+        .from("v2_leads")
+        .insert(leadPayload)
+        .select("id")
+        .single();
+
+      if (leadError || !leadRow?.id) {
+        skipped.push({ opportunityId, reasons: [`lead_create_failed:${leadError?.message || "unknown"}`] });
+        continue;
+      }
+
+      leadId = String(leadRow.id);
+      existingLeadRows.unshift({
+        id: leadId,
+        opportunity_id: opportunityId,
+        contact_name: ownerName || null,
+        contact_channels_json: leadPayload.contact_channels_json,
+        property_address: propertyAddress || null,
+        city: city || null,
+        state: state || null,
+        postal_code: postalCode || cityState.postalCode || null,
+        created_at: new Date().toISOString()
+      });
     }
-
-    const leadId = String(leadRow.id);
     leadByOpportunity.set(opportunityId, leadId);
     if (ownerPhone) existingPhones.add(ownerPhone);
     if (ownerEmail) existingEmails.add(ownerEmail);
@@ -719,25 +808,84 @@ export async function runSdrAgentV2(options: SdrAgentRunOptions): Promise<SdrAge
       .eq("id", opportunityId);
 
     if (dualWriteLegacy && legacyAccountId) {
-      await supabase.from("leads").insert({
-        account_id: legacyAccountId,
-        status: "new",
-        stage: stageFromLeadStatus("new"),
-        name: ownerName || title,
-        phone: ownerPhone,
-        service_type: serviceLine || "General",
-        address: propertyAddress || null,
-        city: city || null,
-        state: state || null,
-        postal_code: postalCode || cityState.postalCode || null,
-        requested_timeframe: toNumber(opportunity.urgency_score, 0) >= 80 ? "ASAP" : "This week",
-        source: "sdr_agent",
-        notes: [
-          `opportunity_id=${opportunityId}`,
-          ...combinedReasons,
-          ...leadNotes
-        ].join(" | ")
+      const requestedTimeframe = toNumber(opportunity.urgency_score, 0) >= 80 ? "ASAP" : "This week";
+      const legacyLeadMatch = findLeadMatch({
+        existing: legacyLeadRows.map((row) => ({
+          id: toString(row.id),
+          phone: toString(row.phone) || null,
+          address: toString(row.address) || null,
+          city: toString(row.city) || null,
+          state: toString(row.state) || null,
+          postalCode: toString(row.postal_code) || null,
+          serviceType: toString(row.service_type) || null,
+          createdAt: toString(row.created_at) || null
+        })),
+        incoming: {
+          phone: ownerPhone || null,
+          email: ownerEmail || null,
+          address: propertyAddress || null,
+          city: city || null,
+          state: state || null,
+          postalCode: postalCode || cityState.postalCode || null,
+          serviceType: serviceLine || "General"
+        }
       });
+
+      if (legacyLeadMatch.matchedLeadId) {
+        const existingLegacyLead = legacyLeadRows.find((row) => toString(row.id) === legacyLeadMatch.matchedLeadId) || null;
+        if (existingLegacyLead && legacyLeadMatch.shouldUpdate) {
+          await supabase.from("leads").update({
+            name: toString(existingLegacyLead.name) || ownerName || title,
+            phone: toString(existingLegacyLead.phone) || ownerPhone || null,
+            service_type: toString(existingLegacyLead.service_type) || serviceLine || "General",
+            address: toString(existingLegacyLead.address) || propertyAddress || null,
+            city: toString(existingLegacyLead.city) || city || null,
+            state: toString(existingLegacyLead.state) || state || null,
+            postal_code: toString(existingLegacyLead.postal_code) || postalCode || cityState.postalCode || null,
+            requested_timeframe: toString(existingLegacyLead.requested_timeframe) || requestedTimeframe,
+            notes: uniqueStrings([
+              toString(existingLegacyLead.notes),
+              `opportunity_id=${opportunityId}`,
+              ...combinedReasons,
+              ...leadNotes,
+              `dedupe=${legacyLeadMatch.reason}`
+            ]).join(" | ")
+          }).eq("account_id", legacyAccountId).eq("id", legacyLeadMatch.matchedLeadId);
+        }
+      } else {
+        await supabase.from("leads").insert({
+          account_id: legacyAccountId,
+          status: "new",
+          stage: stageFromLeadStatus("new"),
+          name: ownerName || title,
+          phone: ownerPhone,
+          service_type: serviceLine || "General",
+          address: propertyAddress || null,
+          city: city || null,
+          state: state || null,
+          postal_code: postalCode || cityState.postalCode || null,
+          requested_timeframe: requestedTimeframe,
+          source: "sdr_agent",
+          notes: [
+            `opportunity_id=${opportunityId}`,
+            ...combinedReasons,
+            ...leadNotes
+          ].join(" | ")
+        });
+        legacyLeadRows.unshift({
+          id: `legacy-${opportunityId}`,
+          name: ownerName || title,
+          phone: ownerPhone,
+          service_type: serviceLine || "General",
+          address: propertyAddress || null,
+          city: city || null,
+          state: state || null,
+          postal_code: postalCode || cityState.postalCode || null,
+          requested_timeframe: requestedTimeframe,
+          notes: [`opportunity_id=${opportunityId}`, ...combinedReasons, ...leadNotes].join(" | "),
+          created_at: new Date().toISOString()
+        });
+      }
     }
 
     let routed = false;

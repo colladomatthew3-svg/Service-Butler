@@ -76,23 +76,37 @@ function createSupabaseMock() {
       if (table === "v2_leads") {
         return {
           select: () => {
-            const state = { tenantId: "", opportunityId: "" };
+            const state = { tenantId: "", opportunityId: "", leadId: "" };
             const builder = {
               eq: (field: string, value: unknown) => {
                 if (field === "tenant_id") state.tenantId = String(value || "");
                 if (field === "opportunity_id") state.opportunityId = String(value || "");
+                if (field === "id") state.leadId = String(value || "");
                 return builder;
               },
+              order: () => builder,
+              limit: async () => ({
+                data: tables.leads.filter((row) => String(row.tenant_id) === state.tenantId),
+                error: null
+              }),
               maybeSingle: async () => ({
                 data:
-                  tables.leads.find(
-                    (row) => String(row.tenant_id) === state.tenantId && String(row.opportunity_id) === state.opportunityId
-                  ) || null,
+                  tables.leads.find((row) => {
+                    if (state.leadId) return String(row.id) === state.leadId;
+                    return String(row.tenant_id) === state.tenantId && String(row.opportunity_id) === state.opportunityId;
+                  }) || null,
                 error: null
               })
             };
             return builder;
           },
+          update: (patch: Record<string, unknown>) => ({
+            eq: async (_field: string, leadId: unknown) => {
+              const index = tables.leads.findIndex((row) => String(row.id) === String(leadId));
+              if (index >= 0) tables.leads[index] = { ...tables.leads[index], ...patch };
+              return { data: null, error: null };
+            }
+          }),
           insert: (payload: Record<string, unknown>) => ({
             select: () => ({
               single: async () => {
@@ -205,6 +219,40 @@ test("convert opportunity to job is idempotent when lead/job already exist", asy
   expect(result.jobId).toBe("job-existing");
   expect(tables.leads).toHaveLength(1);
   expect(tables.jobs).toHaveLength(1);
+});
+
+test("convert opportunity to job reuses matching lead by verified phone and updates evidence", async () => {
+  const { supabase, tables } = createSupabaseMock();
+  tables.leads.push({
+    id: "lead-existing",
+    tenant_id: "tenant-1",
+    opportunity_id: null,
+    property_address: "Buffalo, NY 14201",
+    city: "Buffalo",
+    state: "NY",
+    postal_code: "14201",
+    created_at: "2026-04-06T09:00:00.000Z",
+    contact_channels_json: {
+      phone: "+17165550000",
+      verification_status: "verified",
+      verification_score: 92,
+      contact_evidence: ["phone"]
+    }
+  });
+
+  const result = await convertOpportunityToJobV2({
+    supabase,
+    tenantId: "tenant-1",
+    opportunityId: "opp-1",
+    actorUserId: "user-1"
+  });
+
+  expect(result.leadId).toBe("lead-existing");
+  expect(tables.leads).toHaveLength(1);
+  expect(String(tables.leads[0]?.opportunity_id)).toBe("opp-1");
+  expect((tables.leads[0]?.contact_channels_json as Record<string, unknown>).contact_evidence).toEqual(
+    expect.arrayContaining(["phone", "conversion"])
+  );
 });
 
 test("convert opportunity to job blocks review-required opportunities", async () => {

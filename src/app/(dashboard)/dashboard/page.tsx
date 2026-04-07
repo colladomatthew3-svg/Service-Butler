@@ -65,13 +65,6 @@ type DashboardOpportunityRow = {
   created_at: string;
 };
 
-type DashboardOutboundRow = {
-  id: string;
-  name?: string | null;
-  list_type?: string | null;
-  export_status?: string | null;
-};
-
 type DashboardSdrRow = {
   id: string;
   title?: string | null;
@@ -86,7 +79,6 @@ export default async function DashboardOverviewPage() {
   let leadRows: DashboardLeadRow[] = [];
   let jobRows: DashboardJobRow[] = [];
   let opportunities: DashboardOpportunityRow[] = [];
-  let outboundLists: DashboardOutboundRow[] = [];
   let sdrQueue: DashboardSdrRow[] = [];
   let enrichedLeads: Array<DashboardLeadRow & { intent: number }> = [];
   let sourceSummaries: DataSourceSummary[] = await listDataSourceSummaries();
@@ -116,7 +108,7 @@ export default async function DashboardOverviewPage() {
   } else {
     const { accountId, supabase } = await getCurrentUserContext();
 
-    const [{ data: leads }, { data: loadedSettings }, { data: jobs }, { data: loadedLists }] = await Promise.all([
+    const [{ data: leads }, { data: loadedSettings }, { data: jobs }] = await Promise.all([
       supabase
         .from("leads")
         .select("id,name,service_type,city,state,status,requested_timeframe,created_at,scheduled_for")
@@ -131,8 +123,7 @@ export default async function DashboardOverviewPage() {
         .from("jobs")
         .select("id,pipeline_status,scheduled_for,estimated_value,service_type,customer_name,city,state,intent_score")
         .eq("account_id", accountId)
-        .order("scheduled_for", { ascending: true, nullsFirst: false }),
-      supabase.from("outbound_lists").select("id,name,list_type,export_status").eq("account_id", accountId).order("created_at", { ascending: false }).limit(12)
+        .order("scheduled_for", { ascending: true, nullsFirst: false })
     ]);
 
     const { data: loadedOpportunities } = await supabase
@@ -145,7 +136,6 @@ export default async function DashboardOverviewPage() {
     leadRows = leads || [];
     jobRows = jobs || [];
     opportunities = loadedOpportunities || [];
-    outboundLists = loadedLists || [];
     settings = loadedSettings;
 
     const leadIds = leadRows.map((lead) => String(lead.id));
@@ -252,7 +242,6 @@ export default async function DashboardOverviewPage() {
   const bookedJobs = jobRows.filter((job) =>
     ["WON", "COMPLETED", "SCHEDULED", "IN_PROGRESS"].includes(String(job.pipeline_status || "").toUpperCase())
   ).length;
-  const syncedLists = outboundLists.filter((item) => String(item.export_status) === "synced").length;
   const priorityLeads = [...enrichedLeads]
     .filter((lead) => !["won", "lost"].includes(String(lead.status || "").toLowerCase()))
     .sort((a, b) => Number(b.intent || 0) - Number(a.intent || 0))
@@ -281,23 +270,23 @@ export default async function DashboardOverviewPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Operator"
-        title="Operator Command Center"
-        subtitle="Real-time view of demand, verified leads, booked work, and local market pressure."
+        eyebrow="Revenue Engine"
+        title="Lead-to-Job Command Board"
+        subtitle="One operating view for research opportunities, contact-ready leads, booked jobs, and revenue proof."
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Opportunities" value={String(opportunities.length)} icon={<Target className="h-4 w-4" />} tone="brand" />
-        <StatTile label="Needs action" value={String(queueReadyLeads)} icon={<TriangleAlert className="h-4 w-4" />} tone="warning" />
-        <StatTile label="Jobs booked" value={String(bookedJobs)} icon={<CheckCircle2 className="h-4 w-4" />} tone="success" />
-        <StatTile label="Outreach sync" value={String(syncedLists)} icon={<Radio className="h-4 w-4" />} />
+        <StatTile label="Today's opportunities" value={String(opportunities.length)} icon={<Target className="h-4 w-4" />} tone="brand" />
+        <StatTile label="Leads ready to contact" value={String(queueReadyLeads)} icon={<TriangleAlert className="h-4 w-4" />} tone="warning" />
+        <StatTile label="Booked jobs" value={String(bookedJobs)} icon={<CheckCircle2 className="h-4 w-4" />} tone="success" />
+        <StatTile label="Revenue pipeline" value={formatCurrency(weeklyRevenue)} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Week revenue" value={formatCurrency(weeklyRevenue)} icon={<TrendingUp className="h-4 w-4" />} tone="success" />
         <StatTile label="Jobs next 7 days" value={String(jobsNextSeven)} icon={<Clock3 className="h-4 w-4" />} />
+        <StatTile label="High intent leads" value={String(highIntent)} icon={<ShieldCheck className="h-4 w-4" />} />
         <StatTile label="Active markets" value={String(activeMarkets)} icon={<MapPin className="h-4 w-4" />} />
-        <StatTile label="Latest signal" value={latestSignalAge} icon={<Radio className="h-4 w-4" />} />
+        <StatTile label="Latest live signal" value={latestSignalAge} icon={<Radio className="h-4 w-4" />} />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
@@ -310,8 +299,8 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Highest urgency</p>
-              <h2 className="mt-1 text-base font-semibold text-semantic-text">Opportunities to work first</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Step 1</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Today&apos;s Opportunities</h2>
             </div>
             <Link href="/dashboard/opportunities" className={buttonStyles({ size: "sm", variant: "secondary" })}>
               Open opportunities
@@ -321,7 +310,7 @@ export default async function DashboardOverviewPage() {
             {highestUrgencyOpportunities.length === 0 ? (
               <EmptyPanel
                 title="No real opportunities detected yet."
-                body="Open live source setup first, then run the scanner. Research-only market pressure should route into SDR before it is counted in the proof chain."
+                body="Activate live-safe sources, run the scanner, and let research-only rows flow into SDR until they become verified and contactable."
               />
             ) : (
               <Table className="border-spacing-y-0">
@@ -363,8 +352,8 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Needs action</p>
-              <h2 className="mt-1 text-base font-semibold text-semantic-text">Verified leads to contact next</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Step 2</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Leads Ready to Contact</h2>
             </div>
             <Link href="/dashboard/leads" className={buttonStyles({ size: "sm", variant: "secondary" })}>
               Open leads
@@ -374,7 +363,7 @@ export default async function DashboardOverviewPage() {
             {priorityLeads.length === 0 ? (
               <EmptyPanel
                 title="No verified lead queue yet."
-                body="Use scanner capture and SDR verification to clear a real phone or email. This route stays empty until the live proof chain produces verified leads."
+                body="This stays empty until a real phone or email is verified. Scanner opportunities are research-first and should not skip this step."
               />
             ) : (
               <Table className="border-spacing-y-0">
@@ -417,8 +406,8 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">SDR lane</p>
-              <h2 className="mt-1 text-base font-semibold text-semantic-text">Queued follow-up waiting on verified contact</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Step 1a</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Research Queue Waiting on Verified Contact</h2>
             </div>
             <Link href="/dashboard/scanner?queue=sdr" className={buttonStyles({ size: "sm", variant: "secondary" })}>
               Open SDR lane
@@ -456,8 +445,8 @@ export default async function DashboardOverviewPage() {
 
         <Card>
           <CardHeader>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Qualification throughput</p>
-            <h2 className="mt-1 text-base font-semibold text-semantic-text">What has to be true before a signal becomes a lead</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Qualification rule</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">What must be true before outreach happens</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             <MetricRow
@@ -485,8 +474,8 @@ export default async function DashboardOverviewPage() {
       <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card>
           <CardHeader>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Operator proof</p>
-            <h2 className="mt-1 text-base font-semibold text-semantic-text">Real capture vs qualified lead proof</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Step 3-4</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Booked-Job Proof</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             {hasProofChainData ? (
@@ -514,8 +503,8 @@ export default async function DashboardOverviewPage() {
 
         <Card>
           <CardHeader>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Production watch</p>
-            <h2 className="mt-1 text-base font-semibold text-semantic-text">What can still block a buyer-safe demo</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Revenue blockers</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">What can still stop pilot proof</h2>
           </CardHeader>
           <CardBody className="space-y-3">
             <MetricRow label="Blocked live sources" value={String(blockedSources)} helper="These sources are configured but still blocked by terms, credentials, or failed runs." icon={<TriangleAlert className="h-4 w-4" />} />
@@ -535,8 +524,8 @@ export default async function DashboardOverviewPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Territory summary</p>
-              <h2 className="mt-1 text-base font-semibold text-semantic-text">Where demand is stacking up</h2>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Coverage</p>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Where the revenue loop is stacking up</h2>
             </div>
             <Badge variant="brand">{activeMarkets} active</Badge>
           </CardHeader>
@@ -583,7 +572,7 @@ export default async function DashboardOverviewPage() {
           <Card>
             <CardHeader>
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-semantic-muted">Revenue proof</p>
-              <h2 className="mt-1 text-base font-semibold text-semantic-text">Why this reads like a traceable lead engine</h2>
+              <h2 className="mt-1 text-base font-semibold text-semantic-text">Why this reads like a real lead-to-job engine</h2>
             </CardHeader>
             <CardBody className="space-y-3">
               <MetricRow

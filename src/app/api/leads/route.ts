@@ -22,6 +22,29 @@ function statusToStage(status: string) {
   }
 }
 
+function normalizePhone(value: string | null | undefined) {
+  return String(value || "").replace(/\D+/g, "");
+}
+
+function deriveLeadTruth(lead: Record<string, unknown>) {
+  const phone = String(lead.phone || "").trim();
+  const email = String(lead.email || "").trim();
+  const status = String(lead.status || "new").toLowerCase();
+  const source = String(lead.source || "manual").trim() || "manual";
+  const contactableNow = Boolean(normalizePhone(phone).length >= 10 || email);
+  const countsAsRealLead = contactableNow && !["demo", "sample", "synthetic"].includes(source.toLowerCase());
+  return {
+    source,
+    service_line: String(lead.service_type || "").trim() || null,
+    freshness_timestamp: String(lead.created_at || "").trim() || null,
+    contactable_now: contactableNow,
+    outreach_allowed: countsAsRealLead && ["new", "contacted"].includes(status),
+    counts_as_real_capture: countsAsRealLead,
+    counts_as_real_lead: countsAsRealLead,
+    territory_fit: [lead.city, lead.state].filter(Boolean).join(", ") || null
+  };
+}
+
 export async function GET(req: NextRequest) {
   if (isDemoMode()) {
     const status = req.nextUrl.searchParams.get("status");
@@ -38,7 +61,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("leads")
     .select(
-      "id,created_at,status,name,phone,service_type,address,city,state,postal_code,requested_timeframe,source,notes,scheduled_for,converted_job_id"
+      "id,created_at,status,name,phone,service_type,address,city,state,postal_code,requested_timeframe,source,notes,scheduled_for,converted_job_id,email"
     )
     .eq("account_id", accountId)
     .order("created_at", { ascending: false });
@@ -69,7 +92,12 @@ export async function GET(req: NextRequest) {
   const enriched = (leads || []).map((lead) => {
     const scores = signalScoresByLead[lead.id as string] || [];
     const intentScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
-    return { ...lead, intentScore, signalCount: scores.length };
+    return {
+      ...lead,
+      intentScore,
+      signalCount: scores.length,
+      ...deriveLeadTruth(lead as Record<string, unknown>)
+    };
   });
 
   const counts = enriched.reduce<Record<string, number>>((acc, lead) => {

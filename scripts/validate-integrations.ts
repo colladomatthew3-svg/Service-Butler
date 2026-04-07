@@ -188,9 +188,9 @@ async function main() {
   const serviceRole = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
   if (!supabaseUrl || !serviceRole) {
-    console.log("[validate-integrations] mode=simulated (missing Supabase credentials)");
-    console.log("Twilio and HubSpot validations skipped.");
-    process.exit(0);
+    console.error("[validate-integrations] mode=simulated (missing Supabase credentials)");
+    console.error("Twilio and HubSpot validations skipped. This is a NO-GO for pilot readiness.");
+    process.exit(1);
   }
 
   const supabase = createClient(supabaseUrl, serviceRole, {

@@ -31,6 +31,46 @@ function leadCountsAsReal(row: Record<string, unknown>) {
   return verificationStatus === "verified" && verificationScore >= 70 && Boolean(phone || email);
 }
 
+function deriveOpportunityFreshnessTimestamp(row: Record<string, unknown>, explainability: Record<string, unknown>) {
+  return (
+    asText(explainability.freshness_timestamp) ||
+    asText(explainability.occurred_at) ||
+    asText(explainability.event_timestamp) ||
+    asText(explainability.source_published_at) ||
+    asText(row.created_at) ||
+    null
+  );
+}
+
+function deriveOpportunitySourceLabel(row: Record<string, unknown>, explainability: Record<string, unknown>) {
+  const sourceTypes = Array.isArray(explainability.source_types) ? explainability.source_types.map((value) => asText(value)).filter(Boolean) : [];
+  return sourceTypes[0] || asText(explainability.source_type) || asText(explainability.source_name) || asText(row.service_line || row.opportunity_type) || null;
+}
+
+function deriveOpportunityContactableNow(qualification: ReturnType<typeof getOpportunityQualificationSnapshot>) {
+  return qualificationAllowsDispatch(qualification);
+}
+
+function deriveOpportunityOutreachAllowed({
+  qualification,
+  actionability,
+  countsAsRealCapture
+}: {
+  qualification: ReturnType<typeof getOpportunityQualificationSnapshot>;
+  actionability: ReturnType<typeof deriveOpportunityActionability>;
+  countsAsRealCapture: boolean;
+}) {
+  return countsAsRealCapture && qualificationAllowsDispatch(qualification) && !actionability.reviewRequired;
+}
+
+function legacyOpportunitySource(raw: Record<string, unknown>, row: Record<string, unknown>) {
+  return asText(raw.source_type) || asText(raw.source_name) || asText(row.category) || "legacy_opportunity";
+}
+
+function legacyOpportunityFreshness(raw: Record<string, unknown>, row: Record<string, unknown>) {
+  return asText(raw.freshness_timestamp) || asText(raw.occurred_at) || asText(raw.source_published_at) || asText(row.created_at) || null;
+}
+
 export async function GET(req: NextRequest) {
   if (isDemoMode()) {
     return NextResponse.json({
@@ -136,6 +176,14 @@ export async function GET(req: NextRequest) {
           });
           const dispatchReady = qualificationAllowsDispatch(qualification);
           const countsAsRealCapture = proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived";
+          const freshnessTimestamp = deriveOpportunityFreshnessTimestamp(row, explainability);
+          const sourceLabel = deriveOpportunitySourceLabel(row, explainability);
+          const contactableNow = deriveOpportunityContactableNow(qualification);
+          const outreachAllowed = deriveOpportunityOutreachAllowed({
+            qualification,
+            actionability,
+            countsAsRealCapture
+          });
           const pipelineStage = deriveOpportunityPipelineStage({
             lifecycleStatus: row.lifecycle_status,
             routingStatus: row.routing_status,
@@ -180,8 +228,11 @@ export async function GET(req: NextRequest) {
             qualification_status: qualification.qualificationStatus,
             qualification_reason_code: qualification.qualificationReasonCode,
             proof_authenticity: qualification.proofAuthenticity,
+            source: sourceLabel,
             source_lane: sourceLane,
             source_provenance: typeof explainability.source_provenance === "string" ? explainability.source_provenance : null,
+            freshness_timestamp: freshnessTimestamp,
+            territory_fit: actionability.territoryRelevance,
             priority_score: priorityScore,
             next_recommended_action: qualification.nextRecommendedAction,
             recommended_next_action: actionability.recommendedNextAction,
@@ -200,6 +251,8 @@ export async function GET(req: NextRequest) {
             can_accept_assignment: actionability.canAcceptAssignment,
             can_escalate_assignment: actionability.canEscalateAssignment,
             can_convert_to_job: actionability.canConvertToJob,
+            contactable_now: contactableNow,
+            outreach_allowed: outreachAllowed,
             research_only: qualification.researchOnly,
             requires_sdr_qualification: qualification.requiresSdrQualification,
             verification_status: qualification.verificationStatus,
@@ -239,5 +292,25 @@ export async function GET(req: NextRequest) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  return NextResponse.json({ opportunities: data || [] });
+  return NextResponse.json({
+    opportunities: (data || []).map((row: Record<string, unknown>) => {
+      const raw = asRecord(row.raw);
+      const proofAuthenticity = asText(raw.proof_authenticity).toLowerCase();
+      const contactableNow = Boolean(asText(raw.phone) || asText(raw.email));
+      const countsAsRealCapture = proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived";
+      return {
+        ...row,
+        source: legacyOpportunitySource(raw, row),
+        freshness_timestamp: legacyOpportunityFreshness(raw, row),
+        territory_fit: asText(raw.territory_relevance) || asText(row.territory) || null,
+        contactable_now: contactableNow,
+        outreach_allowed: countsAsRealCapture && contactableNow && !Boolean(raw.review_required),
+        review_required: Boolean(raw.review_required),
+        proof_authenticity: proofAuthenticity || "unknown",
+        service_line: asText(raw.service_line) || asText(row.category) || null,
+        counts_as_real_capture: countsAsRealCapture,
+        counts_as_real_lead: countsAsRealCapture && contactableNow
+      };
+    })
+  });
 }

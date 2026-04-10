@@ -3,24 +3,24 @@
 @tailwind utilities;
 
 :root {
-  --sb-primary: 33 102 217;
-  --sb-primary-hover: 24 79 180;
-  --sb-bg: 247 249 252;
+  --sb-primary: 21 93 193;
+  --sb-primary-hover: 28 110 218;
+  --sb-bg: 249 250 251;
   --sb-card: 255 255 255;
-  --sb-border: 218 226 236;
-  --sb-text: 24 35 58;
-  --sb-muted: 100 116 139;
-  --sb-primary-soft: 224 236 255;
-  --sb-surface-alt: 243 247 252;
-  --sb-surface-subtle: 236 242 249;
-  --sb-copper: 24 166 140;
-  --sb-copper-soft: 220 245 239;
-  --sb-sidebar: 20 29 47;
-  --sb-sidebar-border: 47 63 89;
-  --sb-sidebar-text: 223 228 239;
-  --sb-sidebar-muted: 133 148 173;
+  --sb-border: 224 229 235;
+  --sb-text: 23 28 38;
+  --sb-muted: 108 124 148;
+  --sb-primary-soft: 229 238 251;
+  --sb-surface-alt: 243 245 247;
+  --sb-surface-subtle: 238 242 246;
+  --sb-copper: 43 171 146;
+  --sb-copper-soft: 223 244 239;
+  --sb-sidebar: 23 28 38;
+  --sb-sidebar-border: 48 58 76;
+  --sb-sidebar-text: 217 224 234;
+  --sb-sidebar-muted: 132 145 165;
   --font-inter: "Inter";
-  --font-manrope: "Manrope";
+  --font-manrope: "DM Sans";
   --bg: var(--sb-bg);
   --surface: var(--sb-card);
   --surface2: var(--sb-surface-alt);
@@ -154,7 +154,7 @@ body {
 }
 
 .section-title {
-  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-family: var(--font-manrope), "DM Sans", sans-serif;
   font-size: 1.12rem;
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -174,7 +174,7 @@ body {
 }
 
 .display-title {
-  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-family: var(--font-manrope), "DM Sans", sans-serif;
   font-size: clamp(2.75rem, 5vw, 3.45rem);
   font-weight: 800;
   letter-spacing: -0.07em;
@@ -182,7 +182,7 @@ body {
 }
 
 .title-hero {
-  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-family: var(--font-manrope), "DM Sans", sans-serif;
   font-size: clamp(2.65rem, 5vw, 3.35rem);
   font-weight: 700;
   letter-spacing: -0.06em;
@@ -190,7 +190,7 @@ body {
 }
 
 .title-card {
-  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-family: var(--font-manrope), "DM Sans", sans-serif;
   font-size: var(--text-h3);
   font-weight: 700;
   letter-spacing: -0.05em;
@@ -203,7 +203,7 @@ body {
 }
 
 .dashboard-page-title {
-  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-family: var(--font-manrope), "DM Sans", sans-serif;
   font-size: clamp(1.6rem, 2.2vw, 2.2rem);
   font-weight: 700;
   line-height: 1;
@@ -211,7 +211,7 @@ body {
 }
 
 .dashboard-section-title {
-  font-family: var(--font-manrope), Manrope, sans-serif;
+  font-family: var(--font-manrope), "DM Sans", sans-serif;
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.15;

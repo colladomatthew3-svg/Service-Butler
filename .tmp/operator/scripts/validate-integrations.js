@@ -7,6 +7,7 @@ const node_crypto_1 = require("node:crypto");
 const supabase_js_1 = require("@supabase/supabase-js");
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
+const source_truth_gates_1 = require("../src/lib/v2/source-truth-gates");
 function loadEnvFromFile(filePath) {
     if (!node_fs_1.default.existsSync(filePath))
         return;
@@ -151,14 +152,79 @@ async function main() {
     const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
     const serviceRole = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
     if (!supabaseUrl || !serviceRole) {
-        console.log("[validate-integrations] mode=simulated (missing Supabase credentials)");
-        console.log("Twilio and HubSpot validations skipped.");
-        process.exit(0);
+        console.error("[validate-integrations] mode=simulated (missing Supabase credentials)");
+        console.error("Twilio and HubSpot validations skipped. This is a NO-GO for pilot readiness.");
+        process.exit(1);
     }
     const supabase = (0, supabase_js_1.createClient)(supabaseUrl, serviceRole, {
         auth: { autoRefreshToken: false, persistSession: false }
     });
     const tenantId = await resolveTenantId(supabase);
+    const { data: sourceRows, error: sourceError } = await supabase
+        .from("v2_data_sources")
+        .select("id,status,terms_status,compliance_status,rollout_state,health_status,freshness_timestamp,freshness_sla_minutes")
+        .eq("tenant_id", tenantId)
+        .eq("status", "active");
+    if (sourceError) {
+        throw new Error(`Could not inspect active data sources (${sourceError.message}).`);
+    }
+    const sourceIds = (sourceRows || []).map((row) => String(row.id)).filter(Boolean);
+    const { data: sourceEvents, error: sourceEventsError } = sourceIds.length
+        ? await supabase
+            .from("v2_source_events")
+            .select("source_id,compliance_status,ingested_at")
+            .eq("tenant_id", tenantId)
+            .in("source_id", sourceIds)
+            .order("ingested_at", { ascending: false })
+            .limit(500)
+        : { data: [], error: null };
+    if (sourceEventsError) {
+        throw new Error(`Could not inspect source events (${sourceEventsError.message}).`);
+    }
+    const sourceTruth = (0, source_truth_gates_1.summarizeSourceTruth)((sourceRows || []).map((row) => ({
+        id: String(row.id || ""),
+        status: String(row.status || ""),
+        termsStatus: String(row.terms_status || ""),
+        complianceStatus: String(row.compliance_status || ""),
+        rolloutState: String(row.rollout_state || ""),
+        healthStatus: String(row.health_status || ""),
+        freshnessTimestamp: row.freshness_timestamp ? String(row.freshness_timestamp) : null,
+        freshnessSlaMinutes: Number(row.freshness_sla_minutes || 360)
+    })), (sourceEvents || []).map((row) => ({
+        sourceId: String(row.source_id || ""),
+        complianceStatus: String(row.compliance_status || ""),
+        ingestedAt: row.ingested_at ? String(row.ingested_at) : null
+    })));
+    results.push({
+        check: "live_safe_sources",
+        status: sourceTruth.liveSafeSources > 0 ? "PASS" : "FAIL",
+        detail: sourceTruth.liveSafeSources > 0
+            ? `Live-safe active sources available: ${sourceTruth.liveSafeSources}.`
+            : "No active data sources are approved for live-safe capture.",
+        remediation: sourceTruth.liveSafeSources > 0
+            ? undefined
+            : "Approve terms/compliance and rollout state for at least one source before treating this tenant as real-data ready."
+    });
+    results.push({
+        check: "fresh_live_safe_sources",
+        status: sourceTruth.freshLiveSafeSources > 0 ? "PASS" : "FAIL",
+        detail: sourceTruth.freshLiveSafeSources > 0
+            ? `Fresh live-safe sources within SLA: ${sourceTruth.freshLiveSafeSources}.`
+            : "No live-safe sources are currently fresh enough for real proof.",
+        remediation: sourceTruth.freshLiveSafeSources > 0
+            ? undefined
+            : "Refresh an approved source and record a current freshness timestamp before validating real lead generation."
+    });
+    results.push({
+        check: "recent_approved_source_events",
+        status: sourceTruth.approvedRecentEvents > 0 ? "PASS" : "FAIL",
+        detail: sourceTruth.approvedRecentEvents > 0
+            ? `Approved source events in the last ${sourceTruth.sampleWindowMinutes} minutes: ${sourceTruth.approvedRecentEvents}.`
+            : `No approved source events were ingested in the last ${sourceTruth.sampleWindowMinutes} minutes from a fresh live-safe source.`,
+        remediation: sourceTruth.approvedRecentEvents > 0
+            ? undefined
+            : "Run at least one live-safe source successfully before using lead and opportunity counts as real proof."
+    });
     const { leadId, opportunityId, assignmentId } = await ensureValidationEntities({
         supabase,
         tenantId

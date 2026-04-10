@@ -8,6 +8,7 @@ import { deriveOpportunityPipelineStage } from "@/lib/v2/opportunity-pipeline";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { classifySourceLane, opportunityPriorityScore } from "@/lib/v2/source-lanes";
 import { deriveOpportunityActionability } from "@/lib/v2/opportunity-actionability";
+import { qualifiesAsRealSourceCapture, isIntegrationValidationRecord } from "@/lib/v2/source-truth";
 
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -101,8 +102,12 @@ export async function GET(req: NextRequest) {
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
       const opportunityIds = (data || []).map((row) => String(row.id));
+      const sourceEventIds = Array.from(new Set((data || []).map((row) => String(row.source_event_id || "")).filter(Boolean)));
       const verifiedLeadOpportunityIds = new Set<string>();
       const latestAssignmentByOpportunity = new Map<string, Record<string, unknown>>();
+      const sourceEventById = new Map<string, Record<string, unknown>>();
+      const sourceById = new Map<string, Record<string, unknown>>();
+      const connectorRunById = new Map<string, Record<string, unknown>>();
 
       if (opportunityIds.length > 0) {
         const { data: leadRows, error: leadError } = await v2Context.supabase
@@ -133,11 +138,61 @@ export async function GET(req: NextRequest) {
           if (!opportunityId || latestAssignmentByOpportunity.has(opportunityId)) continue;
           latestAssignmentByOpportunity.set(opportunityId, assignment);
         }
+
+        if (sourceEventIds.length > 0) {
+          const { data: sourceEvents, error: sourceEventError } = await v2Context.supabase
+            .from("v2_source_events")
+            .select("id,source_id,connector_run_id,compliance_status,normalized_payload")
+            .eq("tenant_id", v2Context.franchiseTenantId)
+            .in("id", sourceEventIds);
+
+          if (sourceEventError) return NextResponse.json({ error: sourceEventError.message }, { status: 400 });
+
+          const relatedSourceIds = Array.from(new Set((sourceEvents || []).map((row) => String((row as Record<string, unknown>).source_id || "")).filter(Boolean)));
+          const relatedConnectorRunIds = Array.from(
+            new Set((sourceEvents || []).map((row) => String((row as Record<string, unknown>).connector_run_id || "")).filter(Boolean))
+          );
+
+          for (const sourceEvent of (sourceEvents || []) as Array<Record<string, unknown>>) {
+            sourceEventById.set(String(sourceEvent.id || ""), sourceEvent);
+          }
+
+          if (relatedSourceIds.length > 0) {
+            const { data: sources, error: sourceError } = await v2Context.supabase
+              .from("v2_data_sources")
+              .select("id,status,terms_status,compliance_status,rollout_state,readiness_status,health_status,freshness_timestamp,freshness_sla_minutes")
+              .eq("tenant_id", v2Context.franchiseTenantId)
+              .in("id", relatedSourceIds);
+
+            if (sourceError) return NextResponse.json({ error: sourceError.message }, { status: 400 });
+            for (const source of (sources || []) as Array<Record<string, unknown>>) {
+              sourceById.set(String(source.id || ""), source);
+            }
+          }
+
+          if (relatedConnectorRunIds.length > 0) {
+            const { data: connectorRuns, error: connectorError } = await v2Context.supabase
+              .from("v2_connector_runs")
+              .select("id,status,metadata")
+              .eq("tenant_id", v2Context.franchiseTenantId)
+              .in("id", relatedConnectorRunIds);
+
+            if (connectorError) return NextResponse.json({ error: connectorError.message }, { status: 400 });
+            for (const connectorRun of (connectorRuns || []) as Array<Record<string, unknown>>) {
+              connectorRunById.set(String(connectorRun.id || ""), connectorRun);
+            }
+          }
+        }
       }
 
       return NextResponse.json({
-        opportunities: (data || []).map((row: Record<string, unknown>) => {
+        opportunities: (data || [])
+          .filter((row: Record<string, unknown>) => !isIntegrationValidationRecord(asRecord(row.explainability_json)))
+          .map((row: Record<string, unknown>) => {
           const explainability = (row.explainability_json as Record<string, unknown> | null) || {};
+          const sourceEvent = sourceEventById.get(String(row.source_event_id || "")) || null;
+          const source = sourceEvent ? sourceById.get(String(sourceEvent.source_id || "")) || null : null;
+          const connectorRun = sourceEvent ? connectorRunById.get(String(sourceEvent.connector_run_id || "")) || null : null;
           const proofAuthenticity = classifyProofAuthenticity({
             sourceType:
               Array.isArray(explainability.source_types) && explainability.source_types.length > 0
@@ -175,7 +230,13 @@ export async function GET(req: NextRequest) {
             assignment
           });
           const dispatchReady = qualificationAllowsDispatch(qualification);
-          const countsAsRealCapture = proofAuthenticity === "live_provider" || proofAuthenticity === "live_derived";
+          const countsAsRealCapture = qualifiesAsRealSourceCapture({
+            authenticity: proofAuthenticity,
+            explainability,
+            source,
+            sourceEvent,
+            connectorRun
+          });
           const freshnessTimestamp = deriveOpportunityFreshnessTimestamp(row, explainability);
           const sourceLabel = deriveOpportunitySourceLabel(row, explainability);
           const contactableNow = deriveOpportunityContactableNow(qualification);
@@ -293,7 +354,9 @@ export async function GET(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   return NextResponse.json({
-    opportunities: (data || []).map((row: Record<string, unknown>) => {
+    opportunities: (data || [])
+      .filter((row: Record<string, unknown>) => !isIntegrationValidationRecord(asRecord(row.raw)))
+      .map((row: Record<string, unknown>) => {
       const raw = asRecord(row.raw);
       const proofAuthenticity = asText(raw.proof_authenticity).toLowerCase();
       const contactableNow = Boolean(asText(raw.phone) || asText(raw.email));

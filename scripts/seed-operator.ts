@@ -207,7 +207,8 @@ const DEFAULT_SOURCES = [
     config_encrypted: {
       source_name: "Municipal Permits Feed",
       provider_url: process.env.PERMITS_PROVIDER_URL || "",
-      provider_token: process.env.PERMITS_PROVIDER_TOKEN || ""
+      provider_token: process.env.PERMITS_PROVIDER_TOKEN || "",
+      source_provenance: process.env.PERMITS_PROVIDER_SOURCE_PROVENANCE || process.env.PERMITS_PROVIDER_URL || "operator.permits.provider"
     }
   },
   {
@@ -267,8 +268,8 @@ const DEFAULT_SOURCES = [
       endpoint:
         process.env.OPEN311_ENDPOINT ||
         (IS_SUFFOLK_PROFILE
-          ? "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=100&$where=borough%20in(%27QUEENS%27,%27BROOKLYN%27)%20and%20complaint_type%20in(%27WATER%20LEAK%27,%27FLOODING%27,%27SEWER%27,%27PLUMBING%27,%27FIRE%20SAFETY%20DIRECTOR%20-%20F16%27)"
-          : "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=100")
+          ? "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$select=unique_key,created_date,complaint_type,descriptor,incident_address,incident_zip,borough,status,resolution_description&$where=borough%20in(%27QUEENS%27,%27BROOKLYN%27)%20and%20complaint_type%20in(%27WATER%20LEAK%27,%27FLOODING%27,%27SEWER%27,%27PLUMBING%27,%27FIRE%20SAFETY%20DIRECTOR%20-%20F16%27)&$order=created_date%20DESC&$limit=100"
+          : "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$select=unique_key,created_date,complaint_type,descriptor,incident_address,incident_zip,borough,status,resolution_description&$order=created_date%20DESC&$limit=100")
     }
   },
   {

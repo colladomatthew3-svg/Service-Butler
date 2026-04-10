@@ -1,5 +1,12 @@
 import { checkOpportunityDuplicate, injectDedupKey } from "@/lib/v2/deduplication";
+import {
+  findGroundedLeadContactMatch,
+  findGroundedPermitLicenseContactMatch,
+  parseGroundedLeadContactCandidate
+} from "@/lib/v2/grounded-contact-attachment";
 import { type FranchiseVertical, getVertical } from "@/lib/v2/franchise-verticals";
+import { extractLeadContactCandidate, verifyLeadContactCandidate } from "@/lib/v2/lead-verification";
+import { mergeOpportunityQualification } from "@/lib/v2/opportunity-qualification";
 import { computeOpportunityScores } from "@/lib/v2/scoring";
 import type { V2ConnectorRunResult } from "@/lib/v2/types";
 import { type ConnectorRunMode, normalizeConnectorRunMode, sanitizeIdempotencyKey } from "@/lib/v2/connector-run-request";
@@ -145,6 +152,293 @@ function classifyLikelyJobType(opportunityType: string, primaryServiceLine: stri
   if (normalized.includes("roof") || normalized.includes("hail") || normalized.includes("wind")) return "roof damage inspection";
   if (normalized.includes("hvac") || normalized.includes("heat") || normalized.includes("ac")) return "HVAC outage";
   return "service dispatch";
+}
+
+function incrementCount(map: Record<string, number>, key: string) {
+  map[key] = (map[key] || 0) + 1;
+}
+
+function normalizeAddressKey(input: { address?: string | null; city?: string | null; state?: string | null; postalCode?: string | null }) {
+  return [input.address, input.city, input.state, input.postalCode]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join("|");
+}
+
+async function findGroundedExistingLeadContact({
+  supabase,
+  tenantId,
+  serviceLine,
+  address,
+  city,
+  state,
+  postalCode
+}: {
+  supabase: SupabaseClient;
+  tenantId: string;
+  serviceLine: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postalCode?: string | null;
+}) {
+  const normalizedPostalCode = String(postalCode || "").trim();
+  if (!normalizedPostalCode) return null;
+
+  const { data: leads, error: leadError } = await supabase
+    .from("v2_leads")
+    .select("id,opportunity_id,contact_name,contact_channels_json,property_address,city,state,postal_code,service_type,created_at,lead_status,do_not_contact")
+    .eq("tenant_id", tenantId)
+    .eq("postal_code", normalizedPostalCode)
+    .order("created_at", { ascending: false })
+    .limit(150);
+
+  if (leadError || !Array.isArray(leads) || leads.length === 0) return null;
+
+  const linkedOpportunityIds = Array.from(
+    new Set(
+      (leads as Array<Record<string, unknown>>)
+        .map((row) => String(row.opportunity_id || "").trim())
+        .filter(Boolean)
+    )
+  );
+  const serviceLineByOpportunityId = new Map<string, string>();
+
+  if (linkedOpportunityIds.length > 0) {
+    const { data: opportunities } = await supabase
+      .from("v2_opportunities")
+      .select("id,service_line")
+      .eq("tenant_id", tenantId)
+      .in("id", linkedOpportunityIds);
+
+    for (const row of (opportunities || []) as Array<Record<string, unknown>>) {
+      serviceLineByOpportunityId.set(String(row.id || ""), String(row.service_line || ""));
+    }
+  }
+
+  const match = findGroundedLeadContactMatch({
+    address,
+    city,
+    state,
+    postalCode: normalizedPostalCode,
+    serviceLine,
+    existingLeadContacts: (leads as Array<Record<string, unknown>>).map((row) =>
+      parseGroundedLeadContactCandidate(row, serviceLineByOpportunityId.get(String(row.opportunity_id || "")) || null)
+    )
+  });
+
+  if (match.status !== "attached") return match;
+
+  return {
+    ...match,
+    matchedLeadId: match.lead.leadId,
+    contactName: match.lead.contactName,
+    phone: match.lead.phone,
+    email: match.lead.email,
+    provenance: match.lead.contactProvenance || "historical_verified_lead",
+    evidence: match.lead.contactEvidence,
+    qualificationSource: "historical_verified_lead",
+    qualificationNotes: `${match.reason} lead_id=${match.lead.leadId}`,
+    groundedReason: match.reason
+  };
+}
+
+async function deriveSourceContactState({
+  supabase,
+  tenantId,
+  event,
+  serviceLine,
+  scoring,
+  explainability,
+  sourceEventId
+}: {
+  supabase: SupabaseClient;
+  tenantId: string;
+  event: ConnectorNormalizedEvent;
+  serviceLine: string;
+  scoring: {
+    sourceReliabilityScore: number;
+    explainability: Record<string, unknown>;
+    multiSignal?: boolean;
+  };
+  explainability: Record<string, unknown>;
+  sourceEventId: string;
+}) {
+  const extractedContact = extractLeadContactCandidate({
+    sourceEvent: {
+      raw_payload: event.rawPayload,
+      normalized_payload: event.normalizedPayload
+    }
+  });
+  const sourceVerification = verifyLeadContactCandidate(extractedContact, {
+    sourceReliability: scoring.sourceReliabilityScore,
+    freshnessScore: Number(scoring.explainability.freshness_score || 0),
+    hasMultiSignal: Boolean(scoring.multiSignal),
+    duplicatePhone: false,
+    duplicateEmail: false,
+    duplicateAddress: false
+  });
+  const hasSourceIdentity = Boolean(extractedContact.name);
+  const hasSourceChannels = Boolean(extractedContact.phone || extractedContact.email);
+  const permitLicenseMatch =
+    event.eventType === "permit_signal" && sourceVerification.status !== "verified"
+      ? await findGroundedPermitLicenseContactMatch({
+          sourceEvent: {
+            raw_payload: event.rawPayload,
+            normalized_payload: event.normalizedPayload
+          }
+        })
+      : null;
+  const hasPermitLicenseAttachment = permitLicenseMatch?.status === "attached";
+  const groundedLeadMatch =
+    !hasPermitLicenseAttachment &&
+    (event.eventType === "open311_service_request" || event.eventType === "permit_signal") &&
+    sourceVerification.status !== "verified"
+      ? await findGroundedExistingLeadContact({
+          supabase,
+          tenantId,
+          serviceLine,
+          address: event.addressText || event.locationText || null,
+          city: event.city || null,
+          state: event.state || null,
+          postalCode: event.postalCode || null
+        })
+      : null;
+  const hasGroundedAttachment = groundedLeadMatch?.status === "attached";
+  const attachedPermitLicense =
+    permitLicenseMatch && permitLicenseMatch.status === "attached" ? permitLicenseMatch : null;
+  const verification = attachedPermitLicense
+    ? {
+        ...sourceVerification,
+        name: attachedPermitLicense.contactName,
+        phone: attachedPermitLicense.phone,
+        email: attachedPermitLicense.email,
+        status: "verified" as const,
+        contactable: Boolean(attachedPermitLicense.phone || attachedPermitLicense.email),
+        reasons: [
+          ...sourceVerification.reasons,
+          attachedPermitLicense.reason,
+          `provenance ${attachedPermitLicense.provenance}`
+        ],
+        provenance: attachedPermitLicense.provenance,
+        evidence: attachedPermitLicense.evidence
+      }
+    : hasGroundedAttachment
+    ? {
+        ...sourceVerification,
+        name: groundedLeadMatch.contactName,
+        phone: groundedLeadMatch.phone,
+        email: groundedLeadMatch.email,
+        status: "verified" as const,
+        contactable: Boolean(groundedLeadMatch.phone || groundedLeadMatch.email),
+        reasons: [
+          ...sourceVerification.reasons,
+          `grounded contact reused from verified lead ${groundedLeadMatch.matchedLeadId}`,
+          `provenance ${groundedLeadMatch.provenance}`
+        ],
+        provenance: groundedLeadMatch.provenance,
+        evidence: groundedLeadMatch.evidence
+      }
+    : sourceVerification;
+
+  const contactAttached = Boolean(verification.phone || verification.email);
+  const qualificationStatus = verification.status === "verified" ? "qualified_contactable" : "research_only";
+  const qualificationReasonCode = hasPermitLicenseAttachment
+    ? "verified_contact_attached_from_dob_license"
+    : permitLicenseMatch?.status === "weak_match" || permitLicenseMatch?.status === "identity_only"
+      ? permitLicenseMatch.reasonCode
+      : hasGroundedAttachment
+        ? "verified_contact_attached_from_existing_lead"
+        : groundedLeadMatch?.status === "weak_match"
+          ? groundedLeadMatch.reasonCode
+          : !contactAttached && hasSourceIdentity && !hasSourceChannels
+            ? "source_contact_identity_only"
+            : !contactAttached
+              ? "missing_contact_data_from_source"
+              : verification.status === "verified"
+                ? "verified_contact_present"
+                : "source_contact_unverified";
+  const qualificationNotes = hasPermitLicenseAttachment
+    ? permitLicenseMatch.reason
+    : permitLicenseMatch?.status === "weak_match" || permitLicenseMatch?.status === "identity_only"
+      ? permitLicenseMatch.reason
+      : hasGroundedAttachment
+        ? groundedLeadMatch.qualificationNotes
+        : groundedLeadMatch?.status === "weak_match"
+          ? groundedLeadMatch.reason
+          : verification.reasons.join("; ");
+  const derivedContactStatus: "identified" | "unknown" = verification.status === "verified" ? "identified" : "unknown";
+  const contactAttachmentReason =
+    hasPermitLicenseAttachment
+      ? "dob_license_info"
+      : hasGroundedAttachment
+      ? "historical_verified_lead"
+      : permitLicenseMatch?.status === "weak_match" || permitLicenseMatch?.status === "identity_only"
+        ? "dob_license_info_checked"
+      : groundedLeadMatch?.status === "weak_match"
+        ? "historical_verified_lead_rejected"
+        : contactAttached
+          ? "source_payload"
+          : "none";
+  const contactAttachmentStatus = hasPermitLicenseAttachment
+    ? "grounded_attached"
+    : hasGroundedAttachment
+      ? "grounded_attached"
+    : permitLicenseMatch?.status === "weak_match"
+      ? "insufficient_grounding"
+      : permitLicenseMatch?.status === "identity_only"
+        ? "identity_only"
+        : groundedLeadMatch?.status === "weak_match"
+          ? "insufficient_grounding"
+          : !contactAttached && hasSourceIdentity && !hasSourceChannels
+            ? "identity_only"
+            : !contactAttached
+              ? "missing"
+              : verification.status === "verified"
+                ? "grounded_attached"
+                : "insufficient_grounding";
+
+  return {
+    contactAttached,
+    verification,
+    explainability: mergeOpportunityQualification(explainability, {
+      qualificationStatus,
+      qualificationReasonCode,
+      nextRecommendedAction: verification.status === "verified" ? "dispatch_to_lead_queue" : "route_to_sdr",
+      sourceType: String(event.eventType || ""),
+      scannerEventId: sourceEventId,
+      contactName: verification.name,
+      phone: verification.phone,
+      email: verification.email,
+      verificationStatus: verification.status,
+      qualificationSource:
+        hasPermitLicenseAttachment
+          ? "official_dob_license_info"
+          : hasGroundedAttachment
+          ? groundedLeadMatch.qualificationSource
+          : permitLicenseMatch?.status === "weak_match" || permitLicenseMatch?.status === "identity_only"
+            ? "official_dob_license_info"
+          : groundedLeadMatch?.status === "weak_match"
+            ? "historical_verified_lead"
+            : "source_payload_contact",
+      qualificationNotes
+    }),
+    contactStatus: derivedContactStatus,
+    contactAttachmentReason,
+    contactAttachmentStatus,
+    contactAttachmentProvenance: hasPermitLicenseAttachment
+      ? permitLicenseMatch.provenance
+      : hasGroundedAttachment
+        ? groundedLeadMatch.provenance
+        : permitLicenseMatch?.provenance || verification.provenance,
+    contactGroundedReason: permitLicenseMatch?.reason || groundedLeadMatch?.reason || null,
+    matchedLeadId: hasGroundedAttachment ? groundedLeadMatch.matchedLeadId : null,
+    missingContactData:
+      groundedLeadMatch?.status === "weak_match" || permitLicenseMatch?.status === "weak_match" || permitLicenseMatch?.status === "identity_only"
+        ? false
+        : !contactAttached && !hasSourceIdentity,
+    sourceIdentityOnly: permitLicenseMatch?.status === "identity_only" || (!contactAttached && hasSourceIdentity && !hasSourceChannels)
+  };
 }
 
 function mapClusterType(eventCategory: string) {
@@ -641,7 +935,16 @@ async function upsertOpportunityFromEvent({
   classification: { opportunityType: string; serviceLine: string };
   clusterId: string | null;
   vertical: FranchiseVertical;
-}) {
+}): Promise<{
+  opportunityId: string;
+  multiSignal: boolean;
+  writeMode: "created" | "updated";
+  contactAttached: boolean;
+  contactStatus: "identified" | "unknown";
+  verificationStatus: string | null;
+  contactAttachmentReason: string | null;
+  sourceIdentityOnly: boolean;
+}> {
   const locationPoint = toPoint(event.latitude, event.longitude);
 
   const primaryServiceLine = classification.serviceLine || event.serviceLineCandidates?.[0] || event.serviceLine || "general";
@@ -730,6 +1033,13 @@ async function upsertOpportunityFromEvent({
     multiSignal: false
   };
 
+  let writeMode: "created" | "updated" = "created";
+  let contactAttached = false;
+  let contactStatus: "identified" | "unknown" = "unknown";
+  let verificationStatus: string | null = null;
+  let contactAttachmentReason: string | null = null;
+  let sourceIdentityOnly = false;
+
   if (candidate?.id) {
     const merged = mergeOpportunityScores({
       existing: candidate,
@@ -755,6 +1065,16 @@ async function upsertOpportunityFromEvent({
       multiSignal: merged.multiSignal
     };
 
+    const contactState = await deriveSourceContactState({
+      supabase,
+      tenantId,
+      event,
+      serviceLine: primaryServiceLine,
+      scoring: finalScores,
+      explainability: finalScores.explainability,
+      sourceEventId
+    });
+
     const { data: updated, error } = await supabase
       .from("v2_opportunities")
       .update({
@@ -771,7 +1091,17 @@ async function upsertOpportunityFromEvent({
         location_text: event.locationText || null,
         location: locationPoint ? `SRID=4326;${locationPoint}` : null,
         postal_code: postalCode || null,
-        explainability_json: finalScores.explainability
+        contact_status: contactState.contactStatus,
+        explainability_json: {
+          ...contactState.explainability,
+          contact_attached: contactState.contactAttached,
+          contact_attachment_reason: contactState.contactAttachmentReason,
+          contact_attachment_status: contactState.contactAttachmentStatus,
+          contact_attachment_provenance: contactState.contactAttachmentProvenance,
+          contact_grounded_reason: contactState.contactGroundedReason,
+          matched_verified_lead_id: contactState.matchedLeadId,
+          missing_contact_data: contactState.missingContactData
+        }
       })
       .eq("id", String(candidate.id))
       .select("id")
@@ -779,7 +1109,23 @@ async function upsertOpportunityFromEvent({
 
     if (error || !updated?.id) throw new Error(error?.message || "Failed to update v2 opportunity");
     opportunityId = String(updated.id);
+    writeMode = "updated";
+    contactAttached = contactState.contactAttached;
+    contactStatus = contactState.contactStatus;
+    verificationStatus = contactState.verification.status;
+    contactAttachmentReason = contactState.contactAttachmentReason;
+    sourceIdentityOnly = contactState.sourceIdentityOnly;
   } else {
+    const contactState = await deriveSourceContactState({
+      supabase,
+      tenantId,
+      event,
+      serviceLine: primaryServiceLine,
+      scoring: { ...scoring, multiSignal: false },
+      explainability: baseExplainability,
+      sourceEventId
+    });
+
     const { data: inserted, error } = await supabase
       .from("v2_opportunities")
       .insert({
@@ -799,16 +1145,36 @@ async function upsertOpportunityFromEvent({
         location_text: event.locationText || null,
         location: locationPoint ? `SRID=4326;${locationPoint}` : null,
         postal_code: postalCode || null,
-        contact_status: "identified",
+        contact_status: contactState.contactStatus,
         routing_status: "pending",
         lifecycle_status: "new",
-        explainability_json: baseExplainability
+        explainability_json: {
+          ...contactState.explainability,
+          contact_attached: contactState.contactAttached,
+          contact_attachment_reason: contactState.contactAttachmentReason,
+          contact_attachment_status: contactState.contactAttachmentStatus,
+          contact_attachment_provenance: contactState.contactAttachmentProvenance,
+          contact_grounded_reason: contactState.contactGroundedReason,
+          matched_verified_lead_id: contactState.matchedLeadId,
+          missing_contact_data: contactState.missingContactData,
+          normalized_address_key: normalizeAddressKey({
+            address: event.addressText || event.locationText || null,
+            city: event.city || null,
+            state: event.state || null,
+            postalCode: postalCode || null
+          })
+        }
       })
       .select("id")
       .single();
 
     if (error || !inserted?.id) throw new Error(error?.message || "Failed to create v2 opportunity");
     opportunityId = String(inserted.id);
+    contactAttached = contactState.contactAttached;
+    contactStatus = contactState.contactStatus;
+    verificationStatus = contactState.verification.status;
+    contactAttachmentReason = contactState.contactAttachmentReason;
+    sourceIdentityOnly = contactState.sourceIdentityOnly;
   }
 
   await supabase.from("v2_opportunity_signals").insert([
@@ -868,9 +1234,15 @@ async function upsertOpportunityFromEvent({
 
   return {
     opportunityId,
-    scoring: finalScores,
-    multiSignal: Boolean((finalScores.explainability as Record<string, unknown>).multi_signal)
+    multiSignal: Boolean((finalScores.explainability as Record<string, unknown>).multi_signal),
+    writeMode,
+    contactAttached,
+    contactStatus,
+    verificationStatus,
+    contactAttachmentReason,
+    sourceIdentityOnly
   };
+
 }
 
 export const connectorRunnerInternals = {
@@ -1006,10 +1378,27 @@ export async function runConnectorForSource({
   let totalFreshness = 0;
   let totalReliability = 0;
   let recordsSeen = 0;
+  const trace = {
+    raw_records_fetched: 0,
+    normalized_records: 0,
+    validation_failure_counts: {} as Record<string, number>,
+    source_events_written: 0,
+    suppressed_before_opportunity: 0,
+    suppression_reason_counts: {} as Record<string, number>,
+    opportunities_created: 0,
+    opportunities_updated: 0,
+    contact_attached: 0,
+    contact_missing: 0,
+    contact_attached_from_existing_lead: 0,
+    contact_found_but_unverified: 0,
+    contact_identity_only: 0
+  };
 
   try {
     const pulled = await connector.pull(pullInput);
+    trace.raw_records_fetched = pulled.length;
     const normalizedEvents = await connector.normalize(pulled, pullInput);
+    trace.normalized_records = normalizedEvents.length;
     const vertical = await resolveTenantVertical(supabase, tenantId);
 
     for (let index = 0; index < normalizedEvents.length; index += 1) {
@@ -1020,6 +1409,7 @@ export async function runConnectorForSource({
       const validation = validateNormalizedEvent(event);
       if (!validation.valid) {
         invalidCount += 1;
+        for (const failure of validation.failures) incrementCount(trace.validation_failure_counts, failure);
         continue;
       }
 
@@ -1073,6 +1463,7 @@ export async function runConnectorForSource({
       if (sourceEventError || !sourceEvent?.id) {
         throw new Error(sourceEventError?.message || "Failed writing source event");
       }
+      trace.source_events_written += 1;
 
       const suppression = shouldSuppressIncidentOpportunity({
         event,
@@ -1082,6 +1473,8 @@ export async function runConnectorForSource({
       });
       if (suppression.suppress) {
         invalidCount += 1;
+        trace.suppressed_before_opportunity += 1;
+        incrementCount(trace.suppression_reason_counts, suppression.reason || "suppressed");
         continue;
       }
 
@@ -1103,6 +1496,15 @@ export async function runConnectorForSource({
 
       if (opportunity.multiSignal) multiSignalCount += 1;
       createdCount += 1;
+      if (opportunity.writeMode === "created") trace.opportunities_created += 1;
+      else trace.opportunities_updated += 1;
+      if (opportunity.contactAttached) trace.contact_attached += 1;
+      else trace.contact_missing += 1;
+      if (opportunity.contactAttachmentReason === "historical_verified_lead") {
+        trace.contact_attached_from_existing_lead += 1;
+      }
+      if (opportunity.verificationStatus === "review") trace.contact_found_but_unverified += 1;
+      if ((opportunity as { sourceIdentityOnly?: boolean }).sourceIdentityOnly) trace.contact_identity_only += 1;
 
       if ((index + 1) % 5 === 0) {
         await touchRunHeartbeat({ supabase, runId });
@@ -1131,6 +1533,7 @@ export async function runConnectorForSource({
           avg_source_reliability: recordsSeen > 0 ? Math.round(totalReliability / recordsSeen) : 0,
           invalid_events: invalidCount,
           multi_signal_opportunities: multiSignalCount,
+          ...trace,
           replay_result_status: baseStatus,
           idempotency_key: normalizedIdempotencyKey
         }
@@ -1152,6 +1555,7 @@ export async function runConnectorForSource({
         records_created: createdCount,
         invalid_events: invalidCount,
         multi_signal_opportunities: multiSignalCount,
+        ...trace,
         run_mode: normalizedRunMode,
         idempotency_key: normalizedIdempotencyKey
       }

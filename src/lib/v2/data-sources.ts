@@ -358,7 +358,7 @@ export async function getDataSourceSummaries({
       .limit(500),
     supabase
       .from("v2_source_events")
-      .select("id,source_id,compliance_status,data_freshness_score,source_reliability_score,ingested_at")
+      .select("id,source_id,compliance_status,normalized_payload,source_reliability_score,ingested_at")
       .eq("tenant_id", tenantId)
       .order("ingested_at", { ascending: false })
       .limit(500)
@@ -384,7 +384,7 @@ export async function getDataSourceSummaries({
     const latestRun = latestRuns.get(sourceId) || null;
     const latestEvent = latestEvents.get(sourceId) || null;
     const termsStatus = asText(latestEvent?.compliance_status || sourceRow.terms_status || compliancePolicy?.termsStatus || "pending_review");
-    const complianceStatus = asText(sourceRow.compliance_status || termsStatus || compliancePolicy?.termsStatus || "pending_review");
+    const complianceStatus = asText(latestEvent?.compliance_status || sourceRow.compliance_status || termsStatus || compliancePolicy?.termsStatus || "pending_review");
     const runtimeMode = deriveRuntimeMode({
       sourceRow: {
         ...sourceRow,
@@ -421,7 +421,7 @@ export async function getDataSourceSummaries({
       recordsCreated: latestRunSummary.recordsCreated,
       latestEventAt: asText(latestEvent?.ingested_at) || null,
       latestEventComplianceStatus: asText(latestEvent?.compliance_status) || null,
-      latestEventFreshnessScore: latestEvent ? asNumber(latestEvent.data_freshness_score, 0) : null,
+      latestEventFreshnessScore: latestEvent ? asNumber(parseRecord(latestEvent.normalized_payload).data_freshness_score, 0) : null,
       latestEventReliabilityScore: latestEvent ? asNumber(latestEvent.source_reliability_score, 0) : null,
       freshnessSlaMinutes: Math.max(30, asNumber(sourceRow.freshness_sla_minutes, 360)),
       healthStatus: normalizeHealthStatus(sourceRow.health_status),
@@ -667,15 +667,18 @@ export async function runDataSourceConnector({
     .update({
       health_status: run.status === "failed" ? "failed" : run.status === "partial" || run.status === "stale" ? "degraded" : "ok",
       health_detail: run.errorSummary || (run.status === "replayed" ? "Replay run completed" : "Connector run completed"),
+      compliance_status: sourceSummary.complianceStatus,
+      readiness_status: run.status === "failed" ? "fail" : run.status === "partial" || run.status === "stale" ? "warn" : "pass",
       last_health_checked_at: new Date().toISOString(),
       freshness_timestamp: sourceSummary.latestEventAt || sourceSummary.freshnessTimestamp,
       last_health_latency_ms: Number.isFinite(health.latencyMs) ? Number(health.latencyMs) : null
     })
     .eq("tenant_id", tenantId)
     .eq("id", sourceId);
+  const updatedSourceSummary = await getDataSourceSummary({ supabase, tenantId, sourceId });
   return {
-    sourceSummary,
-    health: summarizeConnectorHealth({ sourceSummary, health, connectorKey }),
+    sourceSummary: updatedSourceSummary,
+    health: summarizeConnectorHealth({ sourceSummary: updatedSourceSummary, health, connectorKey }),
     run
   };
 }

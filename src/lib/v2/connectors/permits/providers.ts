@@ -7,6 +7,10 @@ export type PermitsProvider = {
   termsStatus(input: ConnectorPullInput): "approved" | "restricted" | "pending_review" | "blocked";
 };
 
+const NYC_DOB_NOW_APPROVED_PERMITS_BASE = "https://data.cityofnewyork.us/resource/rbx6-tga4.json";
+const NYC_DOB_NOW_APPROVED_PERMITS_QUERY =
+  "$select=job_filing_number,work_permit,house_no,street_name,permittee_s_license_type,applicant_license,applicant_first_name,applicant_last_name,applicant_business_name,applicant_business_address,issued_date,job_description,owner_business_name,owner_name,owner_street_address,owner_city,owner_state,owner_zip_code,permit_status,zip_code,latitude,longitude&$order=issued_date%20DESC&$limit=200";
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -16,6 +20,23 @@ function endpointFromInput(input: ConnectorPullInput) {
     String(input.config.provider_url || process.env.PERMITS_PROVIDER_URL || "").trim() ||
     ""
   );
+}
+
+function hasExplicitSampleRecords(input: ConnectorPullInput) {
+  return Array.isArray(input.config.sample_records) && input.config.sample_records.length > 0;
+}
+
+function looksLikeNycDobNowApprovedPermits(endpoint: string) {
+  return endpoint.includes("/resource/rbx6-tga4.json");
+}
+
+function buildProviderUrl(input: ConnectorPullInput) {
+  const endpoint = endpointFromInput(input);
+  if (!endpoint) return "";
+  if (looksLikeNycDobNowApprovedPermits(endpoint) && !endpoint.includes("$select=")) {
+    return `${NYC_DOB_NOW_APPROVED_PERMITS_BASE}?${NYC_DOB_NOW_APPROVED_PERMITS_QUERY}`;
+  }
+  return endpoint;
 }
 
 function rateLimitPerMinute(input: ConnectorPullInput) {
@@ -85,7 +106,7 @@ const remotePermitsProvider: PermitsProvider = {
   key: "permits.remote",
 
   async fetchRecords(input: ConnectorPullInput) {
-    const endpoint = endpointFromInput(input);
+    const endpoint = buildProviderUrl(input);
     if (!endpoint) return [];
 
     const rpm = rateLimitPerMinute(input);
@@ -98,8 +119,11 @@ const remotePermitsProvider: PermitsProvider = {
   },
 
   sourceProvenance(input: ConnectorPullInput) {
-    const endpoint = endpointFromInput(input);
-    return endpoint || "remote_permits_provider";
+    return (
+      String(input.config.source_provenance || process.env.PERMITS_PROVIDER_SOURCE_PROVENANCE || "").trim() ||
+      buildProviderUrl(input) ||
+      "remote_permits_provider"
+    );
   },
 
   termsStatus(input: ConnectorPullInput) {
@@ -136,7 +160,29 @@ const staticPermitsProvider: PermitsProvider = {
   }
 };
 
+const missingPermitsProvider: PermitsProvider = {
+  key: "permits.missing",
+
+  async fetchRecords() {
+    return [];
+  },
+
+  sourceProvenance(input: ConnectorPullInput) {
+    return String(input.config.source_provenance || "missing_permits_provider");
+  },
+
+  termsStatus(input: ConnectorPullInput) {
+    const status = String(input.config.terms_status || process.env.PERMITS_TERMS_STATUS || "pending_review").toLowerCase();
+    if (status === "approved") return "approved";
+    if (status === "blocked") return "blocked";
+    if (status === "restricted") return "restricted";
+    return "pending_review";
+  }
+};
+
 export function resolvePermitsProvider(input: ConnectorPullInput): PermitsProvider {
   const endpoint = endpointFromInput(input);
-  return endpoint ? remotePermitsProvider : staticPermitsProvider;
+  if (endpoint) return remotePermitsProvider;
+  if (hasExplicitSampleRecords(input)) return staticPermitsProvider;
+  return missingPermitsProvider;
 }

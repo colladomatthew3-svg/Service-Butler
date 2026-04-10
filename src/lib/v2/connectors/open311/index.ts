@@ -7,6 +7,8 @@ import type {
 } from "@/lib/v2/connectors/types";
 
 const CONNECTOR_VERSION = "v2.1.0";
+const DEFAULT_OPEN311_ENDPOINT =
+  "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$select=unique_key,created_date,complaint_type,descriptor,incident_address,incident_zip,borough,status,resolution_description&$order=created_date%20DESC&$limit=100";
 
 function toIso(value: unknown) {
   const raw = String(value || "").trim();
@@ -73,7 +75,7 @@ export const open311Connector: ConnectorAdapter = {
     }
 
     const endpoint = String(
-      input.config.endpoint || process.env.OPEN311_ENDPOINT || "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=100"
+      input.config.endpoint || process.env.OPEN311_ENDPOINT || DEFAULT_OPEN311_ENDPOINT
     ).trim();
     if (!endpoint) return [];
 
@@ -94,8 +96,8 @@ export const open311Connector: ConnectorAdapter = {
     return records.map((record, index): ConnectorNormalizedEvent => {
       const requestText = `${record.service_name || record.complaint_type || ""} ${record.descriptor || ""} ${record.description || ""} ${record.status_notes || ""}`;
       const classification = classifyRequest(requestText);
-      const occurredAt = toIso(record.requested_datetime || record.updated_datetime || record.created_at);
-      const title = String(record.title || record.service_name || record.complaint_type || `Open311 request ${index + 1}`);
+      const occurredAt = toIso(record.requested_datetime || record.updated_datetime || record.created_at || record.created_date);
+      const title = String(record.title || record.service_name || record.complaint_type || record.descriptor || `Open311 request ${index + 1}`);
       const city = String(record.city || record.borough || "");
       const state = String(record.state || "NY");
       const postalCode = String(record.postal_code || record.zip || record.incident_zip || "");
@@ -106,7 +108,7 @@ export const open311Connector: ConnectorAdapter = {
 
       return {
         occurredAt,
-        dedupeKey: `${record.service_request_id || record.id || title}|${occurredAt}`,
+        dedupeKey: `${record.service_request_id || record.unique_key || record.id || title}|${occurredAt}`,
         eventType: "open311_service_request",
         eventCategory: classification.category,
         title,
@@ -133,6 +135,7 @@ export const open311Connector: ConnectorAdapter = {
         rawPayload: record,
         normalizedPayload: {
           service_request_id: record.service_request_id || record.id || null,
+          unique_key: record.unique_key || null,
           service_name: record.service_name || record.complaint_type || null,
           descriptor: record.descriptor || null,
           contact_name: contactName || null,
@@ -175,7 +178,7 @@ export const open311Connector: ConnectorAdapter = {
     if (hasSample) return { ok: false, detail: "sample_records configured; source is simulated until a live Open311 endpoint is configured" };
 
     const endpoint = String(
-      input.config.endpoint || process.env.OPEN311_ENDPOINT || "https://data.cityofnewyork.us/resource/erm2-nwe9.json?$limit=1"
+      input.config.endpoint || process.env.OPEN311_ENDPOINT || DEFAULT_OPEN311_ENDPOINT
     ).trim();
     if (!endpoint) return { ok: false, detail: "OPEN311 endpoint missing" };
     return { ok: true, detail: "Open311 endpoint configured" };

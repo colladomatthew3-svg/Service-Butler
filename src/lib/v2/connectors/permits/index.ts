@@ -57,7 +57,7 @@ function categoryToServiceLines(category: PermitCategory): string[] {
 }
 
 function inferDemandTiming(record: Record<string, unknown>, category: PermitCategory) {
-  const text = `${record.description || ""} ${record.scope || ""}`.toLowerCase();
+  const text = `${record.description || ""} ${record.scope || ""} ${record.job_description || ""} ${record.work_permit || ""}`.toLowerCase();
   const immediateKeywords = ["emergency", "damage", "leak", "burst", "fire", "flood", "mitigation", "unsafe"];
   const immediate = immediateKeywords.some((keyword) => text.includes(keyword));
 
@@ -120,14 +120,31 @@ export const permitsConnector: ConnectorAdapter = {
 
     return records.map((record, index): ConnectorNormalizedEvent => {
       const title = String(record.title || record.permit_type || `Permit event ${index + 1}`);
-      const occurredAt = toIso(record.occurred_at || record.issued_at || record.created_at);
+      const occurredAt = toIso(record.occurred_at || record.issued_at || record.issued_date || record.created_at);
       const freshnessScore = computeFreshnessScore(occurredAt);
       const category = classifyPermitCategory(record);
       const serviceLineCandidates = categoryToServiceLines(category);
       const demand = inferDemandTiming(record, category);
       const primaryServiceLine = serviceLineCandidates[0] || "general";
+      const applicantName = [record.applicant_first_name, record.applicant_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ");
+      const address = String(
+        record.address ||
+          record.location ||
+          [record.house_no, record.house__, record.street_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") ||
+          ""
+      ).trim();
       const contactName = String(
-        record.owner_name || record.applicant_name || record.contractor_name || record.contact_name || record.business_name || ""
+        record.owner_name ||
+          record.owner_s_first_name ||
+          applicantName ||
+          record.applicant_name ||
+          record.contractor_name ||
+          record.contact_name ||
+          record.business_name ||
+          record.owner_business_name ||
+          record.owner_s_business_name ||
+          record.applicant_business_name ||
+          ""
       ).trim();
       const contactPhone = String(
         record.owner_phone || record.applicant_phone || record.contractor_phone || record.contact_phone || record.phone || ""
@@ -138,18 +155,18 @@ export const permitsConnector: ConnectorAdapter = {
 
       return {
         occurredAt,
-        dedupeKey: `${record.id || record.permit_number || title}|${occurredAt}`,
+        dedupeKey: `${record.id || record.permit_number || record.job_filing_number || record.work_permit || title}|${occurredAt}`,
         eventType: String(record.event_type || "permit_signal"),
         eventCategory: "permit",
-        title,
-        description: String(record.description || record.scope || ""),
-        locationText: String(record.location || record.address || record.city || ""),
-        addressText: String(record.address || record.location || ""),
-        city: String(record.city || ""),
-        state: String(record.state || ""),
-        postalCode: String(record.postal_code || record.zip || ""),
-        latitude: record.latitude != null ? toNumber(record.latitude, NaN) : null,
-        longitude: record.longitude != null ? toNumber(record.longitude, NaN) : null,
+        title: String(record.work_permit || record.permit_type || record.job_type || title),
+        description: String(record.description || record.job_description || record.scope || ""),
+        locationText: address || String(record.city || record.owner_city || ""),
+        addressText: address,
+        city: String(record.city || record.owner_city || ""),
+        state: String(record.state || record.owner_state || ""),
+        postalCode: String(record.postal_code || record.zip_code || record.zip || record.owner_zip_code || ""),
+        latitude: record.latitude != null ? toNumber(record.latitude, NaN) : record.gis_latitude != null ? toNumber(record.gis_latitude, NaN) : null,
+        longitude: record.longitude != null ? toNumber(record.longitude, NaN) : record.gis_longitude != null ? toNumber(record.gis_longitude, NaN) : null,
         serviceLine: primaryServiceLine,
         serviceLineCandidates,
         severity: toNumber(record.severity, demand.severityHint),
@@ -164,12 +181,26 @@ export const permitsConnector: ConnectorAdapter = {
         catastropheSignal: toNumber(record.catastrophe_signal, category === "remediation_repair" ? 40 : 12),
         rawPayload: record,
         normalizedPayload: {
-          permit_id: record.id || record.permit_number || null,
-          permit_type: record.permit_type || null,
-          work_class: record.work_class || record.scope || null,
+          permit_id: record.id || record.permit_number || record.job_filing_number || null,
+          permit_type: record.permit_type || record.work_permit || record.job_type || null,
+          work_class: record.work_class || record.work_type || record.scope || record.permittee_s_license_type || null,
+          applicant_license: record.applicant_license || null,
+          applicant_license_type: record.permittee_s_license_type || null,
+          applicant_business_address: record.applicant_business_address || null,
           contact_name: contactName || null,
           contact_phone: contactPhone || null,
           contact_email: contactEmail || null,
+          owner_business_name: record.owner_business_name || record.owner_s_business_name || null,
+          owner_name: record.owner_name || [record.owner_s_first_name, record.owner_s_last_name].map((value) => String(value || "").trim()).filter(Boolean).join(" ") || null,
+          owner_phone: record.owner_phone || record.owner_s_phone__ || null,
+          applicant_name: applicantName || null,
+          applicant_business_name: record.applicant_business_name || null,
+          applicant_phone: record.applicant_phone || null,
+          permit_status: record.permit_status || null,
+          native_contact_identity_present: Boolean(
+            contactName || record.owner_business_name || record.owner_s_business_name || record.applicant_business_name
+          ),
+          native_contact_channel_present: Boolean(contactPhone || contactEmail),
           permit_category: category,
           demand_timing: demand.demandTiming,
           service_line_candidates: serviceLineCandidates,
@@ -216,10 +247,13 @@ export const permitsConnector: ConnectorAdapter = {
 
   async healthcheck(input: ConnectorPullInput): Promise<ConnectorHealth> {
     const provider = resolvePermitsProvider(input);
-    if (provider.key === "permits.static") {
+    if (provider.key === "permits.static" || provider.key === "permits.missing") {
       return {
         ok: false,
-        detail: "Permits source is using static/sample fallback; configure a live permits provider before treating it as production-ready"
+        detail:
+          provider.key === "permits.static"
+            ? "Permits source is using static/sample fallback; configure a live permits provider before treating it as production-ready"
+            : "Permits source has no live provider configured; set provider_url before treating it as production-ready"
       };
     }
     const start = Date.now();

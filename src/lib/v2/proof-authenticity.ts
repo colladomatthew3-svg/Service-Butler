@@ -53,20 +53,24 @@ export function classifyProofAuthenticity(input: ProofAuthenticityInput): ProofA
   ].filter(Boolean);
   const sourceType = asText(input.sourceType || normalized.source_type).toLowerCase();
   const sourceProvenance = asText(input.sourceProvenance || normalized.source_provenance);
+  const connectorName = asText(normalized.connector_name).toLowerCase();
   const isPublicWebPage =
     /^https?:\/\//i.test(sourceProvenance) &&
     !/localhost|127\.0\.0\.1|example\.com|example\.org|example\.net/i.test(sourceProvenance) &&
     (sourceType.includes("incident") || sourceType.includes("social") || sourceType.includes("review") || sourceType.includes("distress"));
+  const isKnownStructuredProvider = LIVE_PROVIDER_KEYS.has(connectorKey) || matchesAny(LIVE_PROVIDER_PATTERNS, values);
+  const isExplicitDerived = matchesAny(LIVE_DERIVED_PATTERNS, values) || connectorKey.includes("forecast");
 
   if (connectorInputMode === "live_provider") return "live_provider";
   if (connectorInputMode === "synthetic" || connectorInputMode === "synthetic_fallback") return "synthetic";
 
   if (matchesAny(SYNTHETIC_PATTERNS, values)) return "synthetic";
-  if (isPublicWebPage) return "live_provider";
-  if (LIVE_PROVIDER_KEYS.has(connectorKey)) return "live_provider";
-  if (matchesAny(LIVE_PROVIDER_PATTERNS, values)) return "live_provider";
-  if (matchesAny(LIVE_DERIVED_PATTERNS, values)) return "live_derived";
-  if (connectorKey.includes("forecast") || connectorKey.includes("scanner_signal")) return "live_derived";
+  if (isKnownStructuredProvider) return "live_provider";
+  if (isPublicWebPage) {
+    if (connectorName.includes("firecrawl") || connectorKey.includes("firecrawl")) return "live_derived";
+    return "unknown";
+  }
+  if (isExplicitDerived) return "live_derived";
 
   return "unknown";
 }

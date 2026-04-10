@@ -1,7 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000";
 const startServer = process.env.PLAYWRIGHT_START_SERVER === "true";
+const defaultPort = startServer ? "3004" : "3000";
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${defaultPort}`;
 
 export default defineConfig({
   testDir: "./tests",
@@ -17,7 +18,7 @@ export default defineConfig({
   webServer: startServer
     ? {
         command:
-          "DEMO_MODE=true ALLOW_NON_DEV_DEMO_MODE=true npm run build && DEMO_MODE=true ALLOW_NON_DEV_DEMO_MODE=true npm run start -- --hostname 127.0.0.1 --port 3000",
+          `PORT=${defaultPort} DEMO_MODE=true ALLOW_NON_DEV_DEMO_MODE=true npm run dev`,
         url: baseURL,
         reuseExistingServer: true,
         timeout: 120000

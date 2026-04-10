@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, Calendar } from "lucide-react";
 import { Footer } from "@/components/brand/Footer";
 import { TopNav } from "@/components/brand/TopNav";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { getAllPosts } from "@/lib/blog";
 
 export const metadata: Metadata = {
   title: "Blog",
-  description: "Service Butler articles on AI, lead response, scheduling, and operations for home service businesses.",
+  description: "Insights, strategies, and data-driven guides for restoration and home service professionals.",
   alternates: {
     canonical: "/blog"
   }
@@ -19,35 +21,69 @@ export default async function BlogPage() {
   return (
     <>
       <TopNav />
-      <main className="page-section pt-12">
-        <div className="container">
-          <div className="max-w-3xl">
-            <p className="eyebrow">Blog</p>
-            <h1 className="section-title mt-5">Advice for home service operators building a more responsive business</h1>
-            <p className="text-body-lg mt-4 text-semantic-muted">
-              Practical guidance on lead handling, scheduling, and using AI without making your customer experience feel robotic.
+      <main>
+        <section className="page-section py-20 md:py-24 text-center">
+          <div className="container">
+            <h1 className="title-hero mx-auto max-w-4xl text-semantic-text">Blog & Resources</h1>
+            <p className="text-body-lg mx-auto mt-4 max-w-3xl text-semantic-muted">
+              Insights, strategies, and data-driven guides for restoration and home service professionals.
             </p>
           </div>
+        </section>
 
-          <div className="mt-12 grid gap-5 lg:grid-cols-3">
+        <section className="page-section pt-0 pb-20">
+          <div className="container grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {posts.map((post) => (
-              <article key={post.slug} className="section-shell flex h-full flex-col p-6">
-                <div className="flex items-center justify-between gap-3">
-                  <Badge variant="brand">{post.category}</Badge>
-                  <span className="text-sm text-semantic-muted">{post.readTime}</span>
+              <Card key={post.slug} className="group rounded-2xl border-semantic-border p-6 transition-colors hover:border-brand-500/35">
+                <div className="flex items-center gap-3">
+                  <Badge variant="default" className="bg-semantic-surface2 text-semantic-text">
+                    {post.category}
+                  </Badge>
+                  <span className="text-xs text-semantic-muted">{post.readTime}</span>
                 </div>
-                <h2 className="title-card mt-6 text-semantic-text">{post.title}</h2>
-                <p className="mt-4 flex-1 text-sm leading-7 text-semantic-muted">{post.excerpt}</p>
-                <div className="mt-8 flex items-center justify-between gap-3 border-t border-semantic-border pt-4 text-sm text-semantic-muted">
-                  <span>{formatDate(post.publishedAt)}</span>
-                  <Link href={`/blog/${post.slug}`} className="font-semibold text-brand-700">
-                    Read article
+                <h2 className="mt-5 text-xl font-semibold leading-snug text-semantic-text transition-colors group-hover:text-brand-700">
+                  {post.title}
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-semantic-muted">{post.excerpt}</p>
+                <div className="mt-5 flex items-center justify-between pt-2">
+                  <div className="flex items-center gap-1.5 text-xs text-semantic-muted">
+                    <Calendar className="h-3 w-3" />
+                    {formatDate(post.publishedAt)}
+                  </div>
+                  <Link
+                    href={`/blog/${post.slug}`}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 transition-all group-hover:gap-2"
+                  >
+                    Read more
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
-              </article>
+              </Card>
             ))}
           </div>
-        </div>
+        </section>
+
+        <section className="border-t border-semantic-border bg-semantic-surface2/70">
+          <div className="container py-16 text-center">
+            <h2 className="font-heading text-2xl font-bold text-semantic-text">Stay ahead of the curve</h2>
+            <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-semantic-muted">
+              Get weekly insights on restoration industry trends, lead generation tactics, and platform updates.
+            </p>
+            <div className="mx-auto mt-6 flex max-w-sm items-center gap-2">
+              <input
+                type="email"
+                placeholder="you@company.com"
+                className="h-10 flex-1 rounded-md border border-semantic-border bg-white px-4 text-sm text-semantic-text"
+              />
+              <Link
+                href="/login"
+                className="inline-flex h-10 items-center justify-center rounded-md bg-brand-700 px-4 text-sm font-medium text-white transition hover:bg-brand-700/90"
+              >
+                Subscribe
+              </Link>
+            </div>
+          </div>
+        </section>
       </main>
       <Footer />
     </>
@@ -56,7 +92,7 @@ export default async function BlogPage() {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en-US", {
-    month: "long",
+    month: "short",
     day: "numeric",
     year: "numeric"
   }).format(new Date(value));

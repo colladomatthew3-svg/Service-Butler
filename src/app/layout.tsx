@@ -18,10 +18,10 @@ const manrope = DM_Sans({
 export const metadata: Metadata = {
   metadataBase: new URL("https://servicebutler.ai"),
   title: {
-    default: "Service Butler | Operator Command Center",
+    default: "Service Butler | Opportunity Intelligence for Restoration Teams",
     template: "%s | Service Butler"
   },
-  description: "Premium operator command center for home service businesses, built for lead intake, dispatch, scheduling, and booked-job proof.",
+  description: "AI-powered opportunity intelligence for restoration and home service companies, from live signal detection to routed leads and booked jobs.",
   keywords: [
     "home service software",
     "contractor CRM",
@@ -35,8 +35,8 @@ export const metadata: Metadata = {
     canonical: "/"
   },
   openGraph: {
-    title: "Service Butler | Operator Command Center",
-    description: "Run a tighter home service business with faster lead response, cleaner scheduling, and booked-job proof.",
+    title: "Service Butler | Opportunity Intelligence for Restoration Teams",
+    description: "Find restoration opportunities sooner, route them faster, and convert more of them into booked work.",
     url: "/",
     siteName: "Service Butler",
     locale: "en_US",
@@ -52,8 +52,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Service Butler | Operator Command Center",
-    description: "Lead intake, dispatch, scheduling, and booked-job proof for premium home service teams.",
+    title: "Service Butler | Opportunity Intelligence for Restoration Teams",
+    description: "Find restoration opportunities sooner, route them faster, and convert more of them into booked work.",
     images: ["/brand/servicebutler_logo.svg"]
   },
   robots: {

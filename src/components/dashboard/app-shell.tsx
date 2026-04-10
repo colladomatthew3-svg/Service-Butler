@@ -19,7 +19,8 @@ import {
   MessageSquare,
   CreditCard,
   ChevronRight,
-  CircleDot
+  CircleDot,
+  ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useState } from "react";
@@ -44,6 +45,7 @@ const navSections: NavSection[] = [
     label: "Operator",
     items: [
       { href: "/dashboard", label: "Command Center", icon: LayoutGrid, exact: true },
+      { href: "/dashboard/dispatchable-leads", label: "Dispatchable Leads", icon: ShieldCheck },
       { href: "/dashboard/opportunities", label: "Opportunities", icon: Target },
       { href: "/dashboard/scanner", label: "Scanner", icon: Radar },
       { href: "/dashboard/inbox", label: "Inbox", icon: Inbox }

@@ -67,28 +67,27 @@ export default function PricingPage() {
     <>
       <TopNav />
       <main>
-        <section className="page-section py-16">
-          <div className="container text-center">
-            <p className="eyebrow justify-center">Pricing</p>
-            <h1 className="title-hero mx-auto mt-6 max-w-4xl text-semantic-text">Simple, transparent pricing.</h1>
-            <p className="text-body-lg mx-auto mt-4 max-w-3xl text-semantic-muted">
+        <section className="page-section py-20 md:py-24 text-center">
+          <div className="container">
+            <h1 className="title-hero mx-auto max-w-4xl text-semantic-text">Simple, transparent pricing</h1>
+            <p className="text-body-lg mx-auto mt-4 max-w-2xl text-semantic-muted">
               Start free for 14 days. No credit card required. Scale as your business grows.
             </p>
           </div>
         </section>
 
-        <section className="page-section pb-12">
-          <div className="container grid gap-4 md:grid-cols-3">
+        <section className="page-section pb-20">
+          <div className="container grid gap-6 md:grid-cols-3">
             {tiers.map((tier) => (
-              <Card key={tier.name} className={`relative rounded-2xl border-semantic-border p-6 ${tier.badge ? "ring-1 ring-brand-700/25" : ""}`}>
-                {tier.badge ? <Badge className="absolute -top-3 left-6 bg-brand-700 text-white">{tier.badge}</Badge> : null}
-                <p className="text-base font-semibold text-semantic-text">{tier.name}</p>
+              <Card key={tier.name} className={`relative flex flex-col rounded-2xl border-semantic-border p-6 ${tier.badge ? "ring-1 ring-brand-700/20" : ""}`}>
+                {tier.badge ? <Badge variant="brand" className="absolute -top-3 left-6">{tier.badge}</Badge> : null}
+                <p className="text-xl font-semibold text-semantic-text">{tier.name}</p>
                 <div className="mt-3 flex items-end gap-2">
                   <span className="text-4xl font-semibold text-semantic-text">{tier.price}</span>
                   <span className="pb-1 text-sm text-semantic-muted">{tier.period}</span>
                 </div>
                 <p className="mt-3 text-sm leading-7 text-semantic-muted">{tier.description}</p>
-                <ul className="mt-5 space-y-2 text-sm text-semantic-text">
+                <ul className="mt-6 flex-1 space-y-3 text-sm text-semantic-text">
                   {tier.features.map((feature) => (
                     <li key={feature} className="flex gap-2">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-700" />
@@ -97,7 +96,7 @@ export default function PricingPage() {
                   ))}
                 </ul>
                 <div className="mt-6">
-                  <Link href="/login" className={buttonStyles({ fullWidth: true })}>
+                  <Link href="/login" className={buttonStyles({ fullWidth: true, size: "lg" })}>
                     {tier.name === "Enterprise" ? "Contact Sales" : "Start Free Trial"}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
@@ -107,10 +106,10 @@ export default function PricingPage() {
           </div>
         </section>
 
-        <section className="page-section border-y border-semantic-border/70 bg-white/72 py-12">
+        <section className="border-y border-semantic-border/70 bg-white/72 py-20">
           <div className="container max-w-3xl">
             <h2 className="section-title text-center text-semantic-text">Frequently asked questions</h2>
-            <div className="mt-8 space-y-6">
+            <div className="mt-10 space-y-8">
               {[
                 {
                   q: "Can I change plans later?",
@@ -118,15 +117,15 @@ export default function PricingPage() {
                 },
                 {
                   q: "What counts as an opportunity?",
-                  a: "An opportunity is any lead signal detected from your connected data sources, weather alerts, permit data, or manual entries."
+                  a: "An opportunity is any lead signal detected from our connected data sources, weather alerts, permit data, or manual entries."
                 },
                 {
                   q: "Do you offer annual discounts?",
-                  a: "Yes. Annual pricing can be structured for larger rollouts and enterprise plans."
+                  a: "Yes. Save 20% when you pay annually. Contact sales for enterprise annual pricing."
                 },
                 {
                   q: "Is there a free trial?",
-                  a: "Every plan includes a 14-day free trial with full access. No credit card is required to get started."
+                  a: "Every plan includes a 14-day free trial with full access. No credit card required to start."
                 }
               ].map((faq) => (
                 <div key={faq.q}>

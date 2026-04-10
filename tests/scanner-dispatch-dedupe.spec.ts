@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { NextRequest } from "next/server";
 import { POST as postScannerDispatch } from "../src/app/api/scanner/events/[id]/dispatch/route";
+import { featureFlags } from "../src/lib/config/feature-flags";
 
 async function withEnv<T>(patch: Record<string, string | undefined>, fn: () => Promise<T>) {
   const previous = new Map<string, string | undefined>();
@@ -27,6 +28,24 @@ async function withFetchMock<T>(fetchImpl: typeof fetch, fn: () => Promise<T>) {
     return await fn();
   } finally {
     (globalThis as typeof globalThis & { fetch: typeof fetch }).fetch = previousFetch;
+  }
+}
+
+async function withFeatureFlags<T>(
+  patch: Partial<typeof featureFlags>,
+  fn: () => Promise<T>
+) {
+  const previous = {
+    useV2Reads: featureFlags.useV2Reads,
+    useV2Writes: featureFlags.useV2Writes,
+    usePolygonRouting: featureFlags.usePolygonRouting
+  };
+
+  Object.assign(featureFlags, patch);
+  try {
+    return await fn();
+  } finally {
+    Object.assign(featureFlags, previous);
   }
 }
 
@@ -178,6 +197,107 @@ function buildDispatchFetchMock() {
   };
 }
 
+
+function buildBlockedSourceTruthFetchMock() {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    const method = String(init?.method || "GET").toUpperCase();
+
+    if (url.toString().includes("api.open-meteo.com/v1/forecast")) {
+      return jsonResponse({
+        current: { time: "2026-04-06T12:00:00.000Z", temperature_2m: 52, precipitation_probability: 40, weather_code: 61, wind_speed_10m: 10 },
+        hourly: { time: [], temperature_2m: [], precipitation_probability: [], weather_code: [], wind_speed_10m: [] },
+        daily: { time: [], weather_code: [], temperature_2m_max: [], temperature_2m_min: [], precipitation_probability_max: [] }
+      });
+    }
+
+    if (url.pathname.endsWith("/rest/v1/accounts")) return jsonResponse([{ id: "acct-1" }]);
+    if (url.pathname.endsWith("/rest/v1/routing_rules")) return jsonResponse([]);
+    if (url.pathname.endsWith("/rest/v1/contractors")) return jsonResponse([]);
+
+    if (url.pathname.endsWith("/rest/v1/scanner_events")) {
+      return jsonResponse({
+        id: "scanner-1",
+        source: "public_feed",
+        category: "restoration",
+        title: "Water incident",
+        description: "Basement flooding reported.",
+        location_text: "123 Main St, Buffalo, NY 14201",
+        intent_score: 82,
+        confidence: 90,
+        tags: ["water"],
+        lat: 42.8864,
+        lon: -78.8784,
+        raw: {
+          v2_opportunity_id: "opp-1",
+          enrichment: {
+            ownerContact: {
+              name: "Jane Owner",
+              phone: "+17165550000",
+              email: "jane@example.com",
+              verification: "verified"
+            }
+          }
+        }
+      });
+    }
+
+    if (url.pathname.endsWith("/rest/v1/v2_account_tenant_map")) return jsonResponse({ franchise_tenant_id: "tenant-1" });
+    if (url.pathname.endsWith("/rest/v1/v2_opportunities")) {
+      return jsonResponse({
+        id: "opp-1",
+        lifecycle_status: "qualified",
+        contact_status: "identified",
+        explainability_json: {
+          source_event_id: "event-1",
+          source_type: "incident",
+          source_provenance: "https://county.example.gov/incidents/flood-response",
+          qualification_status: "qualified_contactable",
+          verification_status: "verified",
+          phone: "+17165550000",
+          contact_name: "Jane Owner"
+        }
+      });
+    }
+    if (url.pathname.endsWith("/rest/v1/v2_source_events")) {
+      return jsonResponse({
+        id: "event-1",
+        source_id: "source-1",
+        connector_run_id: "run-1",
+        compliance_status: "approved",
+        normalized_payload: {
+          source_type: "incident",
+          source_provenance: "https://county.example.gov/incidents/flood-response"
+        }
+      });
+    }
+    if (url.pathname.endsWith("/rest/v1/v2_data_sources")) {
+      return jsonResponse({
+        id: "source-1",
+        status: "active",
+        terms_status: "approved",
+        compliance_status: "pending_review",
+        rollout_state: "pilot",
+        readiness_status: "pass",
+        health_status: "ok",
+        freshness_timestamp: "2026-04-06T12:00:00.000Z",
+        freshness_sla_minutes: 120
+      });
+    }
+    if (url.pathname.endsWith("/rest/v1/v2_connector_runs")) {
+      return jsonResponse({
+        id: "run-1",
+        status: "completed",
+        metadata: {
+          connector_input_mode: "live_provider"
+        }
+      });
+    }
+
+    throw new Error(`Unexpected fetch: ${method} ${url.toString()}`);
+  };
+}
+
 test.describe.serial("scanner dispatch lead dedupe", () => {
   test("re-dispatch reuses existing lead and existing job without creating duplicates", async () => {
     await withEnv(
@@ -206,6 +326,38 @@ test.describe.serial("scanner dispatch lead dedupe", () => {
           expect(payload.jobId).toBe("job-1");
           expect(payload.leadReused).toBeTruthy();
           expect(String(payload.leadMatchReason || "")).toContain("verified phone");
+        });
+      }
+    );
+  });
+
+  test("dispatch blocks lead creation when source truth gate fails", async () => {
+    await withEnv(
+      {
+        NODE_ENV: "development",
+        REVIEW_MODE: "true",
+        DEMO_MODE: undefined,
+        NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_SERVICE_ROLE_KEY: "service-role",
+        SB_USE_V2_READS: "true",
+        SB_USE_V2_WRITES: "true"
+      },
+      async () => {
+        await withFeatureFlags({ useV2Reads: true, useV2Writes: true }, async () => {
+          await withFetchMock(buildBlockedSourceTruthFetchMock(), async () => {
+            const response = await postScannerDispatch(
+              new NextRequest("http://localhost/api/scanner/events/scanner-1/dispatch", {
+                method: "POST",
+                body: JSON.stringify({ createMode: "lead" })
+              }),
+              { params: Promise.resolve({ id: "scanner-1" }) }
+            );
+
+            expect(response.status).toBe(409);
+            const payload = (await response.json()) as Record<string, unknown>;
+            expect(payload.reason_code).toBe("source_truth_blocked");
+            expect(payload.leadId).toBeUndefined();
+          });
         });
       }
     );

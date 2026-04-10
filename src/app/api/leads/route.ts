@@ -4,6 +4,7 @@ import { createDemoLead, listDemoLeads } from "@/lib/demo/store";
 import { isDemoMode } from "@/lib/services/review-mode";
 import { generateSignals } from "@/lib/services/intent-engine";
 import { getForecastByLatLng } from "@/lib/services/weather";
+import { isIntegrationValidationRecord } from "@/lib/v2/source-truth";
 
 function statusToStage(status: string) {
   switch (status) {
@@ -32,7 +33,11 @@ function deriveLeadTruth(lead: Record<string, unknown>) {
   const status = String(lead.status || "new").toLowerCase();
   const source = String(lead.source || "manual").trim() || "manual";
   const contactableNow = Boolean(normalizePhone(phone).length >= 10 || email);
-  const countsAsRealLead = contactableNow && !["demo", "sample", "synthetic"].includes(source.toLowerCase());
+  const normalizedSource = source.toLowerCase();
+  const countsAsRealLead =
+    contactableNow &&
+    !["demo", "sample", "synthetic", "manual", "import", "seed"].includes(normalizedSource) &&
+    !isIntegrationValidationRecord(lead);
   return {
     source,
     service_line: String(lead.service_type || "").trim() || null,

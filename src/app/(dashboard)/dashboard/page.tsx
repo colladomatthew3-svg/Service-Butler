@@ -655,8 +655,10 @@ function SourceHealthSnapshotCard({
   ctaHref: string;
   forceBlockedGuidance?: boolean;
 }) {
-  const liveCount = sources.filter((source) => source.runtimeMode === "fully-live").length;
-  const partialCount = sources.filter((source) => source.runtimeMode === "live-partial").length;
+  const configuredCount = sources.filter((source) => source.configured).length;
+  const liveSafeCount = sources.filter((source) => source.captureStatus === "capturing_live" || source.captureStatus === "live_safe_partial").length;
+  const freshLiveSafeCount = sources.filter((source) => source.countsAsRealCapture).length;
+  const blockedCount = sources.filter((source) => source.captureStatus === "blocked").length;
   const visibleSources = sources
     .filter((source) => source.configured || source.runtimeMode !== "simulated")
     .slice(0, 4);
@@ -680,10 +682,11 @@ function SourceHealthSnapshotCard({
           />
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-2">
-              <MiniSourceStat label="Live" value={String(liveCount)} />
-              <MiniSourceStat label="Partial" value={String(partialCount)} />
-              <MiniSourceStat label="Total" value={String(sources.length)} />
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+              <MiniSourceStat label="Configured" value={String(configuredCount)} />
+              <MiniSourceStat label="Live-safe" value={String(liveSafeCount)} />
+              <MiniSourceStat label="Fresh live-safe" value={String(freshLiveSafeCount)} />
+              <MiniSourceStat label="Blocked/review" value={String(blockedCount)} />
             </div>
             {visibleSources.length === 0 ? (
               <EmptyPanel
@@ -701,12 +704,18 @@ function SourceHealthSnapshotCard({
                           {source.family} · {source.freshnessLabel}
                         </p>
                       </div>
-                      <Badge variant={source.runtimeMode === "fully-live" ? "success" : source.runtimeMode === "live-partial" ? "warning" : "default"}>
-                        {source.runtimeMode}
+                      <Badge variant={source.captureStatus === "capturing_live" ? "success" : source.captureStatus === "blocked" ? "danger" : source.captureStatus === "live_safe_partial" ? "warning" : "default"}>
+                        {source.captureStatus === "capturing_live"
+                          ? "fresh live-safe"
+                          : source.captureStatus === "live_safe_partial"
+                            ? "configured only"
+                            : source.captureStatus === "blocked"
+                              ? "blocked / review"
+                              : "simulated"}
                       </Badge>
                     </div>
                     <p className="mt-2 text-xs text-semantic-muted">
-                      {source.latestRunStatus || "not run"} · {source.recordsCreated.toLocaleString()} created · {source.recordsSeen.toLocaleString()} seen
+                      {source.latestRunStatus || "not run"} · {source.recordsCreated.toLocaleString()} created · {source.recordsSeen.toLocaleString()} seen · {source.countsAsRealCapture ? "counts toward proof" : "excluded from proof"}
                     </p>
                   </div>
                 ))}

@@ -2,6 +2,7 @@ import type { V2DashboardMetricRow } from "@/lib/v2/types";
 import type { CaptureProofSummary } from "@/lib/v2/capture-proof";
 import { getOpportunityQualificationSnapshot, isBuyerProofEligibleQualification } from "@/lib/v2/opportunity-qualification";
 import { classifyProofAuthenticity, type ProofAuthenticity } from "@/lib/v2/proof-authenticity";
+import { isIntegrationValidationRecord, qualifiesAsRealSourceCapture } from "@/lib/v2/source-truth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function toNumber(value: unknown, fallback = 0) {
@@ -193,6 +194,7 @@ function buildCaptureProofSummary(input: {
   for (const sourceEvent of input.sourceEvents) {
     const connectorRun = input.connectorRunById.get(asText(sourceEvent.connector_run_id));
     const connectorRunMetadata = asRecord(connectorRun?.metadata);
+    const source = input.sourceById?.get(asText(sourceEvent.source_id)) || {};
     const authenticity = classifyProofAuthenticity({
       sourceType: sourceTypeForEvent(sourceEvent, input.sourceById),
       sourceName: sourceNameForEvent(sourceEvent, input.sourceById),
@@ -202,7 +204,15 @@ function buildCaptureProofSummary(input: {
     });
 
     sourceEventsCaptured += 1;
-    if (authenticity === "live_provider" || authenticity === "live_derived") {
+    if (
+      qualifiesAsRealSourceCapture({
+        authenticity,
+        explainability: asRecord(sourceEvent.normalized_payload),
+        source,
+        sourceEvent,
+        connectorRun
+      })
+    ) {
       realSourceEventsCaptured += 1;
     } else if (authenticity === "synthetic") {
       simulatedCount += 1;
@@ -216,8 +226,11 @@ function buildCaptureProofSummary(input: {
   }
 
   for (const opportunity of input.opportunities) {
+    const explainability = asRecord(opportunity.explainability_json);
+    if (isIntegrationValidationRecord(explainability)) continue;
     const sourceEvent = input.sourceEvents.find((row) => asText(row.id) === asText(opportunity.source_event_id)) || {};
     const connectorRun = input.connectorRunById.get(asText(sourceEvent.connector_run_id));
+    const source = input.sourceById?.get(asText(sourceEvent.source_id)) || {};
     const authenticity =
       proofAuthenticityForOpportunity({
         opportunity,
@@ -228,7 +241,7 @@ function buildCaptureProofSummary(input: {
     opportunityAuthenticity.set(asText(opportunity.id), authenticity);
 
     const qualification = getOpportunityQualificationSnapshot({
-      explainability: asRecord(opportunity.explainability_json),
+      explainability,
       lifecycleStatus: opportunity.lifecycle_status,
       contactStatus: opportunity.contact_status,
       proofAuthenticity: authenticity
@@ -243,7 +256,13 @@ function buildCaptureProofSummary(input: {
     }
 
     const countsAsRealCapture =
-      (authenticity === "live_provider" || authenticity === "live_derived") &&
+      qualifiesAsRealSourceCapture({
+        authenticity,
+        explainability,
+        source,
+        sourceEvent,
+        connectorRun
+      }) &&
       !qualification.researchOnly;
     if (countsAsRealCapture) {
       realOpportunitiesCaptured += 1;
@@ -254,15 +273,26 @@ function buildCaptureProofSummary(input: {
   for (const lead of input.leads) {
     const opportunityId = asText(lead.opportunity_id);
     const opportunity = input.opportunities.find((row) => asText(row.id) === opportunityId) || {};
+    const explainability = asRecord(opportunity.explainability_json);
+    if (isIntegrationValidationRecord(explainability)) continue;
+    const sourceEvent = input.sourceEvents.find((row) => asText(row.id) === asText(opportunity.source_event_id)) || {};
+    const connectorRun = input.connectorRunById.get(asText(sourceEvent.connector_run_id));
+    const source = input.sourceById?.get(asText(sourceEvent.source_id)) || {};
     const qualification = getOpportunityQualificationSnapshot({
-      explainability: asRecord(opportunity.explainability_json),
+      explainability,
       lifecycleStatus: opportunity.lifecycle_status,
       contactStatus: opportunity.contact_status,
       proofAuthenticity: opportunityAuthenticity.get(opportunityId) || "unknown"
     });
     const leadSnapshot = leadVerificationSnapshot(lead);
     const countsAsRealLead =
-      (opportunityAuthenticity.get(opportunityId) === "live_provider" || opportunityAuthenticity.get(opportunityId) === "live_derived") &&
+      qualifiesAsRealSourceCapture({
+        authenticity: opportunityAuthenticity.get(opportunityId) || "unknown",
+        explainability,
+        source,
+        sourceEvent,
+        connectorRun
+      }) &&
       qualification.qualificationStatus === "qualified_contactable" &&
       leadSnapshot.verified;
 
@@ -528,7 +558,7 @@ export async function getFranchiseDashboardReadModel({
       .limit(200),
     supabase
       .from("v2_data_sources")
-      .select("id,name,source_type,reliability_score,freshness_timestamp,terms_status,status")
+      .select("id,name,source_type,reliability_score,freshness_timestamp,freshness_sla_minutes,terms_status,compliance_status,rollout_state,readiness_status,health_status,status")
       .eq("tenant_id", franchiseTenantId)
       .limit(100),
     supabase

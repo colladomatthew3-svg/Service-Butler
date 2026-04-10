@@ -364,7 +364,7 @@ function buildConfiguredSummary(
         source_provenance: row.provenance
       }
     }).termsStatus;
-  const complianceStatus = normalizeTermsStatus(row.compliance_status || policyTermsStatus || latestEvent?.compliance_status || termsStatus);
+  const complianceStatus = normalizeTermsStatus(latestEvent?.compliance_status || row.compliance_status || policyTermsStatus || termsStatus);
 
   const runtimeModeBase = computeRuntimeMode(row.source_type, config, termsStatus);
   const runtimeMode: DataSourceRuntimeMode = rolloutState === "disabled" ? "simulated" : rolloutState === "shadow" ? "live-partial" : runtimeModeBase;
@@ -421,11 +421,24 @@ function buildConfiguredSummary(
 
   const captureStatus = resolveCaptureStatus(summary);
   const connectorInputMode = String((latestRun?.metadata as Record<string, unknown> | null)?.connector_input_mode || "").toLowerCase();
+  const latestEventComplianceStatus = normalizeTermsStatus(latestEvent?.compliance_status || complianceStatus);
+  const latestRunStatus = String(latestRun?.status || "").toLowerCase();
+  const hasObservedActivity = Number(latestRun?.records_seen || 0) > 0 || Number(latestRun?.records_created || 0) > 0;
+  const readinessEligible = readinessStatus === "pass" || readinessStatus === "warn";
+  const healthEligible = summary.healthStatus !== "failed";
+  const runEligible = !latestRunStatus || ["completed", "partial", "replayed"].includes(latestRunStatus);
 
   return {
     ...summary,
     captureStatus,
-    countsAsRealCapture: captureStatus === "capturing_live" && connectorInputMode !== "synthetic_fallback"
+    countsAsRealCapture:
+      captureStatus === "capturing_live" &&
+      connectorInputMode !== "synthetic_fallback" &&
+      latestEventComplianceStatus === "approved" &&
+      readinessEligible &&
+      healthEligible &&
+      runEligible &&
+      hasObservedActivity
   };
 }
 

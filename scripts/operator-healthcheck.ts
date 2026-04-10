@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { summarizeSourceTruth } from "../src/lib/v2/source-truth-gates";
 
 function loadEnvFromFile(filePath: string) {
   if (!fs.existsSync(filePath)) return;
@@ -291,13 +292,13 @@ async function main() {
       });
     }
 
-    const { count: sourceCount, error: sourceError } = await supabase
+    const { data: sourceRows, error: sourceError } = await supabase
       .from("v2_data_sources")
-      .select("id", { count: "exact", head: true })
+      .select("id,status,terms_status,compliance_status,rollout_state,health_status,freshness_timestamp,freshness_sla_minutes")
       .eq("tenant_id", tenantId)
       .eq("status", "active");
 
-    if (sourceError || !Number(sourceCount || 0)) {
+    if (sourceError || !sourceRows?.length) {
       pushResult(results, {
         name: "data_sources",
         status: "FAIL",
@@ -308,8 +309,89 @@ async function main() {
       pushResult(results, {
         name: "data_sources",
         status: "PASS",
-        detail: `Active data sources: ${sourceCount}.`
+        detail: `Active data sources: ${sourceRows.length}.`
       });
+
+      const sourceIds = sourceRows.map((row: { id: string }) => row.id);
+      const { data: sourceEvents, error: sourceEventsError } = await supabase
+        .from("v2_source_events")
+        .select("source_id,compliance_status,ingested_at")
+        .eq("tenant_id", tenantId)
+        .in("source_id", sourceIds)
+        .order("ingested_at", { ascending: false })
+        .limit(500);
+
+      if (sourceEventsError) {
+        pushResult(results, {
+          name: "live_safe_sources",
+          status: "FAIL",
+          detail: `Could not inspect source events (${sourceEventsError.message}).`,
+          remediation: "Verify v2_source_events access and rerun the healthcheck."
+        });
+      } else {
+        const truth = summarizeSourceTruth(
+          sourceRows.map((row: Record<string, unknown>) => ({
+            id: String(row.id),
+            status: String(row.status || ""),
+            termsStatus: String(row.terms_status || ""),
+            complianceStatus: String(row.compliance_status || ""),
+            rolloutState: String(row.rollout_state || ""),
+            healthStatus: String(row.health_status || ""),
+            freshnessTimestamp: row.freshness_timestamp ? String(row.freshness_timestamp) : null,
+            freshnessSlaMinutes: Number(row.freshness_sla_minutes || 360)
+          })),
+          (sourceEvents || []).map((row: Record<string, unknown>) => ({
+            sourceId: String(row.source_id || ""),
+            complianceStatus: String(row.compliance_status || ""),
+            ingestedAt: row.ingested_at ? String(row.ingested_at) : null
+          }))
+        );
+
+        if (truth.liveSafeSources > 0) {
+          pushResult(results, {
+            name: "live_safe_sources",
+            status: "PASS",
+            detail: `Live-safe active data sources: ${truth.liveSafeSources}.`
+          });
+        } else {
+          pushResult(results, {
+            name: "live_safe_sources",
+            status: "FAIL",
+            detail: "No active data sources are approved for live-safe capture.",
+            remediation: "Promote at least one source to approved terms/compliance with pilot/live rollout before claiming real capture."
+          });
+        }
+
+        if (truth.freshLiveSafeSources > 0) {
+          pushResult(results, {
+            name: "fresh_live_safe_sources",
+            status: "PASS",
+            detail: `Fresh live-safe sources within SLA: ${truth.freshLiveSafeSources}.`
+          });
+        } else {
+          pushResult(results, {
+            name: "fresh_live_safe_sources",
+            status: "FAIL",
+            detail: "No live-safe sources are currently fresh enough for real operator proof.",
+            remediation: "Refresh at least one approved source and verify health_status/freshness_timestamp before using the dashboard as proof."
+          });
+        }
+
+        if (truth.approvedRecentEvents > 0) {
+          pushResult(results, {
+            name: "recent_approved_source_events",
+            status: "PASS",
+            detail: `Approved source events in the last ${truth.sampleWindowMinutes} minutes: ${truth.approvedRecentEvents}.`
+          });
+        } else {
+          pushResult(results, {
+            name: "recent_approved_source_events",
+            status: "FAIL",
+            detail: `No approved source events were ingested in the last ${truth.sampleWindowMinutes} minutes from a fresh live-safe source.`,
+            remediation: "Run a live-safe source successfully before treating current lead volume as real proof."
+          });
+        }
+      }
     }
   }
 

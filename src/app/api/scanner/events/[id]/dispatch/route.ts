@@ -10,6 +10,8 @@ import { isSyntheticScannerRecord } from "@/lib/services/scanner-truth";
 import { getForecastByLatLng } from "@/lib/services/weather";
 import { findLeadMatch, mergeContactChannels } from "@/lib/v2/lead-matching";
 import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from "@/lib/v2/opportunity-qualification";
+import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
+import { qualifiesAsRealSourceCapture } from "@/lib/v2/source-truth";
 
 type CreateMode = "lead" | "job";
 
@@ -201,7 +203,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
-  const verifiedOwnerContact = extractVerifiedOwnerContactFromEnrichment(event.raw?.enrichment);
   const qualification = v2Opportunity
     ? getOpportunityQualificationSnapshot({
         explainability: v2Opportunity.explainability,
@@ -209,6 +210,87 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         contactStatus: v2Opportunity.contactStatus
       })
     : null;
+
+  if (v2Opportunity) {
+    let sourceEvent: Record<string, unknown> | null = null;
+    let source: Record<string, unknown> | null = null;
+    let connectorRun: Record<string, unknown> | null = null;
+
+    const sourceEventId = String(v2Opportunity.explainability.source_event_id || "").trim();
+    if (sourceEventId) {
+      const { data: sourceEventRow } = await supabase
+        .from("v2_source_events")
+        .select("id,source_id,connector_run_id,compliance_status,normalized_payload")
+        .eq("tenant_id", v2Opportunity.tenantId)
+        .eq("id", sourceEventId)
+        .maybeSingle();
+
+      if (sourceEventRow) {
+        sourceEvent = sourceEventRow as Record<string, unknown>;
+
+        const sourceId = String(sourceEventRow.source_id || "").trim();
+        if (sourceId) {
+          const { data: sourceRow } = await supabase
+            .from("v2_data_sources")
+            .select("id,status,terms_status,compliance_status,rollout_state,readiness_status,health_status,freshness_timestamp,freshness_sla_minutes")
+            .eq("tenant_id", v2Opportunity.tenantId)
+            .eq("id", sourceId)
+            .maybeSingle();
+          if (sourceRow) source = sourceRow as Record<string, unknown>;
+        }
+
+        const connectorRunId = String(sourceEventRow.connector_run_id || "").trim();
+        if (connectorRunId) {
+          const { data: connectorRunRow } = await supabase
+            .from("v2_connector_runs")
+            .select("id,status,metadata")
+            .eq("tenant_id", v2Opportunity.tenantId)
+            .eq("id", connectorRunId)
+            .maybeSingle();
+          if (connectorRunRow) connectorRun = connectorRunRow as Record<string, unknown>;
+        }
+      }
+    }
+
+    const proofAuthenticity = classifyProofAuthenticity({
+      sourceType:
+        Array.isArray(v2Opportunity.explainability.source_types) && v2Opportunity.explainability.source_types.length > 0
+          ? v2Opportunity.explainability.source_types[0]
+          : v2Opportunity.explainability.source_type || event.source || event.category,
+      sourceName: v2Opportunity.explainability.source_name,
+      sourceProvenance: v2Opportunity.explainability.source_provenance,
+      normalizedPayload: sourceEvent ? asRecord(sourceEvent.normalized_payload) : v2Opportunity.explainability,
+      connectorRunMetadata: connectorRun ? asRecord(connectorRun.metadata) : {}
+    });
+
+    const sourceTruthEligible = qualifiesAsRealSourceCapture({
+      authenticity: proofAuthenticity,
+      explainability: v2Opportunity.explainability,
+      source,
+      sourceEvent,
+      connectorRun
+    });
+
+    if (!sourceTruthEligible) {
+      return NextResponse.json(
+        {
+          error: "This scanner signal is not backed by a live-safe approved source chain yet. Keep it in research mode until source truth is validated.",
+          status: "research_only",
+          reason_code: "source_truth_blocked",
+          next_step: qualification?.nextRecommendedAction || "route_to_sdr",
+          proof_authenticity: proofAuthenticity,
+          source_type:
+            qualification?.sourceType ||
+            String(v2Opportunity.explainability.source_type || event.raw?.source_type || event.source || "scanner_signal"),
+          scanner_event_id: event.id,
+          opportunity_id: v2Opportunity.id
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  const verifiedOwnerContact = extractVerifiedOwnerContactFromEnrichment(event.raw?.enrichment);
   const dispatchContact = verifiedOwnerContact || (qualification && qualificationAllowsDispatch(qualification)
     ? {
         name: qualification.contactName,

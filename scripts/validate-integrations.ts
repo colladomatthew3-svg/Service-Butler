@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import path from "node:path";
+import { summarizeSourceTruth } from "../src/lib/v2/source-truth-gates";
 
 function loadEnvFromFile(filePath: string) {
   if (!fs.existsSync(filePath)) return;
@@ -198,6 +199,88 @@ async function main() {
   }) as any;
 
   const tenantId = await resolveTenantId(supabase);
+  const { data: sourceRows, error: sourceError } = await supabase
+    .from("v2_data_sources")
+    .select("id,status,terms_status,compliance_status,rollout_state,health_status,freshness_timestamp,freshness_sla_minutes")
+    .eq("tenant_id", tenantId)
+    .eq("status", "active");
+
+  if (sourceError) {
+    throw new Error(`Could not inspect active data sources (${sourceError.message}).`);
+  }
+
+  const sourceIds = (sourceRows || []).map((row: Record<string, unknown>) => String(row.id)).filter(Boolean);
+  const { data: sourceEvents, error: sourceEventsError } = sourceIds.length
+    ? await supabase
+        .from("v2_source_events")
+        .select("source_id,compliance_status,ingested_at")
+        .eq("tenant_id", tenantId)
+        .in("source_id", sourceIds)
+        .order("ingested_at", { ascending: false })
+        .limit(500)
+    : { data: [], error: null };
+
+  if (sourceEventsError) {
+    throw new Error(`Could not inspect source events (${sourceEventsError.message}).`);
+  }
+
+  const sourceTruth = summarizeSourceTruth(
+    (sourceRows || []).map((row: Record<string, unknown>) => ({
+      id: String(row.id || ""),
+      status: String(row.status || ""),
+      termsStatus: String(row.terms_status || ""),
+      complianceStatus: String(row.compliance_status || ""),
+      rolloutState: String(row.rollout_state || ""),
+      healthStatus: String(row.health_status || ""),
+      freshnessTimestamp: row.freshness_timestamp ? String(row.freshness_timestamp) : null,
+      freshnessSlaMinutes: Number(row.freshness_sla_minutes || 360)
+    })),
+    (sourceEvents || []).map((row: Record<string, unknown>) => ({
+      sourceId: String(row.source_id || ""),
+      complianceStatus: String(row.compliance_status || ""),
+      ingestedAt: row.ingested_at ? String(row.ingested_at) : null
+    }))
+  );
+
+  results.push({
+    check: "live_safe_sources",
+    status: sourceTruth.liveSafeSources > 0 ? "PASS" : "FAIL",
+    detail:
+      sourceTruth.liveSafeSources > 0
+        ? `Live-safe active sources available: ${sourceTruth.liveSafeSources}.`
+        : "No active data sources are approved for live-safe capture.",
+    remediation:
+      sourceTruth.liveSafeSources > 0
+        ? undefined
+        : "Approve terms/compliance and rollout state for at least one source before treating this tenant as real-data ready."
+  });
+
+  results.push({
+    check: "fresh_live_safe_sources",
+    status: sourceTruth.freshLiveSafeSources > 0 ? "PASS" : "FAIL",
+    detail:
+      sourceTruth.freshLiveSafeSources > 0
+        ? `Fresh live-safe sources within SLA: ${sourceTruth.freshLiveSafeSources}.`
+        : "No live-safe sources are currently fresh enough for real proof.",
+    remediation:
+      sourceTruth.freshLiveSafeSources > 0
+        ? undefined
+        : "Refresh an approved source and record a current freshness timestamp before validating real lead generation."
+  });
+
+  results.push({
+    check: "recent_approved_source_events",
+    status: sourceTruth.approvedRecentEvents > 0 ? "PASS" : "FAIL",
+    detail:
+      sourceTruth.approvedRecentEvents > 0
+        ? `Approved source events in the last ${sourceTruth.sampleWindowMinutes} minutes: ${sourceTruth.approvedRecentEvents}.`
+        : `No approved source events were ingested in the last ${sourceTruth.sampleWindowMinutes} minutes from a fresh live-safe source.`,
+    remediation:
+      sourceTruth.approvedRecentEvents > 0
+        ? undefined
+        : "Run at least one live-safe source successfully before using lead and opportunity counts as real proof."
+  });
+
   const { leadId, opportunityId, assignmentId } = await ensureValidationEntities({
     supabase,
     tenantId

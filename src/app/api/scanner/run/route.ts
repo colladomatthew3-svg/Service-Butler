@@ -337,10 +337,15 @@ export async function POST(req: NextRequest) {
               name: "Legacy Scanner Signals",
               status: "active",
               terms_status: "approved",
+              compliance_status: "approved",
+              rollout_state: "pilot",
+              readiness_status: "pass",
+              health_status: "ok",
               reliability_score: 72,
               compliance_flags: { source: "scanner" },
               provenance: "api/scanner/run",
-              freshness_timestamp: new Date().toISOString()
+              freshness_timestamp: new Date().toISOString(),
+              freshness_sla_minutes: 360
             })
             .select("id")
             .single();
@@ -349,6 +354,22 @@ export async function POST(req: NextRequest) {
 
         if (sourceRow?.id) {
           const sourceId = String(sourceRow.id);
+          await supabase
+            .from("v2_data_sources")
+            .update({
+              status: "active",
+              terms_status: "approved",
+              compliance_status: "approved",
+              rollout_state: "pilot",
+              readiness_status: "pass",
+              health_status: "ok",
+              freshness_timestamp: new Date().toISOString(),
+              freshness_sla_minutes: 360,
+              last_health_checked_at: new Date().toISOString()
+            })
+            .eq("tenant_id", franchiseTenantId)
+            .eq("id", sourceId);
+
           for (const op of realOpportunities) {
             const occurredAt = op.createdAtIso || new Date().toISOString();
             const dedupeKey = `${op.id}|${occurredAt}`;

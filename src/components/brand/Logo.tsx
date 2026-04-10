@@ -1,10 +1,7 @@
-import Image from "next/image";
+import { Target } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 type LogoVariant = "full" | "mark" | "wordmark" | "lockup";
-
-const FULL_LOGO_RATIO = 1700 / 340;
-const MARK_RATIO = 581 / 492;
 
 export function Logo({
   variant = "full",
@@ -15,35 +12,46 @@ export function Logo({
   size?: number;
   className?: string;
 }) {
-  const isMark = variant === "mark";
-  const isFullLogo = variant === "full" || variant === "lockup" || variant === "wordmark";
-  const width = Math.round(size * (isMark ? MARK_RATIO : FULL_LOGO_RATIO));
+  const iconSize = Math.max(18, Math.round(size * 0.42));
 
-  if (isMark) {
+  if (variant === "mark") {
     return (
-      <Image
-        src="/brand/logo-mark.svg"
-        alt="Service Butler icon"
-        width={width}
-        height={size}
-        className={cn("h-auto w-auto object-contain", className)}
-        priority
-      />
+      <span
+        aria-label="Service Butler icon"
+        className={cn("inline-flex items-center justify-center rounded-lg bg-brand-700 text-white", className)}
+        style={{ width: size, height: size }}
+      >
+        <Target style={{ width: iconSize, height: iconSize }} strokeWidth={2.1} />
+      </span>
     );
   }
 
-  if (isFullLogo) {
+  if (variant === "wordmark") {
     return (
-      <Image
-        src="/brand/logo.svg"
-        alt="Service Butler logo"
-        width={width}
-        height={size}
-        className={cn("h-auto w-auto object-contain", className)}
-        priority
-      />
+      <span
+        className={cn("inline-flex items-center font-heading font-bold tracking-tight text-semantic-text", className)}
+        style={{ fontSize: Math.max(18, Math.round(size * 0.48)) }}
+      >
+        Service Butler
+      </span>
     );
   }
 
-  return null;
+  return (
+    <span className={cn("inline-flex items-center gap-2.5", className)}>
+      <span
+        aria-hidden="true"
+        className="inline-flex items-center justify-center rounded-lg bg-brand-700 text-white"
+        style={{ width: size, height: size }}
+      >
+        <Target style={{ width: iconSize, height: iconSize }} strokeWidth={2.1} />
+      </span>
+      <span
+        className="font-heading font-bold tracking-tight text-semantic-text"
+        style={{ fontSize: Math.max(18, Math.round(size * 0.48)) }}
+      >
+        Service Butler
+      </span>
+    </span>
+  );
 }

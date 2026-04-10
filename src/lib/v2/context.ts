@@ -1,6 +1,6 @@
 import { getCurrentUserContext } from "@/lib/auth/rbac";
-import { isDemoMode } from "@/lib/services/review-mode";
-import type { V2TenantContext } from "@/lib/v2/types";
+import { isDemoMode, isLocalBypassMode } from "@/lib/services/review-mode";
+import type { V2ResolvedOwnerUser, V2TenantContext } from "@/lib/v2/types";
 
 type TenantResolution = {
   franchiseTenantId: string;
@@ -139,5 +139,133 @@ export async function getV2TenantContext(): Promise<
     enterpriseTenantId,
     franchiseVertical,
     supabase
+  };
+}
+
+function asText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function membershipRank(role: string) {
+  switch (role) {
+    case "FRANCHISE_OWNER":
+      return 0;
+    case "DISPATCHER":
+      return 1;
+    case "TECH":
+      return 2;
+    default:
+      return 99;
+  }
+}
+
+function accountRoleRank(role: string) {
+  switch (role) {
+    case "ACCOUNT_OWNER":
+      return 0;
+    case "DISPATCHER":
+      return 1;
+    case "TECH":
+      return 2;
+    default:
+      return 99;
+  }
+}
+
+export async function resolveV2OwnerUserForTenant(input: {
+  supabase: Awaited<ReturnType<typeof getCurrentUserContext>>["supabase"];
+  accountId: string;
+  userId: string;
+  franchiseTenantId: string;
+}): Promise<V2ResolvedOwnerUser | null> {
+  const normalizedUserId = asText(input.userId);
+  const normalizedAccountId = asText(input.accountId);
+  const normalizedTenantId = asText(input.franchiseTenantId);
+
+  if (!normalizedUserId || !normalizedAccountId || !normalizedTenantId) return null;
+
+  const [{ data: accountRole }, { data: membership }] = await Promise.all([
+    input.supabase
+      .from("account_roles")
+      .select("user_id")
+      .eq("account_id", normalizedAccountId)
+      .eq("user_id", normalizedUserId)
+      .eq("is_active", true)
+      .maybeSingle(),
+    input.supabase
+      .from("v2_tenant_memberships")
+      .select("user_id")
+      .eq("tenant_id", normalizedTenantId)
+      .eq("user_id", normalizedUserId)
+      .eq("is_active", true)
+      .maybeSingle()
+  ]);
+
+  if (accountRole?.user_id && membership?.user_id) {
+    return {
+      ownerUserId: normalizedUserId,
+      resolutionSource: "authenticated_user"
+    };
+  }
+
+  if (!isLocalBypassMode()) return null;
+
+  const [{ data: accountRoles, error: accountRolesError }, { data: memberships, error: membershipsError }] = await Promise.all([
+    input.supabase
+      .from("account_roles")
+      .select("user_id,role,created_at")
+      .eq("account_id", normalizedAccountId)
+      .eq("is_active", true)
+      .in("role", ["ACCOUNT_OWNER", "DISPATCHER", "TECH"]),
+    input.supabase
+      .from("v2_tenant_memberships")
+      .select("user_id,role,created_at")
+      .eq("tenant_id", normalizedTenantId)
+      .eq("is_active", true)
+      .in("role", ["FRANCHISE_OWNER", "DISPATCHER", "TECH"])
+  ]);
+
+  if (accountRolesError || membershipsError || !accountRoles?.length || !memberships?.length) {
+    return null;
+  }
+
+  const membershipByUser = new Map(
+    memberships
+      .map((row) => ({
+        userId: asText(row.user_id),
+        role: asText(row.role),
+        createdAt: asText(row.created_at)
+      }))
+      .filter((row) => row.userId)
+      .map((row) => [row.userId, row])
+  );
+
+  const candidate = accountRoles
+    .map((row) => {
+      const userId = asText(row.user_id);
+      const tenantMembership = membershipByUser.get(userId);
+      if (!userId || !tenantMembership) return null;
+      return {
+        userId,
+        accountRole: asText(row.role),
+        accountCreatedAt: asText(row.created_at),
+        membershipRole: tenantMembership.role,
+        membershipCreatedAt: tenantMembership.createdAt
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => {
+      const roleDelta = Math.min(accountRoleRank(left!.accountRole), membershipRank(left!.membershipRole)) - Math.min(accountRoleRank(right!.accountRole), membershipRank(right!.membershipRole));
+      if (roleDelta !== 0) return roleDelta;
+      const leftCreated = Date.parse(left!.membershipCreatedAt || left!.accountCreatedAt || "");
+      const rightCreated = Date.parse(right!.membershipCreatedAt || right!.accountCreatedAt || "");
+      return (Number.isFinite(leftCreated) ? leftCreated : Number.MAX_SAFE_INTEGER) - (Number.isFinite(rightCreated) ? rightCreated : Number.MAX_SAFE_INTEGER);
+    })[0];
+
+  if (!candidate?.userId) return null;
+
+  return {
+    ownerUserId: candidate.userId,
+    resolutionSource: "tenant_operator_fallback"
   };
 }

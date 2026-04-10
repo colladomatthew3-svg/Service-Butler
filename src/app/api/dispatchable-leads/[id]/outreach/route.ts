@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertRole } from "@/lib/auth/rbac";
-import { getV2TenantContext } from "@/lib/v2/context";
+import { getV2TenantContext, resolveV2OwnerUserForTenant } from "@/lib/v2/context";
 import { deriveDispatchableLeadCandidate } from "@/lib/v2/dispatchable-leads";
 import { triggerDispatchableLeadOutreach } from "@/lib/v2/dispatchable-outreach";
 import type { AccountRole } from "@/types/domain";
@@ -84,10 +84,30 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     latestOutreachEvent: (latestOutreachEvent || null) as Record<string, unknown> | null
   });
 
+  const resolvedOwner = await resolveV2OwnerUserForTenant({
+    supabase: context.supabase,
+    accountId: context.accountId,
+    userId: context.userId,
+    franchiseTenantId: context.franchiseTenantId
+  });
+
+  if (!resolvedOwner?.ownerUserId) {
+    return NextResponse.json(
+      {
+        sent: false,
+        blocked: true,
+        reason: "owner_user_unresolved",
+        detail: "No valid tenant operator could be resolved for first-touch outreach."
+      },
+      { status: 422 }
+    );
+  }
+
   const result = await triggerDispatchableLeadOutreach({
     supabase: context.supabase as never,
     tenantId: context.franchiseTenantId,
-    actorUserId: context.userId,
+    actorUserId: resolvedOwner.ownerUserId,
+    actorResolutionSource: resolvedOwner.resolutionSource,
     franchiseVertical: context.franchiseVertical,
     opportunity: opportunity as Record<string, unknown>,
     candidate,

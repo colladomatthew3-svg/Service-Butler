@@ -198,6 +198,7 @@ test("dispatchable outreach creates lead, persists safe-mode send, and marks opp
       supabase: supabaseMock as never,
       tenantId: "tenant-1",
       actorUserId: "user-1",
+      actorResolutionSource: "tenant_operator_fallback",
       franchiseVertical: "home_services",
       opportunity: state.opportunities[0],
       candidate: buildCandidate()
@@ -209,8 +210,10 @@ test("dispatchable outreach creates lead, persists safe-mode send, and marks opp
     expect(result.sendMode).toBe("review_safe");
     expect(state.leads).toHaveLength(1);
     expect(state.outreach.length).toBe(2);
+    expect(String((state.outreach[1].metadata as Record<string, unknown>).actor_resolution_source)).toBe("tenant_operator_fallback");
     expect((state.opportunities[0].lifecycle_status as string)).toBe("contacted");
     expect(String((state.opportunities[0].explainability_json as Record<string, unknown>).outreach_last_send_mode)).toBe("review_safe");
+    expect(String((state.opportunities[0].explainability_json as Record<string, unknown>).outreach_actor_resolution_source)).toBe("tenant_operator_fallback");
   } finally {
     process.env.TWILIO_ACCOUNT_SID = prev.sid;
     process.env.TWILIO_AUTH_TOKEN = prev.token;

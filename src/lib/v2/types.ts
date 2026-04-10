@@ -38,6 +38,13 @@ export type V2TenantContext = {
   franchiseVertical?: string | null;
 };
 
+export type V2OwnerUserResolutionSource = "authenticated_user" | "tenant_operator_fallback";
+
+export type V2ResolvedOwnerUser = {
+  ownerUserId: string;
+  resolutionSource: V2OwnerUserResolutionSource;
+};
+
 export type V2AssignmentDecision = {
   assignedTenantId: string;
   backupTenantId: string | null;

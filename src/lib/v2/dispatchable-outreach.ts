@@ -2,6 +2,7 @@ import { normalizeDestinationForChannel } from "@/lib/v2/contact-destinations";
 import { dispatchOutreach } from "@/lib/v2/outreach-orchestrator";
 import { getVertical } from "@/lib/v2/franchise-verticals";
 import type { DispatchableLeadCandidate } from "@/lib/v2/dispatchable-leads";
+import type { V2OwnerUserResolutionSource } from "@/lib/v2/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const OUTREACH_COOLING_WINDOW_MINUTES = 240;
@@ -64,6 +65,7 @@ export function mergeDispatchableOutreachSummary(
     follow_up_state: DispatchableLeadFollowUpState;
     outreach_last_message_body: string | null;
     outreach_actor_user_id: string | null;
+    outreach_actor_resolution_source: V2OwnerUserResolutionSource | null;
     outreach_lead_id: string | null;
   }>
 ) {
@@ -83,6 +85,9 @@ export function mergeDispatchableOutreachSummary(
     ...(patch.follow_up_state !== undefined ? { follow_up_state: patch.follow_up_state } : {}),
     ...(patch.outreach_last_message_body !== undefined ? { outreach_last_message_body: patch.outreach_last_message_body } : {}),
     ...(patch.outreach_actor_user_id !== undefined ? { outreach_actor_user_id: patch.outreach_actor_user_id } : {}),
+    ...(patch.outreach_actor_resolution_source !== undefined
+      ? { outreach_actor_resolution_source: patch.outreach_actor_resolution_source }
+      : {}),
     ...(patch.outreach_lead_id !== undefined ? { outreach_lead_id: patch.outreach_lead_id } : {})
   };
 }
@@ -263,6 +268,7 @@ export async function triggerDispatchableLeadOutreach(input: {
   supabase: SupabaseClient;
   tenantId: string;
   actorUserId: string;
+  actorResolutionSource?: V2OwnerUserResolutionSource;
   franchiseVertical?: string | null;
   opportunity: Record<string, unknown>;
   candidate: DispatchableLeadCandidate;
@@ -328,7 +334,8 @@ export async function triggerDispatchableLeadOutreach(input: {
       send_mode: "review_safe",
       contact_provenance: input.candidate.contact_provenance,
       source_provenance: asText(asRecord(input.opportunity.explainability_json).source_provenance) || null,
-      actor_user_id: input.actorUserId
+      actor_user_id: input.actorUserId,
+      actor_resolution_source: input.actorResolutionSource || "authenticated_user"
     }
   });
 
@@ -345,6 +352,7 @@ export async function triggerDispatchableLeadOutreach(input: {
     follow_up_state: sent.sent ? "contacted" : "dispatchable",
     outreach_last_message_body: body,
     outreach_actor_user_id: input.actorUserId,
+    outreach_actor_resolution_source: input.actorResolutionSource || "authenticated_user",
     outreach_lead_id: asText(lead.id)
   });
 

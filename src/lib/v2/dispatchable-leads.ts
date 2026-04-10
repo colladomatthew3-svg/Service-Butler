@@ -2,6 +2,7 @@ import { deriveOpportunityActionability } from "@/lib/v2/opportunity-actionabili
 import { getOpportunityQualificationSnapshot, qualificationAllowsDispatch } from "@/lib/v2/opportunity-qualification";
 import { classifyProofAuthenticity } from "@/lib/v2/proof-authenticity";
 import { qualifiesAsRealSourceCapture } from "@/lib/v2/source-truth";
+import { deriveDispatchableLeadOutreachSummary, type DispatchableLeadFollowUpState } from "@/lib/v2/dispatchable-outreach";
 
 export const DISPATCHABLE_LEAD_RECENCY_HOURS = 72;
 
@@ -120,6 +121,13 @@ export type DispatchableLeadCandidate = {
   contact_provenance: string | null;
   contact_attachment_status: string | null;
   contact_grounded_reason: string | null;
+  outreach_eligible: boolean;
+  outreach_blocked_reason: string | null;
+  outreach_channel: "sms" | null;
+  outreach_status: string | null;
+  outreach_send_mode: "review_safe" | "live" | null;
+  outreach_last_sent_at: string | null;
+  follow_up_state: DispatchableLeadFollowUpState;
   dispatch_eligible: boolean;
   blocked_reason: string | null;
   counts_as_real_capture: boolean;
@@ -133,6 +141,8 @@ export function deriveDispatchableLeadCandidate(input: {
   source?: Record<string, unknown> | null;
   connectorRun?: Record<string, unknown> | null;
   assignment?: Record<string, unknown> | null;
+  lead?: Record<string, unknown> | null;
+  latestOutreachEvent?: Record<string, unknown> | null;
   nowMs?: number;
 }) : DispatchableLeadCandidate {
   const opportunity = input.opportunity;
@@ -192,6 +202,44 @@ export function deriveDispatchableLeadCandidate(input: {
     activeAssignment
   });
   const dispatchEligible = blockedReason == null;
+  const outreach = deriveDispatchableLeadOutreachSummary({
+    candidate: {
+      id: asText(opportunity.id),
+      title: asText(opportunity.title) || null,
+      business_name: deriveDisplayName(opportunity, qualification),
+      phone: qualification.phone,
+      email: qualification.email,
+      location,
+      source: sourceNameForEvent(sourceEvent, source) || null,
+      source_type: sourceTypeForEvent(sourceEvent, source) || null,
+      service_signal: serviceSignal || null,
+      timestamp,
+      age_hours: ageHours,
+      confidence_score: toNumber(opportunity.source_reliability_score ?? explainability.confidence_score, 0),
+      trust_status: dispatchEligible ? "Dispatchable live lead" : blockedReason ? blockedReason.replace(/^Blocked:\s*/, "") : "Needs review",
+      qualification_status: qualification.qualificationStatus,
+      verification_status: qualification.verificationStatus,
+      contact_provenance: asText(explainability.contact_attachment_provenance || qualification.qualificationSource) || null,
+      contact_attachment_status: contactAttachmentStatus,
+      contact_grounded_reason: asText(explainability.contact_grounded_reason) || null,
+      outreach_eligible: false,
+      outreach_blocked_reason: null,
+      outreach_channel: null,
+      outreach_status: null,
+      outreach_send_mode: null,
+      outreach_last_sent_at: null,
+      follow_up_state: "dispatchable",
+      dispatch_eligible: dispatchEligible,
+      blocked_reason: blockedReason,
+      counts_as_real_capture: countsAsRealCapture,
+      review_required: actionability.reviewRequired,
+      assignment_status: actionability.assignmentStatus
+    },
+    opportunity,
+    lead: input.lead || null,
+    latestOutreachEvent: input.latestOutreachEvent || null,
+    nowMs
+  });
 
   return {
     id: asText(opportunity.id),
@@ -212,6 +260,13 @@ export function deriveDispatchableLeadCandidate(input: {
     contact_provenance: asText(explainability.contact_attachment_provenance || qualification.qualificationSource) || null,
     contact_attachment_status: contactAttachmentStatus,
     contact_grounded_reason: asText(explainability.contact_grounded_reason) || null,
+    outreach_eligible: outreach.outreach_eligible,
+    outreach_blocked_reason: outreach.outreach_blocked_reason,
+    outreach_channel: outreach.outreach_channel,
+    outreach_status: outreach.outreach_status,
+    outreach_send_mode: outreach.outreach_send_mode,
+    outreach_last_sent_at: outreach.outreach_last_sent_at,
+    follow_up_state: outreach.follow_up_state,
     dispatch_eligible: dispatchEligible,
     blocked_reason: blockedReason,
     counts_as_real_capture: countsAsRealCapture,

@@ -18,6 +18,8 @@ type DispatchInput = {
   body: string;
   subject?: string | null;
   coolingWindowMinutes?: number;
+  safeMode?: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 async function isSuppressed({
@@ -125,7 +127,8 @@ export async function dispatchOutreach(input: DispatchInput) {
       sequenceId: input.sequenceId,
       channel: input.channel,
       eventType: "skipped",
-      outcome: "lead_marked_do_not_contact"
+      outcome: "lead_marked_do_not_contact",
+      metadata: input.metadata
     });
     return { sent: false, skipped: true, reason: "lead_marked_do_not_contact" };
   }
@@ -146,7 +149,8 @@ export async function dispatchOutreach(input: DispatchInput) {
       sequenceId: input.sequenceId,
       channel: input.channel,
       eventType: "skipped",
-      outcome: "suppressed"
+      outcome: "suppressed",
+      metadata: input.metadata
     });
     return { sent: false, skipped: true, reason: "suppressed" };
   }
@@ -168,7 +172,8 @@ export async function dispatchOutreach(input: DispatchInput) {
       sequenceId: input.sequenceId,
       channel: input.channel,
       eventType: "skipped",
-      outcome: "cooling_window"
+      outcome: "cooling_window",
+      metadata: input.metadata
     });
     return { sent: false, skipped: true, reason: "cooling_window" };
   }
@@ -180,7 +185,8 @@ export async function dispatchOutreach(input: DispatchInput) {
     assignmentId: input.assignmentId,
     sequenceId: input.sequenceId,
     channel: input.channel,
-    eventType: "queued"
+    eventType: "queued",
+    metadata: input.metadata
   });
 
   try {
@@ -188,7 +194,7 @@ export async function dispatchOutreach(input: DispatchInput) {
     let outcome = "queued";
 
     if (input.channel === "sms") {
-      const sent = await sendTwilioMessage({ to: input.to, body: input.body });
+      const sent = await sendTwilioMessage({ to: input.to, body: input.body, safeMode: input.safeMode });
       providerMessageId = sent.providerId;
       if (sent.skipped) {
         outcome = String(sent.reason || "skipped");
@@ -236,7 +242,12 @@ export async function dispatchOutreach(input: DispatchInput) {
       providerMessageId,
       outcome,
       metadata: {
-        cooling_window_minutes: coolingWindowMinutes
+        cooling_window_minutes: coolingWindowMinutes,
+        ...(input.metadata || {}),
+        send_mode:
+          outcome === "sent_via_twilio" || outcome === "voice_task_created"
+            ? "live"
+            : "review_safe"
       }
     });
 
@@ -260,7 +271,11 @@ export async function dispatchOutreach(input: DispatchInput) {
       sent: true,
       skipped: false,
       providerMessageId,
-      outcome
+      outcome,
+      sendMode:
+        outcome === "sent_via_twilio" || outcome === "voice_task_created"
+          ? ("live" as const)
+          : ("review_safe" as const)
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "outreach_failed";
@@ -272,7 +287,8 @@ export async function dispatchOutreach(input: DispatchInput) {
       sequenceId: input.sequenceId,
       channel: input.channel,
       eventType: "failed",
-      outcome: message
+      outcome: message,
+      metadata: input.metadata
     });
 
     await logV2AuditEvent({

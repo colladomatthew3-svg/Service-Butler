@@ -62,6 +62,8 @@ test("dispatchable candidate requires live-safe recent verified contact data", (
   expect(candidate.blocked_reason).toBeNull();
   expect(candidate.business_name).toBe("Red Hook Bakery");
   expect(candidate.contact_provenance).toBeNull();
+  expect(candidate.outreach_eligible).toBeTruthy();
+  expect(candidate.follow_up_state).toBe("dispatchable");
 });
 
 test("synthetic or validation-backed rows are excluded from dispatchable leads", () => {
@@ -110,6 +112,7 @@ test("synthetic or validation-backed rows are excluded from dispatchable leads",
 
   expect(candidate.dispatch_eligible).toBeFalsy();
   expect(candidate.blocked_reason).toContain("synthetic/test");
+  expect(candidate.outreach_eligible).toBeFalsy();
 });
 
 test("recent real candidates without verified contact stay blocked with a clear reason", () => {
@@ -239,6 +242,7 @@ test("operator surface distinguishes ungrounded contact from missing contact", (
   expect(candidate.contact_provenance).toBe("source:name,source:phone");
   expect(candidate.contact_grounded_reason).toBeNull();
   expect(candidate.blocked_reason).toContain("provenance is not strong enough");
+  expect(candidate.outreach_blocked_reason).toBe("not_dispatchable");
 });
 
 test("operator surface exposes grounded permit contact provenance and reason", () => {
@@ -291,4 +295,5 @@ test("operator surface exposes grounded permit contact provenance and reason", (
   expect(candidate.dispatch_eligible).toBeTruthy();
   expect(candidate.contact_provenance).toContain("DOB-License-Info");
   expect(candidate.contact_grounded_reason).toContain("exact permit applicant license");
+  expect(candidate.outreach_eligible).toBeTruthy();
 });

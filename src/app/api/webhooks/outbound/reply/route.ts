@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { logV2AuditEvent } from "@/lib/v2/audit";
 import { extractLeadChannelDestination, normalizeDestinationForChannel } from "@/lib/v2/contact-destinations";
+import { mergeDispatchableOutreachSummary } from "@/lib/v2/dispatchable-outreach";
 import { verifySharedSecretWebhook } from "@/lib/v2/webhook-auth";
 
 export async function POST(req: NextRequest) {
@@ -42,6 +43,40 @@ export async function POST(req: NextRequest) {
       message: body.message || null
     }
   });
+
+  const { data: linkedLead } = await supabase
+    .from("v2_leads")
+    .select("opportunity_id")
+    .eq("tenant_id", body.tenantId)
+    .eq("id", body.leadId)
+    .maybeSingle();
+
+  const opportunityId = String(linkedLead?.opportunity_id || "").trim();
+  if (opportunityId) {
+    const { data: opportunity } = await supabase
+      .from("v2_opportunities")
+      .select("id,explainability_json")
+      .eq("tenant_id", body.tenantId)
+      .eq("id", opportunityId)
+      .maybeSingle();
+
+    if (opportunity?.id) {
+      await supabase
+        .from("v2_opportunities")
+        .update({
+          lifecycle_status: "contacted",
+          explainability_json: mergeDispatchableOutreachSummary(opportunity.explainability_json, {
+            follow_up_state: "replied",
+            outreach_last_status: "replied",
+            outreach_last_outcome: optedOut ? "opt_out" : "reply_received",
+            outreach_last_sent_at: new Date().toISOString(),
+            outreach_lead_id: body.leadId
+          })
+        })
+        .eq("tenant_id", body.tenantId)
+        .eq("id", opportunityId);
+    }
+  }
 
   if (optedOut) {
     if (!normalizedDestination) {

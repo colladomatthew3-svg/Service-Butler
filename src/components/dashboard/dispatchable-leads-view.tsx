@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, ShieldCheck, TriangleAlert, Phone, Clock3 } from "lucide-react";
+import { RefreshCw, ShieldCheck, TriangleAlert, Phone, Clock3, MessageSquare, Reply, CalendarCheck2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatTile } from "@/components/ui/stat-tile";
@@ -26,6 +26,13 @@ type DispatchableLeadRow = {
   contact_provenance: string | null;
   contact_attachment_status: string | null;
   contact_grounded_reason: string | null;
+  outreach_eligible: boolean;
+  outreach_blocked_reason: string | null;
+  outreach_channel: "sms" | null;
+  outreach_status: string | null;
+  outreach_send_mode: "review_safe" | "live" | null;
+  outreach_last_sent_at: string | null;
+  follow_up_state: "dispatchable" | "contacted" | "replied" | "booked" | "follow_up_needed";
   dispatch_eligible: boolean;
   blocked_reason: string | null;
 };
@@ -53,6 +60,7 @@ export function DispatchableLeadsView() {
   const [data, setData] = useState<DispatchableLeadResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<string | null>(null);
 
   async function loadDispatchableLeads() {
     setLoading(true);
@@ -73,6 +81,41 @@ export function DispatchableLeadsView() {
   useEffect(() => {
     void loadDispatchableLeads();
   }, []);
+
+  async function sendOutreach(leadId: string) {
+    setActingId(leadId);
+    try {
+      const response = await fetch(`/api/dispatchable-leads/${leadId}/outreach`, {
+        method: "POST",
+        headers: { "content-type": "application/json" }
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || payload.reason || "Could not send outreach");
+      await loadDispatchableLeads();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Could not send outreach");
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function updateState(leadId: string, state: "replied" | "follow_up_needed" | "booked") {
+    setActingId(leadId);
+    try {
+      const response = await fetch(`/api/dispatchable-leads/${leadId}/state`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ state })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Could not update lead state");
+      await loadDispatchableLeads();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Could not update lead state");
+    } finally {
+      setActingId(null);
+    }
+  }
 
   const leads = data?.leads || [];
   const dispatchable = leads.filter((lead) => lead.dispatch_eligible);
@@ -128,6 +171,7 @@ export function DispatchableLeadsView() {
                   <TH>Source</TH>
                   <TH>Service signal</TH>
                   <TH>Recency</TH>
+                  <TH>Outreach</TH>
                   <TH>Trust</TH>
                 </tr>
               </TableHead>
@@ -140,6 +184,40 @@ export function DispatchableLeadsView() {
                     <TD>{lead.source || lead.source_type || "Unknown"}</TD>
                     <TD>{lead.service_signal || "Unknown"}</TD>
                     <TD>{lead.age_hours != null ? `${lead.age_hours}h ago` : formatTimestamp(lead.timestamp)}</TD>
+                    <TD>
+                      <div className="space-y-2">
+                        <div className="text-xs text-semantic-muted">
+                          {lead.outreach_status ? `${lead.outreach_status} via ${lead.outreach_channel || "sms"}` : "Not contacted"}
+                        </div>
+                        <div className="text-xs text-semantic-muted">
+                          {lead.outreach_send_mode ? `Mode: ${lead.outreach_send_mode}` : lead.outreach_eligible ? "Ready for SMS" : lead.outreach_blocked_reason || "Blocked"}
+                        </div>
+                        {lead.follow_up_state !== "dispatchable" ? <div className="text-xs text-semantic-muted">State: {lead.follow_up_state}</div> : null}
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={!lead.outreach_eligible || actingId === lead.id}
+                            onClick={() => void sendOutreach(lead.id)}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            Send SMS
+                          </Button>
+                          <Button type="button" size="sm" variant="ghost" disabled={actingId === lead.id} onClick={() => void updateState(lead.id, "replied")}>
+                            <Reply className="h-4 w-4" />
+                            Mark Replied
+                          </Button>
+                          <Button type="button" size="sm" variant="ghost" disabled={actingId === lead.id} onClick={() => void updateState(lead.id, "follow_up_needed")}>
+                            Follow Up
+                          </Button>
+                          <Button type="button" size="sm" variant="ghost" disabled={actingId === lead.id} onClick={() => void updateState(lead.id, "booked")}>
+                            <CalendarCheck2 className="h-4 w-4" />
+                            Booked
+                          </Button>
+                        </div>
+                      </div>
+                    </TD>
                     <TD>
                       <div className="space-y-1">
                         <Badge variant="success">{lead.verification_status || "verified"}</Badge>
@@ -176,6 +254,7 @@ export function DispatchableLeadsView() {
                   <TH>Service signal</TH>
                   <TH>Recency</TH>
                   <TH>Contact state</TH>
+                  <TH>Outreach</TH>
                   <TH>Blocked reason</TH>
                 </tr>
               </TableHead>
@@ -190,6 +269,12 @@ export function DispatchableLeadsView() {
                       <div className="space-y-1">
                         <div>{lead.contact_attachment_status || "unknown"}</div>
                         {lead.contact_provenance ? <div className="text-xs text-semantic-muted">{lead.contact_provenance}</div> : null}
+                      </div>
+                    </TD>
+                    <TD>
+                      <div className="space-y-1">
+                        <div>{lead.outreach_status || "not_contactable"}</div>
+                        <div className="text-xs text-semantic-muted">{lead.outreach_blocked_reason || "not_dispatchable"}</div>
                       </div>
                     </TD>
                     <TD>

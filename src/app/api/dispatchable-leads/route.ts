@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   const opportunityIds = opportunityRows.map((row) => asText(row.id)).filter(Boolean);
   const sourceEventIds = Array.from(new Set(opportunityRows.map((row) => asText(row.source_event_id)).filter(Boolean)));
 
-  const [assignmentResult, sourceEventResult] = await Promise.all([
+  const [assignmentResult, sourceEventResult, leadResult] = await Promise.all([
     opportunityIds.length > 0
       ? v2Context.supabase
           .from("v2_assignments")
@@ -53,11 +53,20 @@ export async function GET(req: NextRequest) {
           .select("id,source_id,connector_run_id,occurred_at,ingested_at,compliance_status,normalized_payload")
           .eq("tenant_id", v2Context.franchiseTenantId)
           .in("id", sourceEventIds)
+      : Promise.resolve({ data: [], error: null }),
+    opportunityIds.length > 0
+      ? v2Context.supabase
+          .from("v2_leads")
+          .select("id,opportunity_id,do_not_contact,contact_channels_json,created_at")
+          .eq("tenant_id", v2Context.franchiseTenantId)
+          .in("opportunity_id", opportunityIds)
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [], error: null })
   ]);
 
   if (assignmentResult.error) return NextResponse.json({ error: assignmentResult.error.message }, { status: 400 });
   if (sourceEventResult.error) return NextResponse.json({ error: sourceEventResult.error.message }, { status: 400 });
+  if (leadResult.error) return NextResponse.json({ error: leadResult.error.message }, { status: 400 });
 
   const latestAssignmentByOpportunity = new Map<string, Record<string, unknown>>();
   for (const assignment of (assignmentResult.data || []) as Array<Record<string, unknown>>) {
@@ -79,7 +88,18 @@ export async function GET(req: NextRequest) {
     if (connectorRunId) connectorRunIds.add(connectorRunId);
   }
 
-  const [sourceResult, connectorRunResult] = await Promise.all([
+  const latestLeadByOpportunity = new Map<string, Record<string, unknown>>();
+  const leadIds = new Set<string>();
+  for (const lead of (leadResult.data || []) as Array<Record<string, unknown>>) {
+    const opportunityId = asText(lead.opportunity_id);
+    if (opportunityId && !latestLeadByOpportunity.has(opportunityId)) {
+      latestLeadByOpportunity.set(opportunityId, lead);
+    }
+    const leadId = asText(lead.id);
+    if (leadId) leadIds.add(leadId);
+  }
+
+  const [sourceResult, connectorRunResult, outreachResult] = await Promise.all([
     sourceIds.size > 0
       ? v2Context.supabase
           .from("v2_data_sources")
@@ -93,11 +113,20 @@ export async function GET(req: NextRequest) {
           .select("id,status,metadata")
           .eq("tenant_id", v2Context.franchiseTenantId)
           .in("id", Array.from(connectorRunIds))
+      : Promise.resolve({ data: [], error: null }),
+    leadIds.size > 0
+      ? v2Context.supabase
+          .from("v2_outreach_events")
+          .select("id,lead_id,channel,event_type,outcome,provider_message_id,sent_at,response_at,created_at,metadata")
+          .eq("tenant_id", v2Context.franchiseTenantId)
+          .in("lead_id", Array.from(leadIds))
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [], error: null })
   ]);
 
   if (sourceResult.error) return NextResponse.json({ error: sourceResult.error.message }, { status: 400 });
   if (connectorRunResult.error) return NextResponse.json({ error: connectorRunResult.error.message }, { status: 400 });
+  if (outreachResult.error) return NextResponse.json({ error: outreachResult.error.message }, { status: 400 });
 
   const sourceById = new Map<string, Record<string, unknown>>();
   for (const source of (sourceResult.data || []) as Array<Record<string, unknown>>) {
@@ -109,17 +138,29 @@ export async function GET(req: NextRequest) {
     connectorRunById.set(asText(connectorRun.id), connectorRun);
   }
 
+  const latestOutreachByLead = new Map<string, Record<string, unknown>>();
+  for (const outreach of (outreachResult.data || []) as Array<Record<string, unknown>>) {
+    const leadId = asText(outreach.lead_id);
+    if (leadId && !latestOutreachByLead.has(leadId)) {
+      latestOutreachByLead.set(leadId, outreach);
+    }
+  }
+
   const leads = opportunityRows.map((opportunity) => {
     const sourceEvent = sourceEventById.get(asText(opportunity.source_event_id)) || null;
     const source = sourceEvent ? sourceById.get(asText(sourceEvent.source_id)) || null : null;
     const connectorRun = sourceEvent ? connectorRunById.get(asText(sourceEvent.connector_run_id)) || null : null;
     const assignment = latestAssignmentByOpportunity.get(asText(opportunity.id)) || null;
+    const lead = latestLeadByOpportunity.get(asText(opportunity.id)) || null;
+    const latestOutreachEvent = lead ? latestOutreachByLead.get(asText(lead.id)) || null : null;
     return deriveDispatchableLeadCandidate({
       opportunity,
       sourceEvent,
       source,
       connectorRun,
-      assignment
+      assignment,
+      lead,
+      latestOutreachEvent
     });
   });
 

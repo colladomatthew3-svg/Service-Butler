@@ -18,15 +18,6 @@ function buildBasicAuth(username: string, password: string) {
 
 export async function sendTwilioMessage(input: { to: string; body: string; safeMode?: boolean; testMode?: boolean }) {
   const cfg = twilioConfig();
-  if (!cfg.configured || !cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
-    return {
-      skipped: true,
-      providerId: null,
-      reason: "Twilio credentials missing",
-      mode: "disabled" as const
-    };
-  }
-
   const safeMode = input.safeMode ?? cfg.safeModeByDefault;
   if (safeMode) {
     return {
@@ -38,6 +29,15 @@ export async function sendTwilioMessage(input: { to: string; body: string; safeM
         to: input.to,
         body: input.body
       }
+    };
+  }
+
+  if (!cfg.configured || !cfg.accountSid || !cfg.authToken || !cfg.fromNumber) {
+    return {
+      skipped: true,
+      providerId: null,
+      reason: "Twilio credentials missing",
+      mode: "disabled" as const
     };
   }
 
